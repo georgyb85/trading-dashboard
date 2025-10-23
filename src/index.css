@@ -1,0 +1,186 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Trading Dashboard Design System - Professional Financial Theme */
+
+@layer base {
+  :root {
+    --background: 220 18% 10%;
+    --foreground: 210 40% 98%;
+
+    --card: 220 20% 14%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 220 20% 14%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 220 18% 10%;
+
+    --secondary: 220 20% 18%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 220 15% 20%;
+    --muted-foreground: 215 16% 65%;
+
+    --accent: 217 91% 60%;
+    --accent-foreground: 220 18% 10%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 210 40% 98%;
+
+    --warning: 45 93% 58%;
+    --warning-foreground: 220 18% 10%;
+
+    --border: 220 20% 20%;
+    --input: 220 20% 18%;
+    --ring: 217 91% 60%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 220 22% 8%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 220 18% 10%;
+    --sidebar-accent: 220 20% 14%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 220 20% 16%;
+    --sidebar-ring: 217 91% 60%;
+
+    --chart-1: 217 91% 60%;
+    --chart-2: 142 71% 45%;
+    --chart-3: 0 72% 51%;
+    --chart-4: 280 80% 60%;
+    --chart-5: 45 93% 58%;
+
+    --profit: 142 71% 45%;
+    --profit-foreground: 210 40% 98%;
+    --loss: 0 72% 51%;
+    --loss-foreground: 210 40% 98%;
+    --trading-long: 142 71% 45%;
+    --trading-short: 0 72% 51%;
+    --trading-neutral: 215 16% 65%;
+    --connection-good: 142 71% 45%;
+    --connection-warning: 45 93% 58%;
+    --connection-error: 0 72% 51%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(217 91% 60%), hsl(220 80% 55%));
+    --gradient-profit: linear-gradient(135deg, hsl(142 71% 45%), hsl(152 66% 52%));
+    --gradient-loss: linear-gradient(135deg, hsl(0 72% 51%), hsl(2 78% 47%));
+    --gradient-card: linear-gradient(135deg, hsl(220 20% 14%), hsl(220 22% 16%));
+
+    --shadow-card: 0 12px 40px hsl(220 20% 4% / 0.45);
+    --shadow-glow: 0 0 30px hsl(217 91% 60% / 0.35);
+
+    --transition-smooth: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Trading Dashboard Components */
+@layer components {
+  .trading-card {
+    @apply bg-card border-border shadow-lg rounded-lg p-6 transition-all duration-300 hover:shadow-xl;
+    background: var(--gradient-card);
+    box-shadow: var(--shadow-card);
+  }
+
+  .status-indicator {
+    @apply inline-flex h-3 w-3 rounded-full animate-pulse;
+  }
+
+  .status-good {
+    background-color: hsl(var(--connection-good));
+    box-shadow: 0 0 12px hsl(var(--connection-good) / 0.45);
+  }
+
+  .status-warning {
+    background-color: hsl(var(--connection-warning));
+    box-shadow: 0 0 12px hsl(var(--connection-warning) / 0.45);
+  }
+
+  .status-error {
+    background-color: hsl(var(--connection-error));
+    box-shadow: 0 0 12px hsl(var(--connection-error) / 0.45);
+  }
+
+  .profit-text {
+    color: hsl(var(--success));
+    font-weight: 600;
+  }
+
+  .loss-text {
+    color: hsl(var(--loss));
+    font-weight: 600;
+  }
+
+  .metric-card {
+    @apply trading-card bg-gradient-to-br from-card to-secondary/50;
+  }
+
+  .prediction-display {
+    @apply text-4xl font-bold bg-gradient-to-r from-primary to-blue-400 bg-clip-text text-transparent;
+  }
+
+  .trading-button {
+    @apply px-6 py-3 rounded-lg font-semibold transition-all duration-200 hover:scale-105 active:scale-95;
+  }
+
+  .emergency-stop {
+    @apply trading-button;
+    color: hsl(var(--loss-foreground));
+    background: linear-gradient(135deg, hsl(var(--loss)), hsl(var(--loss) / 0.85));
+    box-shadow: 0 4px 20px hsl(var(--loss) / 0.35);
+    transition: var(--transition-smooth);
+  }
+
+  .emergency-stop:hover {
+    background: linear-gradient(135deg, hsl(var(--loss)), hsl(var(--loss) / 0.7));
+    box-shadow: 0 6px 24px hsl(var(--loss) / 0.45);
+  }
+}
+
+/* Animations for real-time updates */
+@layer utilities {
+  .animate-value-up {
+    animation: valueUp 0.5s ease-out;
+  }
+
+  .animate-value-down {
+    animation: valueDown 0.5s ease-out;
+  }
+
+  @keyframes valueUp {
+    0% { transform: scale(1); color: hsl(142 76% 36%); }
+    50% { transform: scale(1.05); color: hsl(142 76% 46%); }
+    100% { transform: scale(1); }
+  }
+
+  @keyframes valueDown {
+    0% { transform: scale(1); color: hsl(0 84% 60%); }
+    50% { transform: scale(1.05); color: hsl(0 84% 70%); }
+    100% { transform: scale(1); }
+  }
+
+  .pulse-glow {
+    animation: pulseGlow 2s ease-in-out infinite alternate;
+  }
+
+  @keyframes pulseGlow {
+    from { box-shadow: 0 0 5px hsl(217 91% 60% / 0.3); }
+    to { box-shadow: 0 0 20px hsl(217 91% 60% / 0.6); }
+  }
+}
