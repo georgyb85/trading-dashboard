@@ -209,7 +209,7 @@ const WalkforwardDashboard = () => {
   };
 
   return (
-    <div className="dark flex h-screen flex-col bg-background">
+    <div className="flex h-screen flex-col bg-background">
       <SimulationHeader
         onStartSimulation={handleStartSimulation}
         onReset={handleReset}
@@ -309,7 +309,7 @@ const WalkforwardDashboard = () => {
             </div>
 
             {/* Main Content */}
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 p-4">
               <div className="space-y-4">
                 {chartData.length > 0 && <PerformanceChart data={chartData} />}
                 {summaryData.length > 0 && <PerformanceSummary runs={summaryData} />}
@@ -384,7 +384,7 @@ const WalkforwardDashboard = () => {
             </div>
 
             {/* Results Panel */}
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 p-4">
               {examinedFold ? (
                 <FoldResults />
               ) : (

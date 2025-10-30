@@ -6,6 +6,80 @@
 
 @layer base {
   :root {
+    --background: 210 33% 97%;
+    --foreground: 222 47% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 12%;
+
+    --primary: 220 85% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 217 40% 92%;
+    --secondary-foreground: 222 47% 18%;
+
+    --muted: 216 34% 94%;
+    --muted-foreground: 222 28% 35%;
+
+    --accent: 203 89% 48%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 2 79% 56%;
+    --destructive-foreground: 210 40% 98%;
+
+    --success: 142 65% 32%;
+    --success-foreground: 210 40% 98%;
+
+    --warning: 40 95% 48%;
+    --warning-foreground: 220 18% 10%;
+
+    --border: 220 18% 80%;
+    --input: 220 18% 80%;
+    --ring: 220 85% 55%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 215 35% 96%;
+    --sidebar-foreground: 222 47% 18%;
+    --sidebar-primary: 220 85% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 100%;
+    --sidebar-accent-foreground: 222 47% 18%;
+    --sidebar-border: 216 25% 84%;
+    --sidebar-ring: 220 85% 55%;
+
+    --chart-1: 217 91% 60%;
+    --chart-2: 142 71% 45%;
+    --chart-3: 0 72% 51%;
+    --chart-4: 280 80% 60%;
+    --chart-5: 45 93% 58%;
+
+    --profit: 142 65% 32%;
+    --profit-foreground: 0 0% 100%;
+    --loss: 0 74% 42%;
+    --loss-foreground: 0 0% 100%;
+    --trading-long: 142 65% 32%;
+    --trading-short: 0 74% 42%;
+    --trading-neutral: 216 14% 38%;
+    --connection-good: 142 65% 32%;
+    --connection-warning: 40 95% 48%;
+    --connection-error: 2 79% 56%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(217 91% 60%), hsl(221 83% 55%));
+    --gradient-profit: linear-gradient(135deg, hsl(142 65% 32%), hsl(150 65% 38%));
+    --gradient-loss: linear-gradient(135deg, hsl(2 79% 56%), hsl(0 76% 48%));
+    --gradient-card: linear-gradient(135deg, hsl(0 0% 100%), hsl(216 33% 95%));
+
+    --shadow-card: 0 16px 32px hsl(216 44% 40% / 0.15);
+    --shadow-glow: 0 0 30px hsl(217 91% 60% / 0.25);
+
+    --transition-smooth: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dark {
     --background: 220 18% 10%;
     --foreground: 210 40% 98%;
 

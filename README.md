@@ -1,73 +1,36 @@
-# Welcome to your Lovable project
+# Trading Control Panel
 
-## Project info
+Unified React + Vite application for the Agentic Research trading dashboards.  
+Routes are served from `/trade` and cover the live trading view, simulations, walkforward analysis, and feature selection tools.
 
-**URL**: https://lovable.dev/projects/4087f11b-2e37-4f79-bf2b-5e72df7d5a13
+## Getting Started
 
-## How can I edit this code?
-
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/4087f11b-2e37-4f79-bf2b-5e72df7d5a13) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```bash
+npm install
+npm run dev         # starts Vite on http://localhost:5173/trade
+npm run build       # creates production-ready assets in dist/
+npm run preview     # serves the production build locally
 ```
 
-**Edit a file directly in GitHub**
+The dev server assumes a reverse proxy that rewrites `/trade` to the Vite origin.  
+When running locally you can omit the base path by navigating to `http://localhost:5173`.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Project Structure
 
-**Use GitHub Codespaces**
+- `src/` – application code (components, hooks, pages, and app-specific modules).
+- `src/apps/` – feature-specific workspaces (`tradesim`, `lfs`, `walkforward`) now hosted in the unified shell.
+- `public/` – static assets copied verbatim into the build output.
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Environment
 
-## What technologies are used for this project?
+The app expects browser access to:
 
-This project is built with:
+- Trading and status WebSocket feeds (configured in the hooks under `src/hooks/` and `src/lib/`).
+- REST endpoints for account state and analytics (see `src/hooks/useAccountState.ts` and friends).
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+Update `.env` or inline configuration in the hooks to point to your infrastructure.
 
-## How can I deploy this project?
+## Deployment
 
-Simply open [Lovable](https://lovable.dev/projects/4087f11b-2e37-4f79-bf2b-5e72df7d5a13) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+`npm run build` outputs `/dist` containing `index.html` and hashed static assets.  
+Serve that directory behind your preferred web server (e.g., Nginx) with the base path `/trade`.

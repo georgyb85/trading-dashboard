@@ -78,7 +78,6 @@ export const RunDetails = ({ runs, activeRun, onRunChange, onCloseRun, onExamine
   const currentRun = runs.find((r) => r.run === activeRun);
   const colors = ["#ef4444", "#22c55e", "#3b82f6", "#f59e0b", "#8b5cf6"];
   const [configOpen, setConfigOpen] = useState(true);
-  const [showAllFolds, setShowAllFolds] = useState(true);
 
   const copyFeatures = () => {
     if (currentRun) {
@@ -220,21 +219,10 @@ Objective: ${currentRun.config.objective} | Threshold: ${currentRun.config.thres
 
             {/* Fold-by-Fold Performance */}
             <div>
-              <div className="flex items-center justify-between mb-3">
+              <div className="mb-3">
                 <h4 className="font-semibold">Fold-by-Fold Performance</h4>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setShowAllFolds(!showAllFolds)}
-                >
-                  {showAllFolds ? "Show 10 Rows" : "Show All"}
-                </Button>
               </div>
-              <div
-                className={`rounded-lg border border-border bg-card/30 overflow-x-auto ${
-                  !showAllFolds ? "max-h-[440px] overflow-y-auto" : ""
-                }`}
-              >
+              <div className="rounded-lg border border-border bg-card/30 overflow-x-auto max-h-[440px] overflow-y-auto">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">

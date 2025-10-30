@@ -3,6 +3,7 @@ import { TradingSidebar } from "./TradingSidebar";
 import { Activity, Bell, Power, WifiOff, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface TradingLayoutProps {
   children: React.ReactNode;
@@ -87,6 +88,8 @@ export function TradingLayout({ children }: TradingLayoutProps) {
                 </Badge>
               )}
             </Button>
+
+            <ThemeToggle />
 
             <Button
               variant="destructive"
