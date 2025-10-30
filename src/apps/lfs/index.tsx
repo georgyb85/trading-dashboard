@@ -8,66 +8,62 @@ import TargetSelector from "@/apps/lfs/components/TargetSelector";
 import ParametersConfig from "@/apps/lfs/components/ParametersConfig";
 import ResultsDisplay from "@/apps/lfs/components/ResultsDisplay";
 import { Play, Database } from "lucide-react";
+import { useDatasets, useDatasetFeatures, useDatasetTargets, useCreateLfsRun } from "@/lib/hooks/useApi";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 
 const LfsDashboard = () => {
-  const [selectedTable, setSelectedTable] = useState<string>("");
+  const [selectedDatasetId, setSelectedDatasetId] = useState<number | undefined>();
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
   const [selectedTarget, setSelectedTarget] = useState<string>("");
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [lfsConfig, setLfsConfig] = useState({
+    cases: 2000,
+    maxKept: 15,
+    iterations: 3,
+    monteCarloTrials: 500,
+    betaTrials: 20,
+    maxThreads: 20,
+    targetBins: 3,
+  });
   const [results, setResults] = useState<any>(null);
 
-  // Mock data for demonstration
-  const mockFeatures = [
-    "ATR_RATIO_L", "ATR_RATIO_M", "ATR_RATIO_S", "FT110", "FT1L0M",
-    "FT1M1NLP", "FTI_BEST_CRAT", "FTI_CRAT", "FTI_LARGEST", "FTI_MAJOR_LP",
-    "REACTIVITY_L", "REACTIVITY_M", "REACTIVITY_S", "VOL_MAX_PS", "R_PROD_MORLET",
-    "VWMA_RATIO_M", "PRICE_MI", "VWMA_RATIO_L", "BOL_WIDTH_M", "BOL_WIDTH_S"
-  ];
+  // API hooks
+  const { data: datasetsResponse, isLoading: datasetsLoading } = useDatasets();
+  const { data: featuresData, isLoading: featuresLoading } = useDatasetFeatures(selectedDatasetId || 0);
+  const { data: targetsData, isLoading: targetsLoading } = useDatasetTargets(selectedDatasetId || 0);
+  const createLfsMutation = useCreateLfsRun();
 
-  const mockTargets = ["TGT_115", "TGT_315", "TGT_555"];
+  const datasets = datasetsResponse || [];
+  const features = (featuresData || []).filter(f => f.is_active).map(f => f.name);
+  const targets = (targetsData || []).filter(t => t.is_active).map(t => t.name);
 
-  const handleRunAnalysis = () => {
-    setIsAnalyzing(true);
-    
-    // Simulate analysis
-    setTimeout(() => {
-      setResults({
-        config: {
-          features: selectedFeatures.length,
-          target: selectedTarget,
-          cases: 2000,
-          maxKept: 15,
-          iterations: 3,
-          monteCarloTrials: 500,
-          betaTrials: 20,
-          maxThreads: 20,
-          targetBins: 3
-        },
-        table: [
-          { rank: 1, sig: "++", variable: "VOL_MAX_PS", pct: 50.0, soloPValue: 0.0909, unbiasedPValue: 0.0909 },
-          { rank: 2, sig: "++", variable: "R_PROD_MORLET", pct: 35.5, soloPValue: 0.0909, unbiasedPValue: 0.2727 },
-          { rank: 3, sig: "++", variable: "VOL_MIN_PS", pct: 28.45, soloPValue: 0.5455, unbiasedPValue: 0.7273 },
-          { rank: 4, sig: "++", variable: "VWMA_RATIO_M", pct: 27.6, soloPValue: 0.0909, unbiasedPValue: 0.7273 },
-          { rank: 5, sig: "++", variable: "PRICE_MI", pct: 26.95, soloPValue: 0.0909, unbiasedPValue: 0.7273 }
-        ],
-        summary: {
-          highlySignificant: 0,
-          significant: 16,
-          marginal: 13,
-          noise: 89
-        },
-        recommendations: [
-          "VOL_MAX_PS", "R_PROD_MORLET", "VWMA_RATIO_M", 
-          "PRICE_MI", "VWMA_RATIO_L", "BOL_WIDTH_M",
-          "BOL_WIDTH_S", "PV_FIT_M", "BOL_WIDTH_L", "ATR_RATIO_L"
-        ],
-        cautions: [
-          { feature: "VOL_MIN_PS", pct: 28, pValue: 0.545 },
-          { feature: "RES_MIN_ADX", pct: 22, pValue: 0.454 }
-        ]
+  const handleRunAnalysis = async () => {
+    if (!selectedDatasetId || !selectedTarget || selectedFeatures.length === 0) {
+      return;
+    }
+
+    try {
+      const result = await createLfsMutation.mutateAsync({
+        datasetId: selectedDatasetId,
+        targetName: selectedTarget,
+        featureNames: selectedFeatures,
+        config: lfsConfig,
       });
-      setIsAnalyzing(false);
-    }, 2000);
+
+      // Poll for results or display placeholder
+      if (result?.results) {
+        setResults(result.results);
+      } else {
+        // Show status
+        setResults({
+          status: result?.status || 'running',
+          message: 'LFS analysis is running. Results will be available shortly.',
+        });
+      }
+    } catch (error) {
+      console.error('Failed to run LFS analysis:', error);
+    }
   };
 
   return (
@@ -89,17 +85,23 @@ const LfsDashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                <Label htmlFor="table-select">QuestDB Table</Label>
-                <Select value={selectedTable} onValueChange={setSelectedTable}>
-                  <SelectTrigger id="table-select">
-                    <SelectValue placeholder="Select a table" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="market_data">market_data</SelectItem>
-                    <SelectItem value="trading_features">trading_features</SelectItem>
-                    <SelectItem value="price_history">price_history</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="dataset-select">Dataset</Label>
+                {datasetsLoading ? (
+                  <Skeleton className="h-10 w-full" />
+                ) : (
+                  <Select value={selectedDatasetId?.toString()} onValueChange={(val) => setSelectedDatasetId(Number(val))}>
+                    <SelectTrigger id="dataset-select">
+                      <SelectValue placeholder="Select a dataset" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {datasets.map((dataset) => (
+                        <SelectItem key={dataset.id} value={dataset.id.toString()}>
+                          {dataset.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -109,32 +111,46 @@ const LfsDashboard = () => {
               <CardTitle>Feature and Target Selection</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-4">
-                <FeatureSelector
-                  features={mockFeatures}
-                  selectedFeatures={selectedFeatures}
-                  onSelectionChange={setSelectedFeatures}
-                />
-                
-                <TargetSelector
-                  targets={mockTargets}
-                  selectedTarget={selectedTarget}
-                  onSelectionChange={setSelectedTarget}
-                />
-              </div>
+              {!selectedDatasetId ? (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Please select a dataset first
+                  </AlertDescription>
+                </Alert>
+              ) : featuresLoading || targetsLoading ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-32 w-full" />
+                  <Skeleton className="h-32 w-full" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <FeatureSelector
+                    features={features}
+                    selectedFeatures={selectedFeatures}
+                    onSelectionChange={setSelectedFeatures}
+                  />
+
+                  <TargetSelector
+                    targets={targets}
+                    selectedTarget={selectedTarget}
+                    onSelectionChange={setSelectedTarget}
+                  />
+                </div>
+              )}
             </CardContent>
           </Card>
 
           <ParametersConfig />
 
-          <Button 
-            className="w-full" 
+          <Button
+            className="w-full"
             size="lg"
             onClick={handleRunAnalysis}
-            disabled={!selectedTarget || selectedFeatures.length === 0 || isAnalyzing}
+            disabled={!selectedDatasetId || !selectedTarget || selectedFeatures.length === 0 || createLfsMutation.isPending}
           >
             <Play className="mr-2 h-5 w-5" />
-            {isAnalyzing ? "Running Analysis..." : "Run LFS Analysis"}
+            {createLfsMutation.isPending ? "Running Analysis..." : "Run LFS Analysis"}
           </Button>
         </div>
 

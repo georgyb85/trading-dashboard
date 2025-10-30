@@ -19,7 +19,16 @@ import TradesimDashboard from "@/apps/tradesim";
 import LfsDashboard from "@/apps/lfs";
 import WalkforwardDashboard from "@/apps/walkforward";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      gcTime: 1000 * 60 * 10, // 10 minutes (formerly cacheTime)
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

@@ -9,9 +9,16 @@ import { PerformanceMetrics } from "@/apps/tradesim/components/PerformanceMetric
 import { ChartSection } from "@/apps/tradesim/components/ChartSection";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useTradeSimulationRuns } from "@/lib/hooks/useApi";
 
 const TradesimDashboard = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [selectedSimulationId, setSelectedSimulationId] = useState<number | undefined>();
+  const [tradeFilter, setTradeFilter] = useState<'all' | 'long' | 'short'>('all');
+
+  const { data: simulationsResponse, isLoading } = useTradeSimulationRuns();
+  const simulations = simulationsResponse?.data || [];
 
   return (
     <div className="flex min-h-screen bg-background w-full">
@@ -23,7 +30,7 @@ const TradesimDashboard = () => {
           <div className="flex items-center justify-between p-4">
             <div className="flex items-center gap-4">
               {!sidebarOpen && (
-                <button 
+                <button
                   onClick={() => setSidebarOpen(true)}
                   className="p-2 hover:bg-secondary rounded"
                 >
@@ -31,14 +38,26 @@ const TradesimDashboard = () => {
                 </button>
               )}
               <h1 className="text-xl font-bold text-foreground">Trading Simulation Dashboard</h1>
+              <Select value={selectedSimulationId?.toString()} onValueChange={(val) => setSelectedSimulationId(Number(val))}>
+                <SelectTrigger className="w-64">
+                  <SelectValue placeholder="Select simulation run" />
+                </SelectTrigger>
+                <SelectContent>
+                  {simulations.map((sim) => (
+                    <SelectItem key={sim.id} value={sim.id.toString()}>
+                      {sim.name} - {sim.status}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            
+
             <div className="flex items-center gap-3">
               <Button variant="outline" size="sm" className="gap-2">
                 <RotateCcw className="h-4 w-4" />
                 Clear Results
               </Button>
-              <Button size="sm" className="gap-2">
+              <Button size="sm" className="gap-2" disabled={isLoading}>
                 <Play className="h-4 w-4" />
                 Run Simulation
               </Button>
@@ -78,7 +97,7 @@ const TradesimDashboard = () => {
           {/* Trade Filter */}
           <div className="flex items-center gap-4">
             <span className="text-sm font-medium text-foreground">Trade Filter:</span>
-            <RadioGroup defaultValue="all" className="flex gap-4">
+            <RadioGroup value={tradeFilter} onValueChange={(v: any) => setTradeFilter(v)} className="flex gap-4">
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="all" id="all" />
                 <Label htmlFor="all" className="cursor-pointer">All</Label>
@@ -103,7 +122,10 @@ const TradesimDashboard = () => {
             </TabsList>
 
             <TabsContent value="trades" className="space-y-4">
-              <TradeTable />
+              <TradeTable
+                simulationId={selectedSimulationId}
+                tradeType={tradeFilter === 'all' ? undefined : tradeFilter === 'long' ? 'Long' : 'Short'}
+              />
             </TabsContent>
 
             <TabsContent value="performance" className="space-y-4">
