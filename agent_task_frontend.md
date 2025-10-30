@@ -5,30 +5,20 @@
 - Goal: replace mock UI data with API-driven content aligned with the Stage 1 backend contracts.
 
 ## Primary Goals
-1. Implement API client layer pointing at Drogon endpoints defined in the Stage 1 backend plan.
-2. Swap out mock data across Walkforward, Trade Simulation, and LFS apps.
-3. Add validation tooling to verify data integrity and highlight missing backend fields.
+1. Consume the Stage 1 mock endpoints in read-only mode so the UI matches the schema contract.
+2. Replace hard-coded data across Walkforward, Trade Simulation, and LFS dashboards with API responses or clearly labelled placeholders.
+3. Ship verification tooling (`npm run verify-stage1`) and refreshed QA docs for the read-only experience.
 
 ## Detailed Tasks
 - **API Client Setup**
-  - Create `src/lib/api.ts` (or similar) exporting typed fetch helpers for:
-    - `GET /api/datasets`
-    - `GET /api/datasets/{id}/features`
-    - `GET /api/walkforward/runs` + `GET /api/walkforward/runs/{id}`
-    - `GET /api/tradesim/runs` + `GET /api/tradesim/runs/{id}/trades`
-  - Types should align with the Postgres schema (`indicator_datasets`, `walkforward_runs`, etc.).
-  - Include retry + error normalization (toast-friendly messages).
+  - Expose read-only helpers for:
+    - `GET /api/indicators/datasets`
+    - `GET /api/walkforward/runs`, `GET /api/walkforward/runs/{id}` (returns `{ run, folds }`)
+    - `GET /api/tradesim/runs`, `GET /api/tradesim/runs/{id}` (returns `{ run, buckets }`)
 - **UI Integration**
-  - **Walkforward Dashboard (`src/apps/walkforward/index.tsx`):**
-    - Remove `generateMock*` helpers.
-    - Fetch run list on load, support run switching, display fold metrics from API.
-    - Provide loading and error states.
-  - **Trade Simulation App (`src/apps/tradesim/components/TradeTable.tsx` et al.):**
-    - Replace `mockTrades` with API-provided trade rows.
-    - Add controls to choose `simulation_id` and refresh data.
-  - **LFS App (`src/apps/lfs/index.tsx`):**
-    - Populate feature/target selectors via `GET /api/datasets/{id}/features|targets`.
-    - Wire the “Run Analysis” button to POST selected payload to backend (stub if backend not ready).
+  - **Walkforward Dashboard:** render metadata, JSON panels, and fold table; remove create/delete controls.
+  - **Trade Simulation Dashboard:** render metadata and bucket table; acknowledge that per-trade data is unavailable in Stage 1.
+  - **LFS Dashboard:** consume dataset list from API, retain static feature/target lists, and surface Stage 1 placeholder messaging.
 - **State Management & Caching**
   - Use React Query/Zustand or lightweight caching to avoid redundant network calls.
   - Persist last-selected dataset/run in local storage.
@@ -43,11 +33,11 @@
 - API client module and updated React components.
 - QA script (`scripts/verifyStage1.ts`) with README instructions.
 - Documentation (`docs/qa/frontend_stage1.md`) describing test flows and expected visuals.
-- Updated env templates referencing backend host.
+- Updated env templates referencing backend mock host/port.
 
 ## Verification Checklist
-- `[ ]` `npm run build` succeeds with API clients enabled.
-- `[ ]` Walkforward dashboard renders live data (confirmed via browser/network tab).
-- `[ ]` Trade simulation table displays rows returned by backend endpoint.
-- `[ ]` LFS selectors populate from API and handle empty datasets gracefully.
-- `[ ]` QA script reports success for all Stage 1 endpoints (or clearly flags missing backend fields).
+- `[ ]` `npm run build` succeeds with read-only dashboards enabled.
+- `[ ]` Walkforward dashboard renders metadata and fold table from `/api/walkforward/runs/{id}`.
+- `[ ]` Trade simulation dashboard renders metadata and bucket summary from `/api/tradesim/runs/{id}`.
+- `[ ]` LFS dashboard surfaces dataset list and displays Stage 1 placeholder messaging.
+- `[ ]` `npm run verify-stage1` reports PASS/WARN status for the mock endpoints.

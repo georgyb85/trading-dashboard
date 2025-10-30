@@ -34,133 +34,55 @@ Expected output: All endpoints should return `PASS` status.
 
 **Location**: `/trade/walkforward`
 
-#### Test Flow 1: Load Existing Runs
+The Stage 1 dashboard is read-only and mirrors the backend mock payloads.
 
-1. Navigate to the Walkforward Dashboard
-2. **Expected**: Page loads without errors
-3. **Expected**: If runs exist in the database, they should be displayed
-4. **Expected**: Chart data should render showing fold performance
-5. **Expected**: Summary metrics should display correctly
+#### Test Flow 1: Load Runs
 
-#### Test Flow 2: View Run Details
+1. Navigate to the Walkforward dashboard.
+2. **Expected**: Run selector populates with run IDs (or displays "No runs available").
+3. **Expected**: Metadata section lists dataset, target, status, and timestamps.
+4. **Expected**: Hyperparameters, walk config, and summary metrics render as JSON blocks.
+5. **Expected**: Fold table lists fold numbers with train/test ranges when folds exist.
 
-1. If runs are available, click on different run tabs
-2. **Expected**: Switching between runs updates the chart and fold table
-3. **Expected**: Fold metrics (signals, hit rates, P&L) display correctly
-4. **Expected**: No console errors
+#### Test Flow 2: Switch Runs
 
-#### Test Flow 3: Examine Fold
+1. Choose a different run from the dropdown.
+2. **Expected**: Metadata/JSON blocks update to match the selected run.
+3. **Expected**: Fold table refreshes accordingly.
 
-1. Click "Examine" button on any fold row
-2. **Expected**: Switches to "Test Model" tab
-3. **Expected**: Fold configuration panel shows correct train/test indices
-4. **Expected**: Features and target are populated from run config
-
-#### Test Flow 4: Create New Run
-
-1. Configure parameters in the Configuration Panel:
-   - Model type (xgboost, etc.)
-   - Data source
-   - Target variable
-   - Selected features
-   - Walk-forward parameters
-   - Hyperparameters
-2. Click "Start Simulation"
-3. **Expected**: Loading indicator appears
-4. **Expected**: New run is created via API
-5. **Expected**: On success, new run appears in the runs list
-6. **Expected**: Toast notification shows success message
-
-#### Test Flow 5: Error Handling
-
-1. With API server stopped, attempt to create a run
-2. **Expected**: Error toast appears with clear message
-3. **Expected**: UI remains functional
-4. Restart API server and try again
-5. **Expected**: Recovery works without page reload
+> Note: Run creation/deletion is intentionally disabled in Stage 1 and should display informational messaging.
 
 ### 2. Trade Simulation Dashboard Testing
 
 **Location**: `/trade/tradesim`
 
-#### Test Flow 1: Select Simulation
+#### Test Flow 1: Load Simulation Summary
 
-1. Navigate to Trade Simulation Dashboard
-2. Use the "Select simulation run" dropdown in header
-3. **Expected**: Dropdown populates with available simulations
-4. **Expected**: Each simulation shows name and status
+1. Navigate to the Trading Simulation dashboard.
+2. **Expected**: Simulation selector lists available runs (or displays the empty state message).
+3. **Expected**: Metadata block shows IDs, mode, questdb namespace, status badge, and dataset linkage.
 
-#### Test Flow 2: View Trades
+#### Test Flow 2: Review Configuration & Metrics
 
-1. Select a simulation from dropdown
-2. Navigate to "Trade List" tab
-3. **Expected**: Trade table populates with trades from API
-4. **Expected**: All columns display correctly:
-   - Fold, Type, Entry/Exit Time, Prices, Signals, P&L, Returns
-5. **Expected**: P&L values show color coding (green for profit, red for loss)
+1. Scroll to the configuration/summary JSON blocks.
+2. **Expected**: Objects render with pretty-printed JSON; empty objects display "—".
 
-#### Test Flow 3: Filter Trades
+#### Test Flow 3: Inspect Buckets
 
-1. With trades loaded, use the "Trade Filter" radio buttons
-2. Select "Long Only"
-3. **Expected**: Only long trades are displayed
-4. Select "Short Only"
-5. **Expected**: Only short trades are displayed
-6. Select "All"
-7. **Expected**: All trades are displayed
+1. Verify the bucket table lists side-specific aggregates (trade count, wins, PF, etc.).
+2. **Expected**: When no buckets are available, the dashboard shows an explanatory message.
 
-#### Test Flow 4: Empty State
-
-1. Select a simulation with no trades
-2. **Expected**: Message displays "No trades found for this simulation"
-3. **Expected**: No errors in console
-
-#### Test Flow 5: No Selection
-
-1. Clear simulation selection (refresh page)
-2. **Expected**: Message displays "Select a simulation run to view trades"
+> Note: Trade-level tables and simulation execution controls are deferred to later stages; buttons should be disabled or absent.
 
 ### 3. LFS (Local Feature Selection) Dashboard Testing
 
 **Location**: `/trade/lfs`
 
-#### Test Flow 1: Select Dataset
+Stage 1 renders a preview experience without backend execution.
 
-1. Navigate to LFS Dashboard
-2. Click on "Dataset" dropdown
-3. **Expected**: Available datasets populate from API
-4. Select a dataset
-5. **Expected**: Features and targets load for selected dataset
-
-#### Test Flow 2: Configure Analysis
-
-1. With dataset selected:
-   - Select multiple features from the feature list
-   - Select a target variable
-   - Review/adjust parameters (cases, iterations, Monte Carlo trials, etc.)
-2. **Expected**: All selections are reflected in UI
-3. **Expected**: "Run LFS Analysis" button is enabled
-
-#### Test Flow 3: Run Analysis
-
-1. Click "Run LFS Analysis"
-2. **Expected**: Button shows "Running Analysis..."
-3. **Expected**: Analysis run is created via API
-4. **Expected**: Results panel updates when analysis completes or shows status
-
-#### Test Flow 4: View Results
-
-1. After analysis completes:
-2. **Expected**: Results table shows feature rankings
-3. **Expected**: Summary shows counts of significant/marginal/noise features
-4. **Expected**: Recommendations list displays
-5. **Expected**: Cautions section highlights features to review
-
-#### Test Flow 5: Empty Dataset
-
-1. Select a dataset with no features
-2. **Expected**: Alert shows "Please select a dataset first"
-3. **Expected**: Feature/target selectors are disabled
+- Datasets list originates from the indicator catalog endpoint; features/targets fall back to static options.
+- Saving a configuration should produce a placeholder result summarising the staged selection.
+- Confirm the informational banner explains that LFS endpoints are pending.
 
 ### 4. Data Validation Testing
 

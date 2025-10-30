@@ -24,15 +24,15 @@
 
 | Area | File | Current data source | Target backend endpoint | Notes |
 | --- | --- | --- | --- | --- |
-| Walkforward dashboard | `trading-dashboard/src/apps/walkforward/index.tsx:13-151` | Randomized `generateMock*` helpers | `GET /api/walkforward/runs`, `GET /api/walkforward/runs/{id}` | Replace run list, charts, and fold tables with QuestDB/Postgres-backed data. |
-| Trade simulator table | `trading-dashboard/src/apps/tradesim/components/TradeTable.tsx:3-57` | Hard-coded `mockTrades` array | `GET /api/tradesim/runs/{id}/trades` | Structure mirrors QuestDB `trading_sim_traces` rows enriched with Postgres metadata. |
-| Local Feature Selection (LFS) | `trading-dashboard/src/apps/lfs/index.tsx:19-138` | Static `mockFeatures`/`mockTargets` arrays | `GET /api/datasets/{dataset}/features` and `GET /api/datasets/{dataset}/targets` | Endpoint will read QuestDB schema metadata; analysis trigger posts to Drogon. |
+| Walkforward dashboard | `trading-dashboard/src/apps/walkforward/index.tsx` | Read-only metadata + fold table | `GET /api/walkforward/runs`, `GET /api/walkforward/runs/{id}` | Creation/deletion deferred; UI displays JSON blocks and fold table. |
+| Trade simulation dashboard | `trading-dashboard/src/apps/tradesim/index.tsx` | Read-only metadata + aggregated buckets | `GET /api/tradesim/runs`, `GET /api/tradesim/runs/{id}` | Trade-level detail deferred until backend exposes per-trade endpoints. |
+| Local Feature Selection (LFS) | `trading-dashboard/src/apps/lfs/index.tsx` | Static feature/target lists with dataset selector | `GET /api/indicators/datasets` | LFS execution not yet exposed; UI records staged configurations only. |
 
 ### Environment Matrix
 
 | Layer | Host | Role | Notes |
 | --- | --- | --- | --- |
-| Laptop (repo) | local | Data prep, manual exports, UI prototyping | May lack backend/frontend runtime deps; used for CLI/export tooling. |
+| Laptop (repo) | local | Data prep, manual exports, UI prototyping | Runs Dear ImGui workflow for exporting datasets; no dedicated CLI in Stage 1. |
 | Frontend server | `45.85.147.236` | Hosts QuestDB (ILP 9009, REST 9000), Postgres (5432), and the deployed trading-dashboard | Needs firewall ingress from backend for DB access; stores historical datasets. |
 | Backend GPU node | `39.114.73.97` (vast.ai) | Runs Drogon API + CUDA/XGBoost workers | Consumes QuestDB/Postgres remotely; exposes controllers to frontend. |
 
@@ -64,12 +64,12 @@ indicator_bars,dataset=btc_4h_v1,source=chronosflow,granularity=1h date_i=202405
 *Indexes:* create B-tree indexes on `walkforward_runs(dataset_id, created_at DESC)` and `simulation_runs(run_id, created_at DESC)` to power listing endpoints; `walkforward_folds(run_id)` for detail retrieval.
 
 ### Export & Validation Plan
-- **CLI/automation:** extend the existing Dear ImGui exporter into a reusable CLI (`chronosflow_export`) accepting dataset slug, QuestDB connection info, and optional Postgres DSN. It streams Arrow tables in 2000-row batches, enforces the tag schema, and writes metadata rows to `indicator_datasets`.
-- **Post-export verification:** CLI re-queries QuestDB (`SELECT ... LIMIT 100`) and diffs numeric columns against the Arrow source (tolerance configurable); failures abort Postgres writes.
-- **Backfill workflow:** for retrospective datasets, provide a manifest (`exports/<dataset>.yaml`) listing source file, slug, granularity, and checksum; automation iterates manifest and logs row counts.
-- **Regression script:** add `scripts/validate_dataset.py` to fetch `(run_id, fold)` samples from both QuestDB and Postgres, ensuring thresholds align and row counts match expectations.
+- **Manual export:** follow `docs/GUI_EXPORT_WORKFLOW.md` when pushing datasets from the Time Series window. Ensure table names and tags follow the conventions above.
+- **Post-export verification:** run lightweight `SELECT` queries (row count, min/max timestamp, tag sanity) against QuestDB and record findings in the export log.
+- **Backfill workflow:** maintain a simple spreadsheet or markdown log describing each dataset slug, measurement name, and validation query output.
+- **Future automation:** CLI tooling and regression scripts can be revisited after Stage 1 once requirements stabilise.
 
 ### Outstanding Actions & Notes
-- Writing directly to `backend/QUESTDB_INGESTION.md` is blocked in this environment (permission denied); the schema above should be copied into that doc when editing on the server.
-- Companion Postgres schema file should live under `backend/docs/` or `docs/storage/` once write access is available.
-- Next implementation steps: build exporter CLI, create DB migrations for the Postgres tables, and replace frontend mocks with API calls hitting the new Drogon endpoints.
+- Ensure `backend/QUESTDB_INGESTION.md` and backend migrations stay in sync with the agreed schema.
+- Frontend components operate in read-only mode until backend write endpoints are available.
+- Manual export documentation lives in `docs/GUI_EXPORT_WORKFLOW.md`; update it alongside any process changes.
