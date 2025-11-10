@@ -36,8 +36,8 @@ export interface Stage1FoldMetrics {
   samples_test: number;
   best_iteration: number | null;
   best_score: number | null;
-  thresholds: Record<string, number>;
-  metrics: Record<string, number>;
+  thresholds: Record<string, number> | string; // Can be JSON string
+  metrics: Record<string, number> | string; // Can be JSON string
 }
 
 export interface Stage1RunDetail {
@@ -46,9 +46,9 @@ export interface Stage1RunDetail {
   dataset_slug?: string;
   target_column?: string;
   feature_columns?: string[] | string; // Can be JSON string or array
-  hyperparameters?: Record<string, unknown>;
-  walk_config?: Record<string, unknown>;
-  summary_metrics?: Record<string, unknown>;
+  hyperparameters?: Record<string, unknown> | string; // Can be JSON string
+  walk_config?: Record<string, unknown> | string; // Can be JSON string
+  summary_metrics?: Record<string, unknown> | string; // Can be JSON string
   fold_count?: number;
   folds?: Stage1FoldMetrics[];
   created_at?: string;
