@@ -155,6 +155,17 @@ const WalkforwardDashboard = () => {
     console.log('[handleLoadRun] Final parsed run:', parsedRun);
     console.log('[handleLoadRun] First fold after parsing:', parsedRun.folds?.[0]);
 
+    // Update selected features based on the loaded run's features
+    if (parsedRun.feature_columns && Array.isArray(parsedRun.feature_columns)) {
+      setSelectedFeatures(parsedRun.feature_columns);
+      console.log('[handleLoadRun] Updated selected features:', parsedRun.feature_columns);
+    }
+
+    // Update other configuration fields from the run
+    if (parsedRun.target_column) {
+      setTarget(parsedRun.target_column);
+    }
+
     // Check if run already loaded
     const existingIndex = loadedRuns.findIndex(r => r.run_id === parsedRun.run_id);
 
