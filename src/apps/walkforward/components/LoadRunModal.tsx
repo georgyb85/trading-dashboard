@@ -63,12 +63,15 @@ export const LoadRunModal = ({
   };
 
   const getFeaturesCount = (run: any) => {
-    if (!run.features) return 0;
+    // Check feature_columns first (actual API field name)
+    const featuresField = run.feature_columns || run.features;
+
+    if (!featuresField) return 0;
 
     // If features is a string, try to parse it
-    if (typeof run.features === 'string') {
+    if (typeof featuresField === 'string') {
       try {
-        const parsed = JSON.parse(run.features);
+        const parsed = JSON.parse(featuresField);
         return Array.isArray(parsed) ? parsed.length : 0;
       } catch (e) {
         return 0;
@@ -76,7 +79,29 @@ export const LoadRunModal = ({
     }
 
     // If it's already an array, return its length
-    return Array.isArray(run.features) ? run.features.length : 0;
+    return Array.isArray(featuresField) ? featuresField.length : 0;
+  };
+
+  const getFoldCount = (run: any) => {
+    // Check summary_metrics.folds first (actual API structure)
+    if (run.summary_metrics) {
+      // Handle if summary_metrics is a string (needs parsing)
+      if (typeof run.summary_metrics === 'string') {
+        try {
+          const parsed = JSON.parse(run.summary_metrics);
+          return parsed.folds ?? 0;
+        } catch (e) {
+          return 0;
+        }
+      }
+      // Already an object
+      if (typeof run.summary_metrics === 'object' && run.summary_metrics.folds) {
+        return run.summary_metrics.folds;
+      }
+    }
+
+    // Fall back to top-level fold_count
+    return run.fold_count ?? 0;
   };
 
   return (
@@ -157,7 +182,7 @@ export const LoadRunModal = ({
                         {run.run_id.slice(0, 8)}...
                       </TableCell>
                       <TableCell className="text-sm">
-                        {run.fold_count ?? 0}
+                        {getFoldCount(run)}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {getFeaturesCount(run)} features

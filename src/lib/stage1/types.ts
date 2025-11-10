@@ -20,10 +20,25 @@ export interface Stage1DatasetSummary {
 export interface Stage1RunSummary {
   run_id: string;
   dataset_id: string;
-  fold_count?: number;
-  features?: string[] | string; // Can be JSON string or array
+  fold_count?: number; // Legacy field name
+  feature_columns?: string[] | string; // Actual field name from API
+  features?: string[] | string; // Legacy field name - Can be JSON string or array
   thresholds?: number[] | string; // Can be JSON string or array
+  summary_metrics?: {
+    folds?: number;
+    hit_rate_long?: number;
+    hit_rate_short?: number;
+    hit_rate_overall?: number;
+    pf_dual?: number;
+    [key: string]: any;
+  } | string; // Can be object or JSON string
   created_at: string;
+  completed_at?: string;
+  duration_ms?: number;
+  target_column?: string;
+  hyperparameters?: Record<string, unknown> | string;
+  walk_config?: Record<string, unknown> | string;
+  status?: string;
 }
 
 export interface Stage1FoldMetrics {
