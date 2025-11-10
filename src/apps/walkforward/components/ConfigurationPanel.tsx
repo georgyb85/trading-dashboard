@@ -105,8 +105,8 @@ threshold_method: ${props.thresholdMethod}`;
           <TabsTrigger value="copypaste">Copy/Paste</TabsTrigger>
         </TabsList>
 
-        <div className="flex-1 overflow-y-auto p-4">
-          <TabsContent value="data" className="m-0">
+        <div className="flex-1 overflow-hidden">
+          <TabsContent value="data" className="m-0 h-full overflow-y-auto p-4">
             <DataTab
               target={props.target}
               onTargetChange={props.onTargetChange}
@@ -115,7 +115,7 @@ threshold_method: ${props.thresholdMethod}`;
             />
           </TabsContent>
 
-          <TabsContent value="hyperparameters" className="m-0">
+          <TabsContent value="hyperparameters" className="m-0 h-full overflow-y-auto p-4">
             <HyperparametersTab
               maxDepth={props.maxDepth}
               minChildWeight={props.minChildWeight}
@@ -146,7 +146,7 @@ threshold_method: ${props.thresholdMethod}`;
             />
           </TabsContent>
 
-          <TabsContent value="walkforward" className="m-0">
+          <TabsContent value="walkforward" className="m-0 h-full overflow-y-auto p-4">
             <WalkForwardTab
               trainSize={props.trainSize}
               testSize={props.testSize}
@@ -165,7 +165,7 @@ threshold_method: ${props.thresholdMethod}`;
             />
           </TabsContent>
 
-          <TabsContent value="copypaste" className="m-0">
+          <TabsContent value="copypaste" className="m-0 h-full overflow-y-auto p-4">
             <CopyPasteTab
               currentConfig={generateConfigText()}
               onPasteConfig={handlePasteConfig}
