@@ -81,7 +81,10 @@ export const RunDetails = ({ runs, activeRun, onRunChange, onCloseRun, onExamine
 
   const copyFeatures = () => {
     if (currentRun) {
-      navigator.clipboard.writeText(currentRun.config.features.join(", "));
+      const features = Array.isArray(currentRun.config.features)
+        ? currentRun.config.features.join(", ")
+        : "N/A";
+      navigator.clipboard.writeText(features);
       toast({ title: "Features copied to clipboard" });
     }
   };
@@ -100,11 +103,12 @@ Objective: ${currentRun.config.objective} | Threshold: ${currentRun.config.thres
 
   const copyAll = () => {
     if (currentRun) {
+      const featuresArray = Array.isArray(currentRun.config.features) ? currentRun.config.features : [];
       const all = `# Run ${currentRun.run} Configuration
 Model: ${currentRun.config.model}
 
-Features (${currentRun.config.features.length}): [Copy Features button will copy these]
-${currentRun.config.features.join(", ")}
+Features (${featuresArray.length}): [Copy Features button will copy these]
+${featuresArray.join(", ")}
 
 Target: ${currentRun.config.target}
 
@@ -181,9 +185,9 @@ Objective: ${currentRun.config.objective} | Threshold: ${currentRun.config.thres
 
                     {/* Features */}
                     <div>
-                      <span className="text-muted-foreground">Features ({currentRun.config.features.length}):</span>{" "}
+                      <span className="text-muted-foreground">Features ({Array.isArray(currentRun.config.features) ? currentRun.config.features.length : 0}):</span>{" "}
                       <span className="font-mono text-xs">
-                        {currentRun.config.features.join(" | ")}
+                        {Array.isArray(currentRun.config.features) ? currentRun.config.features.join(" | ") : "N/A"}
                       </span>
                     </div>
 

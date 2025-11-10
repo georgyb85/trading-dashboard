@@ -198,12 +198,12 @@ const WalkforwardDashboard = () => {
     run: index + 1,
     run_id: run.run_id,
     config: {
+      ...(run.hyperparameters ?? {}),
+      ...(run.walk_config ?? {}),
       model,
       dataSource: run.dataset_slug ?? "",
       target: run.target_column ?? "",
       features: run.feature_columns ?? [],
-      ...(run.hyperparameters ?? {}),
-      ...(run.walk_config ?? {}),
     },
     folds: (run.folds ?? []).map(fold => ({
       fold: fold.fold_number,
