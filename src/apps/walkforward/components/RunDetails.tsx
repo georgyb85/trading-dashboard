@@ -156,24 +156,26 @@ Objective: ${currentRun.config.objective} | Threshold: ${currentRun.config.thres
             {/* Configuration Summary */}
             <Collapsible open={configOpen} onOpenChange={setConfigOpen}>
               <div className="rounded-lg border border-border bg-muted/30">
-                <CollapsibleTrigger className="w-full p-4 flex items-center justify-between hover:bg-muted/50 transition-colors">
-                  <h4 className="font-semibold">Configuration</h4>
+                <div className="w-full p-4 flex items-center justify-between">
+                  <CollapsibleTrigger className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                    <h4 className="font-semibold">Configuration</h4>
+                    {configOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </CollapsibleTrigger>
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); copyFeatures(); }}>
+                    <Button variant="outline" size="sm" onClick={copyFeatures}>
                       <Copy className="mr-1 h-3 w-3" />
                       Copy Features
                     </Button>
-                    <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); copyHyperparameters(); }}>
+                    <Button variant="outline" size="sm" onClick={copyHyperparameters}>
                       <Copy className="mr-1 h-3 w-3" />
                       Copy Hyperparameters
                     </Button>
-                    <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); copyAll(); }}>
+                    <Button variant="outline" size="sm" onClick={copyAll}>
                       <Copy className="mr-1 h-3 w-3" />
                       Copy All
                     </Button>
-                    {configOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                   </div>
-                </CollapsibleTrigger>
+                </div>
                 
                 <CollapsibleContent>
                   <div className="px-4 pb-4 space-y-3 text-sm">

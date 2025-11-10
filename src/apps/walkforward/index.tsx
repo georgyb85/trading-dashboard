@@ -69,21 +69,32 @@ const WalkforwardDashboard = () => {
 
   // Handle loading a saved run from Stage1
   const handleLoadRun = (run: Stage1RunDetail) => {
+    // Parse feature_columns if it's a JSON string
+    let parsedRun = { ...run };
+    if (typeof run.feature_columns === 'string') {
+      try {
+        parsedRun.feature_columns = JSON.parse(run.feature_columns);
+      } catch (e) {
+        console.error('Failed to parse feature_columns:', e);
+        parsedRun.feature_columns = [];
+      }
+    }
+
     // Check if run already loaded
-    const existingIndex = loadedRuns.findIndex(r => r.run_id === run.run_id);
+    const existingIndex = loadedRuns.findIndex(r => r.run_id === parsedRun.run_id);
 
     if (existingIndex >= 0) {
       setActiveRunIndex(existingIndex);
       toast({
         title: "Run Already Loaded",
-        description: `Switched to existing run ${run.run_id.slice(0, 8)}...`,
+        description: `Switched to existing run ${parsedRun.run_id.slice(0, 8)}...`,
       });
     } else {
-      setLoadedRuns(prev => [...prev, run]);
+      setLoadedRuns(prev => [...prev, parsedRun]);
       setActiveRunIndex(loadedRuns.length);
       toast({
         title: "Run Loaded Successfully",
-        description: `Loaded run ${run.run_id.slice(0, 8)}... with ${run.folds?.length ?? 0} folds`,
+        description: `Loaded run ${parsedRun.run_id.slice(0, 8)}... with ${parsedRun.folds?.length ?? 0} folds`,
       });
     }
   };

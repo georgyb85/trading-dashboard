@@ -45,13 +45,15 @@ export interface Stage1RunDetail {
   dataset_id: string;
   dataset_slug?: string;
   target_column?: string;
-  feature_columns?: string[];
+  feature_columns?: string[] | string; // Can be JSON string or array
   hyperparameters?: Record<string, unknown>;
   walk_config?: Record<string, unknown>;
   summary_metrics?: Record<string, unknown>;
   fold_count?: number;
   folds?: Stage1FoldMetrics[];
   created_at?: string;
+  completed_at?: string;
+  duration_ms?: number;
 }
 
 // API Response wrapper
