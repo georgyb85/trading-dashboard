@@ -69,23 +69,107 @@ const WalkforwardDashboard = () => {
 
   // Handle loading a saved run from Stage1
   const handleLoadRun = (run: Stage1RunDetail) => {
-    console.log('[handleLoadRun] Received run:', run);
+    console.log('[handleLoadRun] Raw run data:', run);
+    console.log('[handleLoadRun] feature_columns type:', typeof run.feature_columns, run.feature_columns);
+    console.log('[handleLoadRun] hyperparameters type:', typeof run.hyperparameters, run.hyperparameters);
+    console.log('[handleLoadRun] First fold metrics type:', typeof run.folds?.[0]?.metrics, run.folds?.[0]?.metrics);
+
+    // Defensive parsing - parse JSON strings if needed, otherwise use as-is
+    let parsedRun = { ...run };
+
+    // Parse feature_columns if it's a string
+    if (typeof run.feature_columns === 'string') {
+      try {
+        parsedRun.feature_columns = JSON.parse(run.feature_columns);
+        console.log('[handleLoadRun] Parsed feature_columns from string');
+      } catch (e) {
+        console.error('Failed to parse feature_columns:', e);
+        parsedRun.feature_columns = [];
+      }
+    }
+
+    // Parse hyperparameters if it's a string
+    if (typeof run.hyperparameters === 'string') {
+      try {
+        parsedRun.hyperparameters = JSON.parse(run.hyperparameters as string);
+        console.log('[handleLoadRun] Parsed hyperparameters from string');
+      } catch (e) {
+        console.error('Failed to parse hyperparameters:', e);
+        parsedRun.hyperparameters = {};
+      }
+    }
+
+    // Parse walk_config if it's a string
+    if (typeof run.walk_config === 'string') {
+      try {
+        parsedRun.walk_config = JSON.parse(run.walk_config as string);
+        console.log('[handleLoadRun] Parsed walk_config from string');
+      } catch (e) {
+        console.error('Failed to parse walk_config:', e);
+        parsedRun.walk_config = {};
+      }
+    }
+
+    // Parse summary_metrics if it's a string
+    if (typeof run.summary_metrics === 'string') {
+      try {
+        parsedRun.summary_metrics = JSON.parse(run.summary_metrics as string);
+        console.log('[handleLoadRun] Parsed summary_metrics from string');
+      } catch (e) {
+        console.error('Failed to parse summary_metrics:', e);
+        parsedRun.summary_metrics = {};
+      }
+    }
+
+    // Parse folds array and their nested JSON fields if needed
+    if (parsedRun.folds && Array.isArray(parsedRun.folds)) {
+      parsedRun.folds = parsedRun.folds.map((fold, idx) => {
+        const parsedFold = { ...fold };
+
+        // Parse fold metrics if it's a string
+        if (typeof fold.metrics === 'string') {
+          try {
+            parsedFold.metrics = JSON.parse(fold.metrics as string);
+            if (idx === 0) console.log('[handleLoadRun] Parsed fold metrics from string');
+          } catch (e) {
+            console.error('Failed to parse fold metrics:', e);
+            parsedFold.metrics = {};
+          }
+        }
+
+        // Parse fold thresholds if it's a string
+        if (typeof fold.thresholds === 'string') {
+          try {
+            parsedFold.thresholds = JSON.parse(fold.thresholds as string);
+            if (idx === 0) console.log('[handleLoadRun] Parsed fold thresholds from string');
+          } catch (e) {
+            console.error('Failed to parse fold thresholds:', e);
+            parsedFold.thresholds = {};
+          }
+        }
+
+        return parsedFold;
+      });
+    }
+
+    console.log('[handleLoadRun] Final parsed run:', parsedRun);
+    console.log('[handleLoadRun] First fold after parsing:', parsedRun.folds?.[0]);
 
     // Check if run already loaded
-    const existingIndex = loadedRuns.findIndex(r => r.run_id === run.run_id);
+    const existingIndex = loadedRuns.findIndex(r => r.run_id === parsedRun.run_id);
 
     if (existingIndex >= 0) {
       setActiveRunIndex(existingIndex);
       toast({
         title: "Run Already Loaded",
-        description: `Switched to existing run ${run.run_id.slice(0, 8)}...`,
+        description: `Switched to existing run ${parsedRun.run_id.slice(0, 8)}...`,
       });
     } else {
-      setLoadedRuns(prev => [...prev, run]);
+      setLoadedRuns(prev => [...prev, parsedRun]);
       setActiveRunIndex(loadedRuns.length);
       toast({
         title: "Run Loaded Successfully",
-        description: `Loaded run ${run.run_id.slice(0, 8)}... with ${run.folds?.length ?? 0} folds`,
+        description: `Loaded run ${parsedRun.run_id.slice(0, 8)}... with ${parsedRun.folds?.length ?? 0} folds`,
       });
     }
   };
