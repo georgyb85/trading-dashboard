@@ -73,32 +73,50 @@ class Stage1Client {
    * List datasets
    */
   async listDatasets(limit = 100, offset = 0): Promise<Stage1ApiResponse<Stage1DatasetSummary[]>> {
-    return this.request<Stage1DatasetSummary[]>(
-      `/api/stage1/datasets?limit=${limit}&offset=${offset}`
+    const response = await this.request<{ datasets: Stage1DatasetSummary[]; count: number }>(
+      `/api/datasets?limit=${limit}&offset=${offset}`
     );
+
+    if (response.success && response.data) {
+      return {
+        data: response.data.datasets,
+        success: true,
+      };
+    }
+
+    return response as any;
   }
 
   /**
    * List runs for a dataset
    */
   async listRuns(datasetId: string, limit = 200, offset = 0): Promise<Stage1ApiResponse<Stage1RunSummary[]>> {
-    return this.request<Stage1RunSummary[]>(
-      `/api/stage1/datasets/${datasetId}/runs?limit=${limit}&offset=${offset}`
+    const response = await this.request<{ runs: Stage1RunSummary[]; count: number }>(
+      `/api/datasets/${datasetId}/runs?limit=${limit}&offset=${offset}`
     );
+
+    if (response.success && response.data) {
+      return {
+        data: response.data.runs,
+        success: true,
+      };
+    }
+
+    return response as any;
   }
 
   /**
    * Get run details with folds
    */
   async getRun(runId: string): Promise<Stage1ApiResponse<Stage1RunDetail>> {
-    return this.request<Stage1RunDetail>(`/api/stage1/runs/${runId}`);
+    return this.request<Stage1RunDetail>(`/api/runs/${runId}`);
   }
 
   /**
    * Get run predictions (optional, for future trade-sim seeding)
    */
   async getRunPredictions(runId: string, format = 'json'): Promise<Stage1ApiResponse<any>> {
-    return this.request<any>(`/api/stage1/runs/${runId}/predictions?format=${format}`);
+    return this.request<any>(`/api/runs/${runId}/predictions?format=${format}`);
   }
 }
 

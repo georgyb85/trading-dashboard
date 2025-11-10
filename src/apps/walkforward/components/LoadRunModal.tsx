@@ -57,7 +57,7 @@ export const LoadRunModal = ({
     }
   };
 
-  const formatDate = (dateString: string | null) => {
+  const formatDate = (dateString: string) => {
     if (!dateString) return "—";
     return new Date(dateString).toLocaleString();
   };
@@ -114,10 +114,9 @@ export const LoadRunModal = ({
                   <TableRow>
                     <TableHead className="w-12"></TableHead>
                     <TableHead>Run ID</TableHead>
-                    <TableHead>Measurement</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Started</TableHead>
-                    <TableHead>Completed</TableHead>
+                    <TableHead>Folds</TableHead>
+                    <TableHead>Features</TableHead>
+                    <TableHead>Created</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -141,26 +140,13 @@ export const LoadRunModal = ({
                         {run.run_id.slice(0, 8)}...
                       </TableCell>
                       <TableCell className="text-sm">
-                        {run.prediction_measurement}
-                      </TableCell>
-                      <TableCell>
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
-                            run.status === "completed"
-                              ? "bg-success/10 text-success"
-                              : run.status === "running"
-                              ? "bg-warning/10 text-warning"
-                              : "bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          {run.status}
-                        </span>
+                        {run.fold_count}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {formatDate(run.started_at)}
+                        {run.features.length} features
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {formatDate(run.completed_at)}
+                        {formatDate(run.created_at)}
                       </TableCell>
                     </TableRow>
                   ))}

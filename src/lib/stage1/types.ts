@@ -4,21 +4,26 @@ export interface Stage1DatasetSummary {
   dataset_id: string;
   dataset_slug: string;
   symbol: string;
+  granularity: string;
+  source: string;
   ohlcv_measurement: string;
   indicator_measurement: string;
   ohlcv_row_count: number;
   indicator_row_count: number;
-  updated_at: string;
+  ohlcv_first_ts: number;
+  ohlcv_last_ts: number;
+  indicator_first_ts: number;
+  indicator_last_ts: number;
+  metadata: Record<string, unknown>;
 }
 
 export interface Stage1RunSummary {
   run_id: string;
   dataset_id: string;
-  dataset_slug: string;
-  prediction_measurement: string;
-  status: string;
-  started_at: string | null;
-  completed_at: string | null;
+  fold_count: number;
+  features: string[];
+  thresholds: number[];
+  created_at: string;
 }
 
 export interface Stage1FoldMetrics {
@@ -35,13 +40,18 @@ export interface Stage1FoldMetrics {
   metrics: Record<string, number>;
 }
 
-export interface Stage1RunDetail extends Stage1RunSummary {
+export interface Stage1RunDetail {
+  run_id: string;
+  dataset_id: string;
+  dataset_slug: string;
   target_column: string;
   feature_columns: string[];
   hyperparameters: Record<string, unknown>;
   walk_config: Record<string, unknown>;
   summary_metrics: Record<string, unknown>;
+  fold_count: number;
   folds: Stage1FoldMetrics[];
+  created_at: string;
 }
 
 // API Response wrapper
