@@ -21,8 +21,8 @@ export interface Stage1RunSummary {
   run_id: string;
   dataset_id: string;
   fold_count?: number;
-  features?: string[];
-  thresholds?: number[];
+  features?: string[] | string; // Can be JSON string or array
+  thresholds?: number[] | string; // Can be JSON string or array
   created_at: string;
 }
 

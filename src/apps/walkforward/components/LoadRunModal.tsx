@@ -62,6 +62,23 @@ export const LoadRunModal = ({
     return new Date(dateString).toLocaleString();
   };
 
+  const getFeaturesCount = (run: any) => {
+    if (!run.features) return 0;
+
+    // If features is a string, try to parse it
+    if (typeof run.features === 'string') {
+      try {
+        const parsed = JSON.parse(run.features);
+        return Array.isArray(parsed) ? parsed.length : 0;
+      } catch (e) {
+        return 0;
+      }
+    }
+
+    // If it's already an array, return its length
+    return Array.isArray(run.features) ? run.features.length : 0;
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[80vh]">
@@ -143,7 +160,7 @@ export const LoadRunModal = ({
                         {run.fold_count ?? 0}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {run.features?.length ?? 0} features
+                        {getFeaturesCount(run)} features
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {formatDate(run.created_at)}
