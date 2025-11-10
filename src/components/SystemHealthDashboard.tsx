@@ -366,25 +366,26 @@ export function SystemHealthDashboard() {
         ws.onmessage = (event) => {
           try {
             const data: StatusUpdate = JSON.parse(event.data);
+            console.log('[SystemHealth] Status message received:', data);
 
             if (data.type === 'update' && data.stats) {
-              // Update prices
-              if (data.stats.lastPrices) {
-                setLastPrices(data.stats.lastPrices);
-              }
-
               // Update threads
               if (data.stats.threads) {
+                console.log('[SystemHealth] Threads update:', data.stats.threads);
                 setThreads(data.stats.threads);
               }
 
               // Update ring buffers
               if (data.stats.ringBuffers) {
+                console.log('[SystemHealth] Ring buffers update:', data.stats.ringBuffers);
                 setRingBuffers(data.stats.ringBuffers);
+              } else {
+                console.warn('[SystemHealth] No ring buffers in stats:', data.stats);
               }
 
               // Update message rates
               if (data.stats.rates) {
+                console.log('[SystemHealth] Message rates update:', data.stats.rates);
                 setMessageRatesExtended(data.stats.rates);
               }
             }
@@ -489,9 +490,21 @@ export function SystemHealthDashboard() {
   // Get the first GPU instance for Kraken card
   const krakenInstance = gpuInstances[0];
   const krakenConnected = krakenInstance?.connected && krakenInstance?.usageMetrics?.message_rates !== undefined;
-  // Use extended message rates if available, fallback to GPU instance data
-  const messageRates = messageRatesExtended || krakenInstance?.usageMetrics?.message_rates;
+
+  // Normalize message rates to handle both extended API (camelCase) and GPU instance data (snake_case)
+  const messageRates = messageRatesExtended
+    ? {
+        total_per_sec: messageRatesExtended.totalPerSec,
+        trades_per_sec: messageRatesExtended.tradesPerSec,
+        orderbooks_per_sec: messageRatesExtended.orderbooksPerSec
+      }
+    : krakenInstance?.usageMetrics?.message_rates;
+
   const systemConnected = messageRatesExtended !== null || krakenConnected;
+
+  // Debug logging for ring buffers
+  console.log('[SystemHealth] Ring buffers state:', ringBuffers);
+  console.log('[SystemHealth] Ring buffer count:', Object.keys(ringBuffers).length);
 
   return (
     <div className="space-y-6">
@@ -499,29 +512,11 @@ export function SystemHealthDashboard() {
         <h1 className="text-3xl font-bold">System Health Dashboard</h1>
       </div>
 
-      {/* Price Ticker */}
-      {lastPrices.length > 0 && (
-        <Card className="trading-card">
-          <CardContent className="py-3">
-            <div className="flex items-center gap-6 overflow-x-auto">
-              {lastPrices.map(price => (
-                <div key={price.symbol} className="flex items-center gap-2 whitespace-nowrap">
-                  <Badge variant="outline" className="text-xs font-mono">{price.symbol}</Badge>
-                  <span className="text-lg font-bold font-mono">
-                    ${price.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Kraken Exchange Status Card */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="trading-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Message Stream</CardTitle>
+            <CardTitle className="text-sm font-medium">Kraken Exchange</CardTitle>
             {getStatusIcon(systemConnected)}
           </CardHeader>
           <CardContent>
