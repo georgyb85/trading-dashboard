@@ -334,7 +334,7 @@ const WalkforwardDashboard = () => {
   }));
 
   return (
-    <div className="flex h-screen flex-col bg-background">
+    <div className="flex h-full flex-col bg-background">
       <SimulationHeader
         onStartSimulation={handleStartSimulation}
         onReset={handleReset}
