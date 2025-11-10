@@ -366,26 +366,30 @@ export function SystemHealthDashboard() {
         ws.onmessage = (event) => {
           try {
             const data: StatusUpdate = JSON.parse(event.data);
-            console.log('[SystemHealth] Status message received:', data);
 
             if (data.type === 'update' && data.stats) {
+              // Log the actual stats structure once to debug
+              if (!data.stats.ringBuffers) {
+                console.log('[SystemHealth] Stats object keys:', Object.keys(data.stats));
+                console.log('[SystemHealth] Full stats object:', data.stats);
+              }
+
               // Update threads
               if (data.stats.threads) {
-                console.log('[SystemHealth] Threads update:', data.stats.threads);
                 setThreads(data.stats.threads);
               }
 
-              // Update ring buffers
+              // Update ring buffers - check all possible field names
               if (data.stats.ringBuffers) {
-                console.log('[SystemHealth] Ring buffers update:', data.stats.ringBuffers);
                 setRingBuffers(data.stats.ringBuffers);
-              } else {
-                console.warn('[SystemHealth] No ring buffers in stats:', data.stats);
+              } else if ((data.stats as any).ring_buffers) {
+                setRingBuffers((data.stats as any).ring_buffers);
+              } else if ((data.stats as any).ringbuffers) {
+                setRingBuffers((data.stats as any).ringbuffers);
               }
 
               // Update message rates
               if (data.stats.rates) {
-                console.log('[SystemHealth] Message rates update:', data.stats.rates);
                 setMessageRatesExtended(data.stats.rates);
               }
             }
@@ -501,10 +505,6 @@ export function SystemHealthDashboard() {
     : krakenInstance?.usageMetrics?.message_rates;
 
   const systemConnected = messageRatesExtended !== null || krakenConnected;
-
-  // Debug logging for ring buffers
-  console.log('[SystemHealth] Ring buffers state:', ringBuffers);
-  console.log('[SystemHealth] Ring buffer count:', Object.keys(ringBuffers).length);
 
   return (
     <div className="space-y-6">
