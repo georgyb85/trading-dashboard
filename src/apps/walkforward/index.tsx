@@ -83,7 +83,7 @@ const WalkforwardDashboard = () => {
       setActiveRunIndex(loadedRuns.length);
       toast({
         title: "Run Loaded Successfully",
-        description: `Loaded run ${run.run_id.slice(0, 8)}... with ${run.folds.length} folds`,
+        description: `Loaded run ${run.run_id.slice(0, 8)}... with ${run.folds?.length ?? 0} folds`,
       });
     }
   };
@@ -130,8 +130,8 @@ const WalkforwardDashboard = () => {
 
     const currentRun = loadedRuns[runIndex];
     if (currentRun) {
-      setFoldFeatures(currentRun.feature_columns);
-      setFoldTarget(currentRun.target_column);
+      setFoldFeatures(currentRun.feature_columns ?? []);
+      setFoldTarget(currentRun.target_column ?? "");
       setFoldTradingThreshold((fold.thresholds?.prediction_scaled ?? 0).toString());
     }
     setViewMode("testModel");
@@ -146,7 +146,7 @@ const WalkforwardDashboard = () => {
 
   // Generate chart data from Stage1 runs
   const chartData = loadedRuns.length > 0
-    ? loadedRuns[activeRunIndex]?.folds.map((fold) => {
+    ? loadedRuns[activeRunIndex]?.folds?.map((fold) => {
         const runningSum = fold.metrics?.running_sum ?? 0;
         const runningDual = fold.metrics?.running_sum_dual ?? runningSum;
         const runningShort = fold.metrics?.running_sum_short ?? 0;
@@ -163,7 +163,7 @@ const WalkforwardDashboard = () => {
 
   // Generate summary data from Stage1 runs
   const summaryData = loadedRuns.map((run, index) => {
-    const folds = run.folds;
+    const folds = run.folds ?? [];
     const totalReturn = folds.reduce((sum, fold) => sum + (fold.metrics?.sum ?? 0), 0);
     const totalSignals = folds.reduce((sum, fold) => sum + (fold.metrics?.n_signals ?? 0), 0);
     const totalSignalsLong = folds.reduce((sum, fold) => sum + (fold.metrics?.n_signals_long ?? 0), 0);
@@ -199,13 +199,13 @@ const WalkforwardDashboard = () => {
     run_id: run.run_id,
     config: {
       model,
-      dataSource: run.dataset_slug,
-      target: run.target_column,
-      features: run.feature_columns,
-      ...run.hyperparameters,
-      ...run.walk_config,
+      dataSource: run.dataset_slug ?? "",
+      target: run.target_column ?? "",
+      features: run.feature_columns ?? [],
+      ...(run.hyperparameters ?? {}),
+      ...(run.walk_config ?? {}),
     },
-    folds: run.folds.map(fold => ({
+    folds: (run.folds ?? []).map(fold => ({
       fold: fold.fold_number,
       iter: fold.best_iteration ?? 0,
       signalsLong: fold.metrics?.n_signals_long ?? 0,

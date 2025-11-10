@@ -20,9 +20,9 @@ export interface Stage1DatasetSummary {
 export interface Stage1RunSummary {
   run_id: string;
   dataset_id: string;
-  fold_count: number;
-  features: string[];
-  thresholds: number[];
+  fold_count?: number;
+  features?: string[];
+  thresholds?: number[];
   created_at: string;
 }
 
@@ -43,15 +43,15 @@ export interface Stage1FoldMetrics {
 export interface Stage1RunDetail {
   run_id: string;
   dataset_id: string;
-  dataset_slug: string;
-  target_column: string;
-  feature_columns: string[];
-  hyperparameters: Record<string, unknown>;
-  walk_config: Record<string, unknown>;
-  summary_metrics: Record<string, unknown>;
-  fold_count: number;
-  folds: Stage1FoldMetrics[];
-  created_at: string;
+  dataset_slug?: string;
+  target_column?: string;
+  feature_columns?: string[];
+  hyperparameters?: Record<string, unknown>;
+  walk_config?: Record<string, unknown>;
+  summary_metrics?: Record<string, unknown>;
+  fold_count?: number;
+  folds?: Stage1FoldMetrics[];
+  created_at?: string;
 }
 
 // API Response wrapper

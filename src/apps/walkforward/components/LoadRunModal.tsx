@@ -140,10 +140,10 @@ export const LoadRunModal = ({
                         {run.run_id.slice(0, 8)}...
                       </TableCell>
                       <TableCell className="text-sm">
-                        {run.fold_count}
+                        {run.fold_count ?? 0}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {run.features.length} features
+                        {run.features?.length ?? 0} features
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {formatDate(run.created_at)}
