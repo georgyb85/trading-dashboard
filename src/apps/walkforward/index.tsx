@@ -244,21 +244,38 @@ const WalkforwardDashboard = () => {
     });
   };
 
-  // Generate chart data from Stage1 runs
+  // Generate chart data from ALL loaded runs
   const chartData = loadedRuns.length > 0
-    ? loadedRuns[activeRunIndex]?.folds?.map((fold) => {
-        const runningSum = fold.metrics?.running_sum ?? 0;
-        const runningDual = fold.metrics?.running_sum_dual ?? runningSum;
-        const runningShort = fold.metrics?.running_sum_short ?? 0;
+    ? (() => {
+        // Get the maximum number of folds across all runs
+        const maxFolds = Math.max(...loadedRuns.map(run => run.folds?.length ?? 0));
 
-        return {
-          fold: fold.fold_number,
-          [`Run ${activeRunIndex + 1}`]: runningSum,
-          runningLong: runningSum,
-          runningDual: runningDual,
-          runningShort: runningShort,
-        };
-      }) ?? []
+        // Create data points for each fold
+        const data: Array<{ fold: number; [key: string]: number }> = [];
+
+        for (let foldNum = 0; foldNum < maxFolds; foldNum++) {
+          const dataPoint: { fold: number; [key: string]: number } = { fold: foldNum };
+
+          // Add data from each run for this fold
+          loadedRuns.forEach((run, runIndex) => {
+            const fold = run.folds?.[foldNum];
+            if (fold) {
+              const runningSum = fold.metrics?.running_sum ?? 0;
+              const runningDual = fold.metrics?.running_sum_dual ?? runningSum;
+              const runningShort = fold.metrics?.running_sum_short ?? 0;
+
+              // Add entries for each strategy type
+              dataPoint[`run${runIndex + 1}_dual`] = runningDual;
+              dataPoint[`run${runIndex + 1}_long`] = runningSum;
+              dataPoint[`run${runIndex + 1}_short`] = runningShort;
+            }
+          });
+
+          data.push(dataPoint);
+        }
+
+        return data;
+      })()
     : [];
 
   // Generate summary data from Stage1 runs
