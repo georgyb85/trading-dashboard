@@ -264,32 +264,71 @@ const WalkforwardDashboard = () => {
   // Generate summary data from Stage1 runs
   const summaryData = loadedRuns.map((run, index) => {
     const folds = run.folds ?? [];
+
+    // Debug: log first fold metrics to see available fields
+    if (folds.length > 0 && index === 0) {
+      console.log('[summaryData] First fold metrics fields:', Object.keys(folds[0].metrics || {}));
+      console.log('[summaryData] First fold metrics sample:', folds[0].metrics);
+    }
+
+    // Aggregate metrics across all folds
     const totalReturn = folds.reduce((sum, fold) => sum + (fold.metrics?.sum ?? 0), 0);
     const totalSignals = folds.reduce((sum, fold) => sum + (fold.metrics?.n_signals ?? 0), 0);
-    const totalSignalsLong = folds.reduce((sum, fold) => sum + (fold.metrics?.n_signals_long ?? 0), 0);
-    const totalSignalsShort = folds.reduce((sum, fold) => sum + (fold.metrics?.n_signals_short ?? 0), 0);
+    const totalSignalsShort = folds.reduce((sum, fold) => sum + (fold.metrics?.n_short_signals ?? 0), 0);
+    const totalSignalsLong = totalSignals - totalSignalsShort; // Calculate long signals
 
-    // Calculate average hit rates
-    const hitRates = folds.map(f => f.metrics?.hit_rate ?? 0).filter(h => h > 0);
-    const avgHitRate = hitRates.length > 0
-      ? hitRates.reduce((a, b) => a + b, 0) / hitRates.length
+    // Calculate hit rates separately for long and short
+    const hitRatesLong = folds.map(f => f.metrics?.hit_rate ?? 0).filter(h => h > 0);
+    const hitRatesShort = folds.map(f => f.metrics?.short_hit_rate ?? 0).filter(h => h > 0);
+
+    const avgHitRateLong = hitRatesLong.length > 0
+      ? hitRatesLong.reduce((a, b) => a + b, 0) / hitRatesLong.length
       : 0;
+
+    const avgHitRateShort = hitRatesShort.length > 0
+      ? hitRatesShort.reduce((a, b) => a + b, 0) / hitRatesShort.length
+      : 0;
+
+    // Calculate overall hit rate (weighted by signal counts)
+    const totalWins = folds.reduce((sum, fold) => {
+      const wins = (fold.metrics?.n_signals ?? 0) * (fold.metrics?.hit_rate ?? 0);
+      return sum + wins;
+    }, 0);
+    const avgHitRateTotal = totalSignals > 0 ? totalWins / totalSignals : 0;
+
+    // Calculate profit factors from last fold's running metrics
+    const lastFold = folds[folds.length - 1];
+    const pfTest = lastFold?.metrics?.profit_factor_test ?? 0;
+    const pfTrain = lastFold?.metrics?.profit_factor_train ?? 0;
+    const pfShortTest = lastFold?.metrics?.profit_factor_short_test ?? 0;
+    const pfShortTrain = lastFold?.metrics?.profit_factor_short_train ?? 0;
+
+    console.log('[summaryData] Run', index + 1, 'calculations:', {
+      totalSignals,
+      totalSignalsLong,
+      totalSignalsShort,
+      avgHitRateLong,
+      avgHitRateShort,
+      avgHitRateTotal,
+      pfTest,
+      pfTrain
+    });
 
     return {
       run: index + 1,
       folds: folds.length,
       return: totalReturn,
-      pfLong: 0, // Need to calculate from metrics
-      pfShort: 0, // Need to calculate from metrics
-      pfDual: 0, // Need to calculate from metrics
+      pfLong: pfTest, // Using profit_factor_test as general PF
+      pfShort: pfShortTest,
+      pfDual: pfTest, // Assuming test PF represents dual strategy
       sigLong: totalSignalsLong,
       sigShort: totalSignalsShort,
       sigDual: totalSignals,
       totalTrades: totalSignals,
-      hitRateLong: avgHitRate * 100,
-      hitRateShort: avgHitRate * 100,
-      hitRateTotal: avgHitRate * 100,
-      runtime: 0, // Not available in Stage1 data
+      hitRateLong: avgHitRateLong * 100,
+      hitRateShort: avgHitRateShort * 100,
+      hitRateTotal: avgHitRateTotal * 100,
+      runtime: run.duration_ms ? Math.round(run.duration_ms / 1000) : 0, // Convert ms to seconds
     };
   });
 
@@ -305,35 +344,42 @@ const WalkforwardDashboard = () => {
       target: run.target_column ?? "",
       features: run.feature_columns ?? [],
     },
-    folds: (run.folds ?? []).map(fold => ({
-      fold: fold.fold_number,
-      iter: fold.best_iteration ?? 0,
-      signalsLong: fold.metrics?.n_signals_long ?? 0,
-      signalsShort: fold.metrics?.n_signals_short ?? 0,
-      signalsTotal: fold.metrics?.n_signals ?? 0,
-      hitRateLong: (fold.metrics?.hit_rate_long ?? 0) * 100,
-      hitRateShort: (fold.metrics?.hit_rate_short ?? 0) * 100,
-      hitRateTotal: (fold.metrics?.hit_rate ?? 0) * 100,
-      sum: fold.metrics?.sum ?? 0,
-      running: fold.metrics?.running_sum ?? 0,
-      pfTrain: fold.metrics?.pf_train ?? 0,
-      pfLong: fold.metrics?.pf_long ?? 0,
-      pfShort: fold.metrics?.pf_short ?? 0,
-      pfDual: fold.metrics?.pf_dual ?? 0,
-      trainStart: fold.train_start_idx.toString(),
-      trainEnd: fold.train_end_idx.toString(),
-      testStart: fold.test_start_idx.toString(),
-      testEnd: fold.test_end_idx.toString(),
-      train_start_idx: fold.train_start_idx,
-      train_end_idx: fold.train_end_idx,
-      test_start_idx: fold.test_start_idx,
-      test_end_idx: fold.test_end_idx,
-      samples_train: fold.samples_train,
-      samples_test: fold.samples_test,
-      best_score: fold.best_score,
-      thresholds: fold.thresholds,
-      metrics: fold.metrics,
-    })),
+    folds: (run.folds ?? []).map(fold => {
+      // Calculate long signals (total - short)
+      const nSignals = fold.metrics?.n_signals ?? 0;
+      const nShortSignals = fold.metrics?.n_short_signals ?? 0;
+      const nLongSignals = nSignals - nShortSignals;
+
+      return {
+        fold: fold.fold_number,
+        iter: fold.best_iteration ?? 0,
+        signalsLong: nLongSignals,
+        signalsShort: nShortSignals,
+        signalsTotal: nSignals,
+        hitRateLong: (fold.metrics?.hit_rate ?? 0) * 100,
+        hitRateShort: (fold.metrics?.short_hit_rate ?? 0) * 100,
+        hitRateTotal: (fold.metrics?.hit_rate ?? 0) * 100, // Overall hit rate
+        sum: fold.metrics?.sum ?? 0,
+        running: fold.metrics?.running_sum ?? 0,
+        pfTrain: fold.metrics?.profit_factor_train ?? 0,
+        pfLong: fold.metrics?.profit_factor_test ?? 0,
+        pfShort: fold.metrics?.profit_factor_short_test ?? 0,
+        pfDual: fold.metrics?.profit_factor_test ?? 0,
+        trainStart: fold.train_start_idx.toString(),
+        trainEnd: fold.train_end_idx.toString(),
+        testStart: fold.test_start_idx.toString(),
+        testEnd: fold.test_end_idx.toString(),
+        train_start_idx: fold.train_start_idx,
+        train_end_idx: fold.train_end_idx,
+        test_start_idx: fold.test_start_idx,
+        test_end_idx: fold.test_end_idx,
+        samples_train: fold.samples_train,
+        samples_test: fold.samples_test,
+        best_score: fold.best_score,
+        thresholds: fold.thresholds,
+        metrics: fold.metrics,
+      };
+    }),
   }));
 
   return (
