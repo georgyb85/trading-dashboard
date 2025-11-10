@@ -73,19 +73,43 @@ interface GPUInstance {
 
 // Hardcoded GPU instances - add more as needed
 const GPU_INSTANCES: Array<{id: string, ip: string, name: string}> = [
-  { id: 'gpu1', ip: '39.114.73.97', name: 'GPU Server 1' },
+  { id: 'gpu1', ip: '220.82.52.202', name: 'GPU Server 1' },
   // Add more GPU instances here:
   // { id: 'gpu2', ip: '192.168.1.100', name: 'GPU Server 2' },
 ];
 
+type GPUInstanceConfig = (typeof GPU_INSTANCES)[number];
+
 export function SystemHealthDashboard() {
   const wsRefs = useRef<Map<string, WebSocket>>(new Map());
+  const reconnectTimers = useRef<Map<string, number>>(new Map());
+  const retryCounts = useRef<Map<string, number>>(new Map());
 
   const [gpuInstances, setGpuInstances] = useState<GPUInstance[]>(() => {
     const cached = loadFromCache<GPUInstance[]>(CACHE_KEYS.SYSTEM_HEALTH);
     if (cached && cached.length > 0) {
-      console.log('📂 Loaded GPU data from cache');
-      return cached;
+      console.log("📂 Loaded GPU data from cache");
+      const cachedMap = new Map(cached.map(instance => [instance.id, instance]));
+      return GPU_INSTANCES.map(config => {
+        const cachedInstance = cachedMap.get(config.id);
+        if (cachedInstance) {
+          return {
+            ...cachedInstance,
+            ...config,
+            connected: false,
+            systemInfo: cachedInstance.systemInfo ?? null,
+            usageMetrics: cachedInstance.usageMetrics ?? null,
+            usageHistory: cachedInstance.usageHistory ?? []
+          };
+        }
+        return {
+          ...config,
+          connected: false,
+          systemInfo: null,
+          usageMetrics: null,
+          usageHistory: []
+        };
+      });
     }
     return GPU_INSTANCES.map(config => ({
       ...config,
@@ -101,40 +125,96 @@ export function SystemHealthDashboard() {
 
   // WebSocket connections for GPU services
   useEffect(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const BASE_RECONNECT_DELAY_MS = 2000;
+    const MAX_RECONNECT_DELAY_MS = 60000;
+    const reconnectMap = reconnectTimers.current;
+    const wsMap = wsRefs.current;
+    const retryMap = retryCounts.current;
 
-    // Create WebSocket connection for each GPU instance
-    gpuInstances.forEach((instance) => {
+    function scheduleReconnect(config: GPUInstanceConfig) {
+      if (reconnectMap.has(config.id)) {
+        return;
+      }
+
+      const attempt = retryMap.get(config.id) ?? 0;
+      const delay = Math.min(
+        BASE_RECONNECT_DELAY_MS * Math.pow(2, attempt),
+        MAX_RECONNECT_DELAY_MS
+      );
+      const nextAttempt = attempt + 1;
+      retryMap.set(config.id, nextAttempt);
+      console.info(
+        `GPU WebSocket reconnect scheduled for ${config.name} in ${delay}ms (attempt ${nextAttempt})`
+      );
+
+      const timerId = window.setTimeout(() => {
+        reconnectMap.delete(config.id);
+        connect(config);
+      }, delay);
+
+      reconnectMap.set(config.id, timerId);
+    }
+
+    function connect(config: GPUInstanceConfig) {
       const wsUrl = `${protocol}//${window.location.host}/gpu-ws`;
 
-      console.log(`Connecting to GPU WebSocket for ${instance.name} (${instance.ip}):`, wsUrl);
-      const ws = new WebSocket(wsUrl);
-      wsRefs.current.set(instance.id, ws);
+      console.log(`Connecting to GPU WebSocket for ${config.name} (${config.ip}):`, wsUrl);
+
+      const existing = wsMap.get(config.id);
+      if (existing) {
+        try {
+          existing.close();
+        } catch (error) {
+          console.warn(`Error closing existing WebSocket for ${config.name}:`, error);
+        }
+      }
+
+      wsMap.delete(config.id);
+
+      let ws: WebSocket;
+      try {
+        ws = new WebSocket(wsUrl);
+      } catch (error) {
+        console.error(`Failed to create GPU WebSocket for ${config.name}:`, error);
+        scheduleReconnect(config);
+        return;
+      }
+
+      wsMap.set(config.id, ws);
 
       ws.onopen = () => {
-        console.log(`GPU WebSocket connected: ${instance.name}`);
-        ws.send('subscribe:usage');
-        setGpuInstances(prev => prev.map(gpu =>
-          gpu.id === instance.id
-            ? { ...gpu, connected: true }
-            : gpu
-        ));
+        console.log(`GPU WebSocket connected: ${config.name}`);
+        const existingTimer = reconnectMap.get(config.id);
+        if (existingTimer) {
+          window.clearTimeout(existingTimer);
+          reconnectMap.delete(config.id);
+        }
+        retryMap.set(config.id, 0);
+        ws.send("subscribe:usage");
+        setGpuInstances(prev =>
+          prev.map(gpu =>
+            gpu.id === config.id
+              ? { ...gpu, connected: true }
+              : gpu
+          )
+        );
       };
 
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
 
-        if (data.type === 'system_info') {
-          console.log(`Received system info for ${instance.name}:`, data);
+        if (data.type === "system_info") {
+          console.log(`Received system info for ${config.name}:`, data);
           setGpuInstances(prev => prev.map(gpu =>
-            gpu.id === instance.id
+            gpu.id === config.id
               ? { ...gpu, systemInfo: data }
               : gpu
           ));
-        } else if (data.type === 'usage_update') {
+        } else if (data.type === "usage_update") {
           setGpuInstances(prev => {
             const updated = prev.map(gpu => {
-              if (gpu.id === instance.id) {
+              if (gpu.id === config.id) {
                 // Add new data point to history
                 const newHistoryPoint: UsageHistory = {
                   timestamp: data.timestamp,
@@ -159,34 +239,41 @@ export function SystemHealthDashboard() {
             saveToCache(CACHE_KEYS.SYSTEM_HEALTH, updated);
             return updated;
           });
-        } else if (data.status === 'subscribed') {
-          console.log(`Subscribed to usage updates for ${instance.name}`);
+        } else if (data.status === "subscribed") {
+          console.log(`Subscribed to usage updates for ${config.name}`);
         }
       };
 
-      ws.onerror = (error) => {
-        console.error(`GPU WebSocket error for ${instance.name}:`, error);
+      ws.onerror = (event) => {
+        console.error(`GPU WebSocket error for ${config.name}:`, event);
         setGpuInstances(prev => prev.map(gpu =>
-          gpu.id === instance.id
+          gpu.id === config.id
             ? { ...gpu, connected: false }
             : gpu
         ));
+        scheduleReconnect(config);
       };
 
-      ws.onclose = () => {
-        console.log(`GPU WebSocket disconnected: ${instance.name}`);
+      ws.onclose = (event) => {
+        console.log(`GPU WebSocket disconnected: ${config.name}`, event);
         setGpuInstances(prev => prev.map(gpu =>
-          gpu.id === instance.id
+          gpu.id === config.id
             ? { ...gpu, connected: false }
             : gpu
         ));
+        wsMap.delete(config.id);
+        scheduleReconnect(config);
       };
-    });
+    }
+
+    GPU_INSTANCES.forEach(config => connect(config));
 
     return () => {
-      // Cleanup all WebSocket connections
-      wsRefs.current.forEach(ws => ws.close());
-      wsRefs.current.clear();
+      reconnectMap.forEach(timerId => window.clearTimeout(timerId));
+      reconnectMap.clear();
+      wsMap.forEach(ws => ws.close());
+      wsMap.clear();
+      retryMap.clear();
     };
   }, []);
 

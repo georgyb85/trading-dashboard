@@ -5,12 +5,12 @@
 This document specifies the WebSocket API protocol for the GPU monitoring service running on remote servers. The API provides real-time system information and usage metrics (CPU, RAM, GPU) to connected clients.
 
 **Server Endpoint:** `ws://[SERVER_IP]:33931/usage`
-**Example:** `ws://39.114.73.97:33931/usage`
+**Example:** `ws://220.82.52.202:33931/usage`
 
 **Nginx Proxy Configuration:**
 ```nginx
 location /gpu-ws {
-    proxy_pass         http://39.114.73.97:33931/usage;
+    proxy_pass         http://220.82.52.202:33931/usage;
     proxy_http_version 1.1;
     proxy_set_header   Upgrade           $http_upgrade;
     proxy_set_header   Connection        "upgrade";
@@ -38,7 +38,7 @@ const ws = new WebSocket(wsUrl);
 
 **Direct Connection (without proxy):**
 ```javascript
-const ws = new WebSocket('ws://39.114.73.97:33931/usage');
+const ws = new WebSocket('ws://220.82.52.202:33931/usage');
 ```
 
 ### 2. Connection Events
@@ -563,7 +563,7 @@ monitor.connect();
 cargo install websocat
 
 # Connect to server
-websocat ws://39.114.73.97:33931/usage
+websocat ws://220.82.52.202:33931/usage
 
 # After connection, type:
 subscribe:usage
@@ -576,7 +576,7 @@ subscribe:usage
 ```javascript
 const WebSocket = require('ws');
 
-const ws = new WebSocket('ws://39.114.73.97:33931/usage');
+const ws = new WebSocket('ws://220.82.52.202:33931/usage');
 
 ws.on('open', () => {
     console.log('Connected');

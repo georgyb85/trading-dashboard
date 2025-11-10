@@ -1,7 +1,7 @@
 # Stage 1.1–1.2 Alignment Results
 
 ## Context Snapshot
-- **Environment:** Laptop dev workspace (this repo), frontend server `45.85.147.236` (QuestDB + Postgres install + trading-dashboard), backend GPU node `39.114.73.97` (CUDA + Drogon services, ephemeral).
+- **Environment:** Laptop dev workspace (this repo), frontend server `45.85.147.236` (QuestDB + Postgres install + trading-dashboard), backend GPU node `220.82.52.202` (CUDA + Drogon services, ephemeral).
 - **Data entry point:** ChronosFlow/TSSB loaders convert local CSVs into Arrow tables and add UTC epoch seconds via `chronosflow::AnalyticsDataFrame::with_unix_timestamp` (`analytics_dataframe.cpp:360-441`).
 - **QuestDB export path:** `TimeSeriesWindow::ExportToQuestDB` (`TimeSeriesWindow.cpp:655-712`) batches Arrow rows into ILP payloads and streams them to `telnet://45.85.147.236:9009`.
 
@@ -38,7 +38,7 @@
 | --- | --- | --- | --- |
 | Laptop (repo) | local | Data prep, manual exports, UI prototyping | May lack backend/frontend runtime deps; used for CLI/export tooling. |
 | Frontend server | `45.85.147.236` | Hosts QuestDB (ILP 9009, REST 9000), Postgres service (5432), and the deployed trading-dashboard | Postgres cluster exists but Stage 1 DB/user/tables still need to be created here; allow backend ingress for DB access. |
-| Backend GPU node | `39.114.73.97` (vast.ai) | Runs Drogon API + CUDA/XGBoost workers | Ephemeral host; **no local databases**. Connects to QuestDB/Postgres on `45.85.147.236` using provisioned credentials. |
+| Backend GPU node | `220.82.52.202` (vast.ai) | Runs Drogon API + CUDA/XGBoost workers | Ephemeral host; **no local databases**. Connects to QuestDB/Postgres on `45.85.147.236` using provisioned credentials. |
 
 ## Stage 1.2 – Schema & Pipeline Hardening
 

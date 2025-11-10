@@ -13,7 +13,7 @@
 
 ## Executive Summary
 
-Successfully completed all Stage 1.1-1.3 infrastructure tasks on the frontend server (45.85.147.236). The server is now fully configured to support the trading platform's data pipeline, with QuestDB and PostgreSQL databases operational and accessible to the backend GPU node (39.114.73.97).
+Successfully completed all Stage 1.1-1.3 infrastructure tasks on the frontend server (45.85.147.236). The server is now fully configured to support the trading platform's data pipeline, with QuestDB and PostgreSQL databases operational and accessible to the backend GPU node (220.82.52.202).
 
 **Status**: ✅ All tasks completed successfully
 
@@ -43,7 +43,7 @@ Successfully completed all Stage 1.1-1.3 infrastructure tasks on the frontend se
   - Firewall policy: INPUT chain set to ACCEPT (permissive)
   - UFW is active but not restrictive
   - All required ports (5432, 9000, 9009) are accessible from 0.0.0.0
-  - Backend node (39.114.73.97) can reach all services
+  - Backend node (220.82.52.202) can reach all services
   - No additional firewall rules needed
 - **Verification**:
   ```bash
@@ -112,7 +112,7 @@ Successfully completed all Stage 1.1-1.3 infrastructure tasks on the frontend se
 - **Status**: COMPLETED
 - **File**: `/etc/postgresql/16/main/pg_hba.conf`
 - **Changes**: Added entries for:
-  - Backend GPU node: `host stage1_trading stage1_app 39.114.73.97/32 scram-sha-256`
+  - Backend GPU node: `host stage1_trading stage1_app 220.82.52.202/32 scram-sha-256`
   - Local testing: `host stage1_trading stage1_app 127.0.0.1/32 scram-sha-256`
 - **Service**: PostgreSQL reloaded to apply changes
 - **Verification**:
@@ -183,7 +183,7 @@ Successfully completed all Stage 1.1-1.3 infrastructure tasks on the frontend se
 - **Stage 1 User**: `stage1_app` ✓
 - **Tables**: 6 (all Stage 1 schema tables) ✓
 - **Indexes**: 17 ✓
-- **Access Control**: Configured for backend node (39.114.73.97) ✓
+- **Access Control**: Configured for backend node (220.82.52.202) ✓
 - **Connection Test**: Successful ✓
 
 ### Network Configuration
@@ -225,7 +225,7 @@ Successfully completed all Stage 1.1-1.3 infrastructure tasks on the frontend se
 
 ## Connection Information for Backend Node
 
-The backend GPU node (39.114.73.97) should use the following connection details:
+The backend GPU node (220.82.52.202) should use the following connection details:
 
 ### PostgreSQL
 ```bash
@@ -323,7 +323,7 @@ UNION ALL SELECT 'simulation_runs', COUNT(*) FROM simulation_runs;"
 
 #### Network Connectivity (from backend node)
 ```bash
-# Test from 39.114.73.97
+# Test from 220.82.52.202
 ping 45.85.147.236
 
 # Test PostgreSQL
@@ -385,7 +385,7 @@ All tasks completed successfully without critical issues.
 
 ## Conclusion
 
-The frontend server (45.85.147.236) is now fully configured and ready to support Stage 1 of the trading platform. All infrastructure components are operational, secured, and documented. The backend GPU node (39.114.73.97) can connect to both QuestDB and PostgreSQL using the provided credentials.
+The frontend server (45.85.147.236) is now fully configured and ready to support Stage 1 of the trading platform. All infrastructure components are operational, secured, and documented. The backend GPU node (220.82.52.202) can connect to both QuestDB and PostgreSQL using the provided credentials.
 
 **Infrastructure Status**: ✅ PRODUCTION READY for Stage 1
 

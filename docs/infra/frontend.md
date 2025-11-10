@@ -158,7 +158,7 @@ All tables created successfully:
 Stage 1 entries:
 ```
 # Stage 1 Trading Platform - Backend GPU node access
-host    stage1_trading    stage1_app    39.114.73.97/32        scram-sha-256
+host    stage1_trading    stage1_app    220.82.52.202/32        scram-sha-256
 # Stage 1 Trading Platform - Allow local connections for testing
 host    stage1_trading    stage1_app    127.0.0.1/32           scram-sha-256
 ```
@@ -209,13 +209,13 @@ ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;"
 - **9009**: QuestDB ILP
 
 ### Backend Node Access
-The backend GPU node (39.114.73.97) can access:
+The backend GPU node (220.82.52.202) can access:
 - PostgreSQL: Yes (configured in pg_hba.conf)
 - QuestDB REST: Yes (open on 0.0.0.0)
 - QuestDB ILP: Yes (open on 0.0.0.0)
 
 ### Testing Connectivity
-From the backend node (39.114.73.97):
+From the backend node (220.82.52.202):
 ```bash
 # Test PostgreSQL connection
 PGPASSWORD='St4g3!Tr4d1ng#2025' psql -U stage1_app -d stage1_trading -h 45.85.147.236 -c "SELECT 'Connected' as status;"
@@ -442,10 +442,10 @@ sudo systemctl restart postgresql
 ### Backend Node Cannot Connect
 ```bash
 # Verify backend IP in pg_hba.conf
-grep "39.114.73.97" /etc/postgresql/16/main/pg_hba.conf
+grep "220.82.52.202" /etc/postgresql/16/main/pg_hba.conf
 
 # Test from this server to backend
-ping 39.114.73.97
+ping 220.82.52.202
 
 # Check firewall rules
 iptables -L -n -v

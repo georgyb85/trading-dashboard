@@ -5,7 +5,7 @@ Host: `45.85.147.236` (persistent). Houses QuestDB, Postgres, and production `tr
 ## Stage 1.1 – Architecture & Alignment
 - [ ] Clone/pull the latest `trading-dashboard` codebase from this repo and place it under the appropriate deployment directory.
 - [ ] Verify QuestDB service health (ports 9000/9009) and document connection info in `docs/infra/frontend.md` (new file to create on the server).
-- [ ] Inventory firewall rules so the backend node (`39.114.73.97`) can reach QuestDB ILP/REST and Postgres.
+- [ ] Inventory firewall rules so the backend node (`220.82.52.202`) can reach QuestDB ILP/REST and Postgres.
 
 ## Stage 1.2 – Schema & Data Pipeline Hardening
 - [ ] Create Postgres role + database dedicated to Stage 1 (`CREATE ROLE stage1_app ...`, `CREATE DATABASE stage1_trading ...`).

@@ -5,7 +5,7 @@ Goal: transition the desktop-first Dear ImGui workflow into a web-delivered anal
 ## Environment Roles (Stage 1 Baseline)
 - **Laptop (this repo):** owns raw OHLCV/indicator files, Dear ImGui exporters, and serves as the source of truth for historical exports. The app dynamically names QuestDB measurements (e.g., `btc25_1`, `btc25_run3`) when exporting datasets or walkforward outputs. No long-lived databases run locally.
 - **Frontend server – `45.85.147.236`:** persistent host for QuestDB, Postgres (database+user still to be created), and the production `trading-dashboard` web app. QuestDB schemas are materialised as soon as the laptop exports land; Postgres captures run/simulation metadata and hyperparameters pushed from the laptop.
-- **Backend GPU node – `39.114.73.97` (ephemeral vast.ai):** runs the Drogon service layer. Hosts have no resident databases; they connect remotely to QuestDB/Postgres on the frontend server using credentials provisioned there and must handle dynamic measurement names supplied at runtime.
+- **Backend GPU node – `220.82.52.202` (ephemeral vast.ai):** runs the Drogon service layer. Hosts have no resident databases; they connect remotely to QuestDB/Postgres on the frontend server using credentials provisioned there and must handle dynamic measurement names supplied at runtime.
 
 ## Stage 1 – Shared Data Contract & Read/Visualize Experience
 *Outcome:* consistent schemas across QuestDB/Postgres, reliable export tooling from the laptop workflow, backend endpoints that surface historical runs, and a frontend that renders those artifacts with production data instead of stubs.

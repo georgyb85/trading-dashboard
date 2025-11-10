@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { SimulationHeader } from "@/apps/walkforward/components/SimulationHeader";
+import { LoadRunModal } from "@/apps/walkforward/components/LoadRunModal";
 import { ConfigurationPanel } from "@/apps/walkforward/components/ConfigurationPanel";
 import { PerformanceChart } from "@/apps/walkforward/components/PerformanceChart";
 import { PerformanceSummary } from "@/apps/walkforward/components/PerformanceSummary";
@@ -10,15 +11,22 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { generateMockChartData, generateMockSummary, generateMockFolds } from "@/apps/walkforward/lib/mockData";
 import { toast } from "@/hooks/use-toast";
+import type { Stage1RunDetail } from "@/lib/stage1/types";
 
 const WalkforwardDashboard = () => {
+  // Dataset and run selection
+  const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
+  const [loadRunModalOpen, setLoadRunModalOpen] = useState(false);
+  const [loadedRuns, setLoadedRuns] = useState<Stage1RunDetail[]>([]);
+  const [activeRunIndex, setActiveRunIndex] = useState(0);
+
+  // Configuration state
   const [model, setModel] = useState("xgboost");
   const [dataSource, setDataSource] = useState("btc_1h");
   const [target, setTarget] = useState("TGT_315");
   const [selectedFeatures, setSelectedFeatures] = useState([
-    "PRICE_MI", "R_PROD_MORLET", "VWMA_RATIO_M", "VWMA_RATIO_L", 
+    "PRICE_MI", "R_PROD_MORLET", "VWMA_RATIO_M", "VWMA_RATIO_L",
     "ATR_RATIO_L", "VOL_MAX_PS", "BOL_WIDTH_S", "BOL_WIDTH_M", "PV_FIT_M"
   ]);
   const [trainSize, setTrainSize] = useState(650);
@@ -41,17 +49,15 @@ const WalkforwardDashboard = () => {
   const [objective, setObjective] = useState("reg:quantileerror");
   const [quantileAlpha, setQuantileAlpha] = useState(0.95);
   const [thresholdMethod, setThresholdMethod] = useState("OptimalROC");
+
+  // UI state
   const [isRunning, setIsRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [showConfig, setShowConfig] = useState(true);
   const [showFoldConfig, setShowFoldConfig] = useState(true);
-  const [runs, setRuns] = useState<any[]>([]);
-  const [activeRun, setActiveRun] = useState(1);
-  const [chartData, setChartData] = useState<any[]>([]);
-  const [summaryData, setSummaryData] = useState<any[]>([]);
   const [viewMode, setViewMode] = useState<"simulation" | "testModel">("simulation");
   const [examinedFold, setExaminedFold] = useState<any>(null);
-  
+
   // Test Model state
   const [foldTrainStart, setFoldTrainStart] = useState("");
   const [foldTrainEnd, setFoldTrainEnd] = useState("");
@@ -61,142 +67,72 @@ const WalkforwardDashboard = () => {
   const [foldTarget, setFoldTarget] = useState("");
   const [foldTradingThreshold, setFoldTradingThreshold] = useState("0.798373");
 
-  useEffect(() => {
-    // Initialize with mock data for Run 1
-    const initialRun = {
-      run: 1,
-      config: {
-        model,
-        dataSource,
-        target,
-        features: selectedFeatures,
-        trainSize,
-        testSize,
-        trainTestGap,
-        stepSize,
-        startFold,
-        endFold,
-        initialOffset,
-        maxDepth,
-        minChildWeight,
-        learningRate,
-        numRounds,
-        earlyStopping,
-        minRounds,
-        subsample,
-        colsampleBytree,
-        lambda,
-        forceMinimumTraining,
-        objective,
-        quantileAlpha,
-        thresholdMethod,
-      },
-      folds: generateMockFolds(140),
-    };
-    setRuns([initialRun]);
-    setChartData(generateMockChartData(140, 1));
-    setSummaryData(generateMockSummary(1));
-  }, []);
+  // Handle loading a saved run from Stage1
+  const handleLoadRun = (run: Stage1RunDetail) => {
+    // Check if run already loaded
+    const existingIndex = loadedRuns.findIndex(r => r.run_id === run.run_id);
 
-  const handleStartSimulation = () => {
-    setIsRunning(true);
-    setProgress(0);
-
-    const newRunNumber = runs.length + 1;
-    const numFolds = Math.floor((1000 - trainSize) / stepSize);
-
-    // Simulate progress
-    const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setIsRunning(false);
-
-          // Add new run
-          const newRun = {
-            run: newRunNumber,
-            config: {
-              model,
-              dataSource,
-              target,
-              features: selectedFeatures,
-              trainSize,
-              testSize,
-              trainTestGap,
-              stepSize,
-              startFold,
-              endFold,
-              initialOffset,
-              maxDepth,
-              minChildWeight,
-              learningRate,
-              numRounds,
-              earlyStopping,
-              minRounds,
-              subsample,
-              colsampleBytree,
-              lambda,
-              forceMinimumTraining,
-              objective,
-              quantileAlpha,
-              thresholdMethod,
-            },
-            folds: generateMockFolds(numFolds),
-          };
-
-          setRuns((prev) => [...prev, newRun]);
-          setActiveRun(newRunNumber);
-          setChartData(generateMockChartData(numFolds, newRunNumber));
-          setSummaryData(generateMockSummary(newRunNumber));
-
-          toast({
-            title: "Simulation Complete",
-            description: `Run ${newRunNumber} completed successfully with ${numFolds} folds.`,
-          });
-
-          return 100;
-        }
-        return prev + 1;
+    if (existingIndex >= 0) {
+      setActiveRunIndex(existingIndex);
+      toast({
+        title: "Run Already Loaded",
+        description: `Switched to existing run ${run.run_id.slice(0, 8)}...`,
       });
-    }, 30);
-  };
-
-  const handleReset = () => {
-    setRuns([]);
-    setChartData([]);
-    setSummaryData([]);
-    setProgress(0);
-    toast({
-      title: "Reset Complete",
-      description: "All simulation data has been cleared.",
-    });
-  };
-
-  const handleCloseRun = (runNumber: number) => {
-    const updatedRuns = runs.filter((r) => r.run !== runNumber);
-    setRuns(updatedRuns);
-
-    if (updatedRuns.length > 0) {
-      setActiveRun(updatedRuns[updatedRuns.length - 1].run);
-      setChartData(generateMockChartData(140, updatedRuns.length));
-      setSummaryData(generateMockSummary(updatedRuns.length));
     } else {
-      setActiveRun(1);
-      setChartData([]);
-      setSummaryData([]);
+      setLoadedRuns(prev => [...prev, run]);
+      setActiveRunIndex(loadedRuns.length);
+      toast({
+        title: "Run Loaded Successfully",
+        description: `Loaded run ${run.run_id.slice(0, 8)}... with ${run.folds.length} folds`,
+      });
     }
   };
 
-  const handleExamineFold = (run: number, fold: any) => {
-    setExaminedFold({ run, fold });
-    setFoldTrainStart(fold.trainStart);
-    setFoldTrainEnd(fold.trainEnd);
-    setFoldTestStart(fold.testStart);
-    setFoldTestEnd(fold.testEnd);
-    const currentRun = runs.find((r) => r.run === run);
+  // Handle starting a simulation (demo mode for now)
+  const handleStartSimulation = () => {
+    toast({
+      title: "Demo Mode",
+      description: "Start Simulation is currently disabled. Please use 'Load Saved Run' to view existing results.",
+      variant: "default",
+    });
+  };
+
+  // Handle reset
+  const handleReset = () => {
+    setLoadedRuns([]);
+    setActiveRunIndex(0);
+    setExaminedFold(null);
+    toast({
+      title: "Reset Complete",
+      description: "All loaded runs have been cleared.",
+    });
+  };
+
+  // Handle closing a run
+  const handleCloseRun = (runIndex: number) => {
+    const updatedRuns = loadedRuns.filter((_, index) => index !== runIndex);
+    setLoadedRuns(updatedRuns);
+
+    if (updatedRuns.length > 0) {
+      setActiveRunIndex(Math.min(runIndex, updatedRuns.length - 1));
+    } else {
+      setActiveRunIndex(0);
+    }
+  };
+
+  // Handle examining a fold
+  const handleExamineFold = (runIndex: number, fold: any) => {
+    setExaminedFold({ runIndex, fold });
+    setFoldTrainStart(fold.train_start_idx.toString());
+    setFoldTrainEnd(fold.train_end_idx.toString());
+    setFoldTestStart(fold.test_start_idx.toString());
+    setFoldTestEnd(fold.test_end_idx.toString());
+
+    const currentRun = loadedRuns[runIndex];
     if (currentRun) {
-      setFoldFeatures(currentRun.config.features);
-      setFoldTarget(currentRun.config.target);
+      setFoldFeatures(currentRun.feature_columns);
+      setFoldTarget(currentRun.target_column);
+      setFoldTradingThreshold((fold.thresholds?.prediction_scaled ?? 0).toString());
     }
     setViewMode("testModel");
   };
@@ -208,14 +144,109 @@ const WalkforwardDashboard = () => {
     });
   };
 
+  // Generate chart data from Stage1 runs
+  const chartData = loadedRuns.length > 0
+    ? loadedRuns[activeRunIndex]?.folds.map((fold) => {
+        const runningSum = fold.metrics?.running_sum ?? 0;
+        const runningDual = fold.metrics?.running_sum_dual ?? runningSum;
+        const runningShort = fold.metrics?.running_sum_short ?? 0;
+
+        return {
+          fold: fold.fold_number,
+          [`Run ${activeRunIndex + 1}`]: runningSum,
+          runningLong: runningSum,
+          runningDual: runningDual,
+          runningShort: runningShort,
+        };
+      }) ?? []
+    : [];
+
+  // Generate summary data from Stage1 runs
+  const summaryData = loadedRuns.map((run, index) => {
+    const folds = run.folds;
+    const totalReturn = folds.reduce((sum, fold) => sum + (fold.metrics?.sum ?? 0), 0);
+    const totalSignals = folds.reduce((sum, fold) => sum + (fold.metrics?.n_signals ?? 0), 0);
+    const totalSignalsLong = folds.reduce((sum, fold) => sum + (fold.metrics?.n_signals_long ?? 0), 0);
+    const totalSignalsShort = folds.reduce((sum, fold) => sum + (fold.metrics?.n_signals_short ?? 0), 0);
+
+    // Calculate average hit rates
+    const hitRates = folds.map(f => f.metrics?.hit_rate ?? 0).filter(h => h > 0);
+    const avgHitRate = hitRates.length > 0
+      ? hitRates.reduce((a, b) => a + b, 0) / hitRates.length
+      : 0;
+
+    return {
+      run: index + 1,
+      folds: folds.length,
+      return: totalReturn,
+      pfLong: 0, // Need to calculate from metrics
+      pfShort: 0, // Need to calculate from metrics
+      pfDual: 0, // Need to calculate from metrics
+      sigLong: totalSignalsLong,
+      sigShort: totalSignalsShort,
+      sigDual: totalSignals,
+      totalTrades: totalSignals,
+      hitRateLong: avgHitRate * 100,
+      hitRateShort: avgHitRate * 100,
+      hitRateTotal: avgHitRate * 100,
+      runtime: 0, // Not available in Stage1 data
+    };
+  });
+
+  // Convert Stage1 runs to the format expected by RunDetails
+  const runsForDetails = loadedRuns.map((run, index) => ({
+    run: index + 1,
+    run_id: run.run_id,
+    config: {
+      model,
+      dataSource: run.dataset_slug,
+      target: run.target_column,
+      features: run.feature_columns,
+      ...run.hyperparameters,
+      ...run.walk_config,
+    },
+    folds: run.folds.map(fold => ({
+      fold: fold.fold_number,
+      iter: fold.best_iteration ?? 0,
+      signalsLong: fold.metrics?.n_signals_long ?? 0,
+      signalsShort: fold.metrics?.n_signals_short ?? 0,
+      signalsTotal: fold.metrics?.n_signals ?? 0,
+      hitRateLong: (fold.metrics?.hit_rate_long ?? 0) * 100,
+      hitRateShort: (fold.metrics?.hit_rate_short ?? 0) * 100,
+      hitRateTotal: (fold.metrics?.hit_rate ?? 0) * 100,
+      sum: fold.metrics?.sum ?? 0,
+      running: fold.metrics?.running_sum ?? 0,
+      pfTrain: fold.metrics?.pf_train ?? 0,
+      pfLong: fold.metrics?.pf_long ?? 0,
+      pfShort: fold.metrics?.pf_short ?? 0,
+      pfDual: fold.metrics?.pf_dual ?? 0,
+      trainStart: fold.train_start_idx.toString(),
+      trainEnd: fold.train_end_idx.toString(),
+      testStart: fold.test_start_idx.toString(),
+      testEnd: fold.test_end_idx.toString(),
+      train_start_idx: fold.train_start_idx,
+      train_end_idx: fold.train_end_idx,
+      test_start_idx: fold.test_start_idx,
+      test_end_idx: fold.test_end_idx,
+      samples_train: fold.samples_train,
+      samples_test: fold.samples_test,
+      best_score: fold.best_score,
+      thresholds: fold.thresholds,
+      metrics: fold.metrics,
+    })),
+  }));
+
   return (
     <div className="flex h-screen flex-col bg-background">
       <SimulationHeader
         onStartSimulation={handleStartSimulation}
         onReset={handleReset}
+        onLoadRun={() => setLoadRunModalOpen(true)}
         isRunning={isRunning}
         model={model}
         onModelChange={setModel}
+        selectedDataset={selectedDataset}
+        onDatasetChange={setSelectedDataset}
       />
 
       {isRunning && (
@@ -229,6 +260,13 @@ const WalkforwardDashboard = () => {
           </div>
         </div>
       )}
+
+      <LoadRunModal
+        open={loadRunModalOpen}
+        onOpenChange={setLoadRunModalOpen}
+        datasetId={selectedDataset}
+        onLoadRun={handleLoadRun}
+      />
 
       {/* Top-level Tabs */}
       <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)} className="flex flex-col flex-1 overflow-hidden">
@@ -313,20 +351,20 @@ const WalkforwardDashboard = () => {
               <div className="space-y-4">
                 {chartData.length > 0 && <PerformanceChart data={chartData} />}
                 {summaryData.length > 0 && <PerformanceSummary runs={summaryData} />}
-                {runs.length > 0 && (
+                {runsForDetails.length > 0 && (
                   <RunDetails
-                    runs={runs}
-                    activeRun={activeRun}
-                    onRunChange={setActiveRun}
-                    onCloseRun={handleCloseRun}
+                    runs={runsForDetails}
+                    activeRun={activeRunIndex + 1}
+                    onRunChange={(runNumber) => setActiveRunIndex(runNumber - 1)}
+                    onCloseRun={(runNumber) => handleCloseRun(runNumber - 1)}
                     onExamineFold={handleExamineFold}
                   />
                 )}
-                {runs.length === 0 && (
+                {runsForDetails.length === 0 && (
                   <div className="flex h-96 items-center justify-center text-muted-foreground">
                     <div className="text-center">
-                      <p className="text-lg font-medium">No simulation runs yet</p>
-                      <p className="text-sm">Configure your parameters and click "Start Simulation" to begin</p>
+                      <p className="text-lg font-medium">No runs loaded yet</p>
+                      <p className="text-sm">Select a dataset and click "Load Saved Run" to begin</p>
                     </div>
                   </div>
                 )}
@@ -348,7 +386,7 @@ const WalkforwardDashboard = () => {
                 <>
                   {examinedFold ? (
                     <FoldConfigPanel
-                      run={examinedFold.run}
+                      run={examinedFold.runIndex + 1}
                       fold={examinedFold.fold.fold}
                       trainStart={foldTrainStart}
                       trainEnd={foldTrainEnd}
