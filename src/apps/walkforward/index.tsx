@@ -69,95 +69,23 @@ const WalkforwardDashboard = () => {
 
   // Handle loading a saved run from Stage1
   const handleLoadRun = (run: Stage1RunDetail) => {
-    // Parse JSON string fields from API response
-    let parsedRun = { ...run };
-
-    // Parse feature_columns
-    if (typeof run.feature_columns === 'string') {
-      try {
-        parsedRun.feature_columns = JSON.parse(run.feature_columns);
-      } catch (e) {
-        console.error('Failed to parse feature_columns:', e);
-        parsedRun.feature_columns = [];
-      }
-    }
-
-    // Parse hyperparameters
-    if (typeof run.hyperparameters === 'string') {
-      try {
-        parsedRun.hyperparameters = JSON.parse(run.hyperparameters as string);
-      } catch (e) {
-        console.error('Failed to parse hyperparameters:', e);
-        parsedRun.hyperparameters = {};
-      }
-    }
-
-    // Parse walk_config
-    if (typeof run.walk_config === 'string') {
-      try {
-        parsedRun.walk_config = JSON.parse(run.walk_config as string);
-      } catch (e) {
-        console.error('Failed to parse walk_config:', e);
-        parsedRun.walk_config = {};
-      }
-    }
-
-    // Parse summary_metrics
-    if (typeof run.summary_metrics === 'string') {
-      try {
-        parsedRun.summary_metrics = JSON.parse(run.summary_metrics as string);
-      } catch (e) {
-        console.error('Failed to parse summary_metrics:', e);
-        parsedRun.summary_metrics = {};
-      }
-    }
-
-    // Parse folds array and their nested JSON fields
-    if (parsedRun.folds && Array.isArray(parsedRun.folds)) {
-      parsedRun.folds = parsedRun.folds.map(fold => {
-        const parsedFold = { ...fold };
-
-        // Parse fold metrics
-        if (typeof fold.metrics === 'string') {
-          try {
-            parsedFold.metrics = JSON.parse(fold.metrics as string);
-          } catch (e) {
-            console.error('Failed to parse fold metrics:', e);
-            parsedFold.metrics = {};
-          }
-        }
-
-        // Parse fold thresholds
-        if (typeof fold.thresholds === 'string') {
-          try {
-            parsedFold.thresholds = JSON.parse(fold.thresholds as string);
-          } catch (e) {
-            console.error('Failed to parse fold thresholds:', e);
-            parsedFold.thresholds = {};
-          }
-        }
-
-        return parsedFold;
-      });
-    }
-
-    console.log('[handleLoadRun] Parsed run:', parsedRun);
+    console.log('[handleLoadRun] Received run:', run);
 
     // Check if run already loaded
-    const existingIndex = loadedRuns.findIndex(r => r.run_id === parsedRun.run_id);
+    const existingIndex = loadedRuns.findIndex(r => r.run_id === run.run_id);
 
     if (existingIndex >= 0) {
       setActiveRunIndex(existingIndex);
       toast({
         title: "Run Already Loaded",
-        description: `Switched to existing run ${parsedRun.run_id.slice(0, 8)}...`,
+        description: `Switched to existing run ${run.run_id.slice(0, 8)}...`,
       });
     } else {
-      setLoadedRuns(prev => [...prev, parsedRun]);
+      setLoadedRuns(prev => [...prev, run]);
       setActiveRunIndex(loadedRuns.length);
       toast({
         title: "Run Loaded Successfully",
-        description: `Loaded run ${parsedRun.run_id.slice(0, 8)}... with ${parsedRun.folds?.length ?? 0} folds`,
+        description: `Loaded run ${run.run_id.slice(0, 8)}... with ${run.folds?.length ?? 0} folds`,
       });
     }
   };
