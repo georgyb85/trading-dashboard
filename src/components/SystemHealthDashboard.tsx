@@ -489,7 +489,9 @@ export function SystemHealthDashboard() {
   // Get the first GPU instance for Kraken card
   const krakenInstance = gpuInstances[0];
   const krakenConnected = krakenInstance?.connected && krakenInstance?.usageMetrics?.message_rates !== undefined;
-  const messageRates = krakenInstance?.usageMetrics?.message_rates;
+  // Use extended message rates if available, fallback to GPU instance data
+  const messageRates = messageRatesExtended || krakenInstance?.usageMetrics?.message_rates;
+  const systemConnected = messageRatesExtended !== null || krakenConnected;
 
   return (
     <div className="space-y-6">
@@ -497,18 +499,36 @@ export function SystemHealthDashboard() {
         <h1 className="text-3xl font-bold">System Health Dashboard</h1>
       </div>
 
+      {/* Price Ticker */}
+      {lastPrices.length > 0 && (
+        <Card className="trading-card">
+          <CardContent className="py-3">
+            <div className="flex items-center gap-6 overflow-x-auto">
+              {lastPrices.map(price => (
+                <div key={price.symbol} className="flex items-center gap-2 whitespace-nowrap">
+                  <Badge variant="outline" className="text-xs font-mono">{price.symbol}</Badge>
+                  <span className="text-lg font-bold font-mono">
+                    ${price.price.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Kraken Exchange Status Card */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="trading-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Kraken Exchange</CardTitle>
-            {getStatusIcon(krakenConnected)}
+            <CardTitle className="text-sm font-medium">Message Stream</CardTitle>
+            {getStatusIcon(systemConnected)}
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Badge variant={krakenConnected ? "default" : "destructive"} className="text-xs">
-                  {krakenConnected ? "Connected" : "Disconnected"}
+                <Badge variant={systemConnected ? "default" : "destructive"} className="text-xs">
+                  {systemConnected ? "Connected" : "Disconnected"}
                 </Badge>
               </div>
 
@@ -810,6 +830,44 @@ export function SystemHealthDashboard() {
         );
       })}
 
+      {/* Ring Buffer Status */}
+      {Object.keys(ringBuffers).length > 0 && (
+        <Card className="trading-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-5 w-5" />
+              Ring Buffer Status
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {Object.entries(ringBuffers).map(([name, stats]) => (
+                <div key={name} className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">{name}</span>
+                    <div className="flex items-center gap-4">
+                      <span className="text-xs text-muted-foreground">
+                        {stats.unconsumed.toLocaleString()} unconsumed
+                      </span>
+                      <span className={`text-sm font-bold ${
+                        stats.utilization < 50 ? 'text-success' :
+                        stats.utilization < 80 ? 'text-warning' : 'text-loss'
+                      }`}>
+                        {stats.utilization.toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                  <Progress value={Math.min(stats.utilization, 100)} className="h-2" />
+                  <div className="text-xs text-muted-foreground text-right">
+                    Max 12h: {stats.max12h.toLocaleString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* System Threads Status */}
       <Card className="trading-card">
         <CardHeader>
@@ -819,25 +877,40 @@ export function SystemHealthDashboard() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { name: "Data Processor", status: "healthy" },
-              { name: "ML Inference", status: "healthy" },
-              { name: "Risk Monitor", status: "healthy" },
-              { name: "Order Manager", status: "warning" }
-            ].map((thread) => (
-              <div key={thread.name} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                <div>
-                  <p className="text-sm font-medium">{thread.name}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{thread.status}</p>
+          {threads.length > 0 ? (
+            <div className="space-y-3">
+              {threads.map((thread) => (
+                <div key={thread.name} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="text-sm font-medium">{thread.name}</p>
+                      <Badge variant={
+                        thread.state === 'running' ? 'default' :
+                        thread.state === 'error' ? 'destructive' : 'secondary'
+                      }>
+                        {thread.state}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span>Processed: {thread.processed.toLocaleString()}</span>
+                      {thread.errors > 0 && <span className="text-loss">Errors: {thread.errors}</span>}
+                      <span className={
+                        thread.avgLatencyUs / 1000 < 100 ? 'text-success' :
+                        thread.avgLatencyUs / 1000 < 500 ? 'text-warning' : 'text-loss'
+                      }>
+                        Latency: {(thread.avgLatencyUs / 1000).toFixed(2)}ms
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <span className={`status-indicator ${
-                  thread.status === "healthy" ? "status-good" :
-                  thread.status === "warning" ? "status-warning" : "status-error"
-                }`}></span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Activity className="h-8 w-8 animate-pulse mx-auto mb-2" />
+              <p className="text-sm">Waiting for thread data...</p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
