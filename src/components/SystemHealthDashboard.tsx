@@ -26,6 +26,58 @@ interface MessageRates {
   orderbooks_per_sec: number;
 }
 
+// New extended API types
+interface PriceUpdate {
+  symbol: string;
+  price: number;
+}
+
+interface ThreadStatus {
+  name: string;
+  state: "running" | "starting" | "stopped" | "error";
+  processed: number;
+  errors: number;
+  avgLatencyUs: number;
+}
+
+interface RingBufferStats {
+  unconsumed: number;
+  utilization: number;
+  max12h: number;
+}
+
+interface StatusUpdate {
+  topic: "status";
+  type: "update";
+  stats: {
+    timestamp: string;
+    lastPrices: PriceUpdate[];
+    counts: {
+      tradeMessages: number;
+      orderbookMessages: number;
+    };
+    rates: {
+      totalPerSec: number;
+      tradesPerSec: number;
+      orderbooksPerSec: number;
+    };
+    threads: ThreadStatus[];
+    ringBuffers: Record<string, RingBufferStats>;
+  };
+  trades: any[];
+  ohlcv: any[];
+}
+
+interface UsageUpdateNew {
+  type: "usage_update";
+  cpu: number;
+  ram: number;
+  gpu: number;
+  messagesPerSec: number;
+  tradesPerSec: number;
+  orderbooksPerSec: number;
+}
+
 interface GPUInfo {
   index: number;
   name: string;
@@ -84,6 +136,23 @@ export function SystemHealthDashboard() {
   const wsRefs = useRef<Map<string, WebSocket>>(new Map());
   const reconnectTimers = useRef<Map<string, number>>(new Map());
   const retryCounts = useRef<Map<string, number>>(new Map());
+  const systemStatusWsRef = useRef<WebSocket | null>(null);
+  const systemUsageWsRef = useRef<WebSocket | null>(null);
+
+  // New state for extended API data
+  const [lastPrices, setLastPrices] = useState<PriceUpdate[]>([]);
+  const [threads, setThreads] = useState<ThreadStatus[]>([]);
+  const [ringBuffers, setRingBuffers] = useState<Record<string, RingBufferStats>>({});
+  const [messageRatesExtended, setMessageRatesExtended] = useState<{
+    totalPerSec: number;
+    tradesPerSec: number;
+    orderbooksPerSec: number;
+  } | null>(null);
+  const [systemUsage, setSystemUsage] = useState<{
+    cpu: number;
+    ram: number;
+    gpu: number;
+  } | null>(null);
 
   const [gpuInstances, setGpuInstances] = useState<GPUInstance[]>(() => {
     const cached = loadFromCache<GPUInstance[]>(CACHE_KEYS.SYSTEM_HEALTH);
@@ -277,6 +346,131 @@ export function SystemHealthDashboard() {
     };
   }, []);
 
+  // System Health WebSocket connections (new extended API)
+  useEffect(() => {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+
+    // Connect to /status endpoint for prices, threads, ring buffers
+    function connectSystemStatus() {
+      const wsUrl = `${protocol}//${window.location.host}/system-status`;
+      console.log('[SystemHealth] Connecting to status WebSocket:', wsUrl);
+
+      try {
+        const ws = new WebSocket(wsUrl);
+        systemStatusWsRef.current = ws;
+
+        ws.onopen = () => {
+          console.log('[SystemHealth] Status WebSocket connected');
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data: StatusUpdate = JSON.parse(event.data);
+
+            if (data.type === 'update' && data.stats) {
+              // Update prices
+              if (data.stats.lastPrices) {
+                setLastPrices(data.stats.lastPrices);
+              }
+
+              // Update threads
+              if (data.stats.threads) {
+                setThreads(data.stats.threads);
+              }
+
+              // Update ring buffers
+              if (data.stats.ringBuffers) {
+                setRingBuffers(data.stats.ringBuffers);
+              }
+
+              // Update message rates
+              if (data.stats.rates) {
+                setMessageRatesExtended(data.stats.rates);
+              }
+            }
+          } catch (error) {
+            console.error('[SystemHealth] Error parsing status message:', error);
+          }
+        };
+
+        ws.onerror = (error) => {
+          console.error('[SystemHealth] Status WebSocket error:', error);
+        };
+
+        ws.onclose = () => {
+          console.log('[SystemHealth] Status WebSocket closed, reconnecting in 5s...');
+          setTimeout(connectSystemStatus, 5000);
+        };
+      } catch (error) {
+        console.error('[SystemHealth] Failed to create status WebSocket:', error);
+        setTimeout(connectSystemStatus, 5000);
+      }
+    }
+
+    // Connect to /usage endpoint for CPU/RAM/GPU metrics
+    function connectSystemUsage() {
+      const wsUrl = `${protocol}//${window.location.host}/system-usage`;
+      console.log('[SystemHealth] Connecting to usage WebSocket:', wsUrl);
+
+      try {
+        const ws = new WebSocket(wsUrl);
+        systemUsageWsRef.current = ws;
+
+        ws.onopen = () => {
+          console.log('[SystemHealth] Usage WebSocket connected');
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data: UsageUpdateNew = JSON.parse(event.data);
+
+            if (data.type === 'usage_update') {
+              setSystemUsage({
+                cpu: data.cpu,
+                ram: data.ram,
+                gpu: data.gpu
+              });
+
+              // Also update message rates if provided
+              if (data.messagesPerSec) {
+                setMessageRatesExtended({
+                  totalPerSec: data.messagesPerSec,
+                  tradesPerSec: data.tradesPerSec || 0,
+                  orderbooksPerSec: data.orderbooksPerSec || 0
+                });
+              }
+            }
+          } catch (error) {
+            console.error('[SystemHealth] Error parsing usage message:', error);
+          }
+        };
+
+        ws.onerror = (error) => {
+          console.error('[SystemHealth] Usage WebSocket error:', error);
+        };
+
+        ws.onclose = () => {
+          console.log('[SystemHealth] Usage WebSocket closed, reconnecting in 5s...');
+          setTimeout(connectSystemUsage, 5000);
+        };
+      } catch (error) {
+        console.error('[SystemHealth] Failed to create usage WebSocket:', error);
+        setTimeout(connectSystemUsage, 5000);
+      }
+    }
+
+    connectSystemStatus();
+    connectSystemUsage();
+
+    return () => {
+      if (systemStatusWsRef.current) {
+        systemStatusWsRef.current.close();
+      }
+      if (systemUsageWsRef.current) {
+        systemUsageWsRef.current.close();
+      }
+    };
+  }, []);
 
   const getStatusIcon = (connected: boolean) => {
     return connected ? (
