@@ -154,6 +154,9 @@ const WalkforwardDashboard = () => {
 
     console.log('[handleLoadRun] Final parsed run:', parsedRun);
     console.log('[handleLoadRun] First fold after parsing:', parsedRun.folds?.[0]);
+    console.log('[handleLoadRun] Total folds in array:', parsedRun.folds?.length);
+    console.log('[handleLoadRun] Summary metrics folds:', parsedRun.summary_metrics?.folds);
+    console.log('[handleLoadRun] Last fold in array:', parsedRun.folds?.[parsedRun.folds.length - 1]);
 
     // Update selected features based on the loaded run's features
     if (parsedRun.feature_columns && Array.isArray(parsedRun.feature_columns)) {
