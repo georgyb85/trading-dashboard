@@ -362,24 +362,42 @@ const WalkforwardDashboard = () => {
       features: run.feature_columns ?? [],
     },
     folds: (run.folds ?? []).map(fold => {
-      // Calculate long signals (total - short)
+      // Get signal counts from metrics
       const nSignals = fold.metrics?.n_signals ?? 0;
       const nShortSignals = fold.metrics?.n_short_signals ?? 0;
-      const nLongSignals = nSignals - nShortSignals;
+      const nLongSignals = fold.metrics?.n_long_signals ?? (nSignals - nShortSignals);
+
+      // Calculate correct total: Long + Short
+      const signalsTotal = nLongSignals + nShortSignals;
+
+      // Get hit rates - use long-specific and short-specific metrics if available
+      const hitRateLong = (fold.metrics?.long_hit_rate ?? fold.metrics?.hit_rate ?? 0) * 100;
+      const hitRateShort = (fold.metrics?.short_hit_rate ?? 0) * 100;
+
+      // Calculate weighted hit rate for total
+      let hitRateTotal = 0;
+      if (signalsTotal > 0) {
+        const longHits = nLongSignals * (hitRateLong / 100);
+        const shortHits = nShortSignals * (hitRateShort / 100);
+        hitRateTotal = ((longHits + shortHits) / signalsTotal) * 100;
+      }
+
+      // Get running sum - check for cumulative value
+      const runningSum = fold.metrics?.running_sum ?? fold.metrics?.running_sum_dual ?? 0;
 
       return {
         fold: fold.fold_number,
         iter: fold.best_iteration ?? 0,
         signalsLong: nLongSignals,
         signalsShort: nShortSignals,
-        signalsTotal: nSignals,
-        hitRateLong: (fold.metrics?.hit_rate ?? 0) * 100,
-        hitRateShort: (fold.metrics?.short_hit_rate ?? 0) * 100,
-        hitRateTotal: (fold.metrics?.hit_rate ?? 0) * 100, // Overall hit rate
+        signalsTotal: signalsTotal,
+        hitRateLong: nLongSignals > 0 ? hitRateLong : 0,
+        hitRateShort: nShortSignals > 0 ? hitRateShort : 0,
+        hitRateTotal: signalsTotal > 0 ? hitRateTotal : 0,
         sum: fold.metrics?.sum ?? 0,
-        running: fold.metrics?.running_sum ?? 0,
+        running: runningSum,
         pfTrain: fold.metrics?.profit_factor_train ?? 0,
-        pfLong: fold.metrics?.profit_factor_test ?? 0,
+        pfLong: fold.metrics?.profit_factor_test ?? fold.metrics?.profit_factor_long_test ?? 0,
         pfShort: fold.metrics?.profit_factor_short_test ?? 0,
         pfDual: fold.metrics?.profit_factor_test ?? 0,
         trainStart: fold.train_start_idx.toString(),

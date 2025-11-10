@@ -286,8 +286,12 @@ Objective: ${currentRun.config.objective} | Threshold: ${currentRun.config.thres
                         <TableCell className={`text-center ${fold.pfDual > 0 ? "profit-text" : fold.pfDual < 0 ? "loss-text" : ""}`}>
                           {fold.pfDual !== 0 ? fold.pfDual.toFixed(2) : "–"}
                         </TableCell>
-                        <TableCell className="text-center text-xs">[{fold.trainStart}, {fold.trainEnd}]</TableCell>
-                        <TableCell className="text-center text-xs">[{fold.testStart}, {fold.testEnd}]</TableCell>
+                        <TableCell className="text-center text-xs">
+                          [{fold.trainStart}, {(parseInt(fold.trainEnd) - 1).toString()}]
+                        </TableCell>
+                        <TableCell className="text-center text-xs">
+                          [{fold.testStart}, {(parseInt(fold.testEnd) - 1).toString()}]
+                        </TableCell>
                         <TableCell className="text-center">
                           <Button 
                             variant="default" 
