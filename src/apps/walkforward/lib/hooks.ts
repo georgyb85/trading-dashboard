@@ -57,6 +57,11 @@ export const useStage1Runs = (datasetId: string | null) => {
         throw new Error(error);
       }
 
+      console.log('[useStage1Runs] Raw response data:', response.data);
+      console.log('[useStage1Runs] First run:', response.data[0]);
+      console.log('[useStage1Runs] First run fold_count type:', typeof response.data[0]?.fold_count, response.data[0]?.fold_count);
+      console.log('[useStage1Runs] First run features type:', typeof response.data[0]?.features, response.data[0]?.features);
+
       return response.data;
     },
     enabled: !!datasetId,
