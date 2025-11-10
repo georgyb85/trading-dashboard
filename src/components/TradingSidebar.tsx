@@ -14,6 +14,7 @@ import {
   PlayCircle,
   Filter,
   Route,
+  LineChart,
 } from "lucide-react";
 
 const navigationItems = [
@@ -76,6 +77,12 @@ const navigationItems = [
     url: "/analytics",
     icon: BarChart3,
     description: "Performance reports"
+  },
+  {
+    title: "Indicators",
+    url: "/indicators",
+    icon: LineChart,
+    description: "Trading indicator analysis"
   },
   {
     title: "Trade Simulator",

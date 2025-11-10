@@ -15,6 +15,7 @@ import { RiskManagement } from "./components/RiskManagement";
 import { StrategyConfiguration } from "./components/StrategyConfiguration";
 import { AnalyticsDashboard } from "./components/AnalyticsDashboard";
 import NotFound from "./pages/NotFound";
+import Indicators from "./pages/Indicators";
 import TradesimDashboard from "@/apps/tradesim";
 import LfsDashboard from "@/apps/lfs";
 import WalkforwardDashboard from "@/apps/walkforward";
@@ -48,6 +49,7 @@ const App = () => (
             <Route path="/risk" element={<RiskManagement />} />
             <Route path="/config" element={<StrategyConfiguration />} />
             <Route path="/analytics" element={<AnalyticsDashboard />} />
+            <Route path="/indicators" element={<Indicators />} />
             <Route path="/tradesim" element={<TradesimDashboard />} />
             <Route path="/lfs" element={<LfsDashboard />} />
             <Route path="/walkforward" element={<WalkforwardDashboard />} />
