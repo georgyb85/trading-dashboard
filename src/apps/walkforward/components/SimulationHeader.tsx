@@ -35,7 +35,7 @@ export const SimulationHeader = ({
         <Button
           onClick={onLoadRun}
           variant="outline"
-          disabled={!selectedDataset || isRunning}
+          disabled={isRunning}
         >
           <FolderOpen className="mr-2 h-4 w-4" />
           Load Saved Run
@@ -43,8 +43,8 @@ export const SimulationHeader = ({
 
         <div className="flex items-center gap-2">
           <label className="text-sm font-medium text-muted-foreground">Model:</label>
-          <Select value={model} onValueChange={onModelChange}>
-            <SelectTrigger className="w-[180px]">
+          <Select value={model} onValueChange={onModelChange} disabled>
+            <SelectTrigger className="w-[180px]" disabled>
               <SelectValue placeholder="Select model" />
             </SelectTrigger>
             <SelectContent>
@@ -58,8 +58,8 @@ export const SimulationHeader = ({
 
         <div className="flex items-center gap-2">
           <label className="text-sm font-medium text-muted-foreground">Mode:</label>
-          <Select defaultValue="walkforward">
-            <SelectTrigger className="w-[180px]">
+          <Select defaultValue="walkforward" disabled>
+            <SelectTrigger className="w-[180px]" disabled>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
