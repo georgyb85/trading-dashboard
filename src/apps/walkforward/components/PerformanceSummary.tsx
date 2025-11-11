@@ -72,11 +72,11 @@ export const PerformanceSummary = ({ runs }: PerformanceSummaryProps) => {
                 </TableCell>
                 <TableCell className="text-right font-medium">{run.folds}</TableCell>
                 <TableCell className={`text-right font-semibold ${run.return > 0 ? "text-success" : "text-destructive"}`}>
-                  {run.return.toFixed(2)}%
+                  {run.return.toFixed(2)}
                 </TableCell>
                 <TableCell className="text-right font-medium">{run.pfLong.toFixed(2)}</TableCell>
                 <TableCell className="text-right font-medium">{run.pfShort.toFixed(2)}</TableCell>
-                <TableCell className="text-right font-medium">{run.pfDual}</TableCell>
+                <TableCell className="text-right font-medium">{run.pfDual.toFixed(2)}</TableCell>
                 <TableCell className="text-right font-medium">{run.sigLong}</TableCell>
                 <TableCell className="text-right font-medium">{run.sigShort}</TableCell>
                 <TableCell className="text-right font-medium">{run.sigDual}</TableCell>
