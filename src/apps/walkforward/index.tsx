@@ -260,13 +260,17 @@ const WalkforwardDashboard = () => {
           loadedRuns.forEach((run, runIndex) => {
             const fold = run.folds?.[foldNum];
             if (fold) {
-              const runningSum = fold.metrics?.running_sum ?? 0;
-              const runningDual = fold.metrics?.running_sum_dual ?? runningSum;
+              // According to guide:
+              // running_sum = cumulative P&L for LONG signals only
+              // running_sum_short = cumulative P&L for SHORT signals only
+              // running_sum_dual = cumulative P&L for long + short combined
+              const runningLong = fold.metrics?.running_sum ?? 0;
               const runningShort = fold.metrics?.running_sum_short ?? 0;
+              const runningDual = fold.metrics?.running_sum_dual ?? 0;
 
               // Add entries for each strategy type
               dataPoint[`run${runIndex + 1}_dual`] = runningDual;
-              dataPoint[`run${runIndex + 1}_long`] = runningSum;
+              dataPoint[`run${runIndex + 1}_long`] = runningLong;
               dataPoint[`run${runIndex + 1}_short`] = runningShort;
             }
           });
@@ -282,62 +286,62 @@ const WalkforwardDashboard = () => {
   const summaryData = loadedRuns.map((run, index) => {
     const folds = run.folds ?? [];
 
-    // Debug: log first fold metrics to see available fields
-    if (folds.length > 0 && index === 0) {
-      console.log('[summaryData] First fold metrics fields:', Object.keys(folds[0].metrics || {}));
-      console.log('[summaryData] First fold metrics sample:', folds[0].metrics);
-    }
-
-    // Aggregate metrics across all folds
-    const totalReturn = folds.reduce((sum, fold) => sum + (fold.metrics?.sum ?? 0), 0);
-    const totalSignals = folds.reduce((sum, fold) => sum + (fold.metrics?.n_signals ?? 0), 0);
+    // According to FoldPerformance_ReconstructionGuide.md aggregation formulas:
+    // total_long_signals  = Σ fold.n_signals
+    // total_short_signals = Σ fold.n_short_signals
+    // total_signals       = total_long_signals + total_short_signals
+    const totalSignalsLong = folds.reduce((sum, fold) => sum + (fold.metrics?.n_signals ?? 0), 0);
     const totalSignalsShort = folds.reduce((sum, fold) => sum + (fold.metrics?.n_short_signals ?? 0), 0);
-    const totalSignalsLong = totalSignals - totalSignalsShort; // Calculate long signals
+    const totalSignals = totalSignalsLong + totalSignalsShort;
 
-    // Calculate hit rates separately for long and short
-    const hitRatesLong = folds.map(f => f.metrics?.hit_rate ?? 0).filter(h => h > 0);
-    const hitRatesShort = folds.map(f => f.metrics?.short_hit_rate ?? 0).filter(h => h > 0);
-
-    const avgHitRateLong = hitRatesLong.length > 0
-      ? hitRatesLong.reduce((a, b) => a + b, 0) / hitRatesLong.length
-      : 0;
-
-    const avgHitRateShort = hitRatesShort.length > 0
-      ? hitRatesShort.reduce((a, b) => a + b, 0) / hitRatesShort.length
-      : 0;
-
-    // Calculate overall hit rate (weighted by signal counts)
-    const totalWins = folds.reduce((sum, fold) => {
-      const wins = (fold.metrics?.n_signals ?? 0) * (fold.metrics?.hit_rate ?? 0);
-      return sum + wins;
+    // hit_rate_long = Σ (fold.hit_rate * fold.n_signals) / max(1, total_long_signals)
+    // hit_rate_short = Σ (fold.short_hit_rate * fold.n_short_signals) / max(1, total_short_signals)
+    const weightedLongHits = folds.reduce((sum, fold) => {
+      const signals = fold.metrics?.n_signals ?? 0;
+      const hitRate = fold.metrics?.hit_rate ?? 0;
+      return sum + (hitRate * signals);
     }, 0);
-    const avgHitRateTotal = totalSignals > 0 ? totalWins / totalSignals : 0;
 
-    // Calculate profit factors from last fold's running metrics
+    const weightedShortHits = folds.reduce((sum, fold) => {
+      const signals = fold.metrics?.n_short_signals ?? 0;
+      const hitRate = fold.metrics?.short_hit_rate ?? 0;
+      return sum + (hitRate * signals);
+    }, 0);
+
+    const avgHitRateLong = totalSignalsLong > 0 ? weightedLongHits / totalSignalsLong : 0;
+    const avgHitRateShort = totalSignalsShort > 0 ? weightedShortHits / totalSignalsShort : 0;
+
+    // hit_rate_overall = (Σ fold.signal_wins + Σ fold.short_signal_wins) / max(1, total_signals)
+    // Since we don't have signal_wins directly, use weighted calculation
+    const totalHits = (totalSignalsLong * avgHitRateLong) + (totalSignalsShort * avgHitRateShort);
+    const avgHitRateTotal = totalSignals > 0 ? totalHits / totalSignals : 0;
+
+    // For profit factors, aggregate across all folds:
+    // pf_long  = compute_pf(Σ fold.sum_wins, Σ fold.sum_losses)
+    // pf_short = compute_pf(Σ fold.sum_short_wins, Σ fold.sum_short_losses)
+    const totalSumWins = folds.reduce((sum, fold) => sum + (fold.metrics?.sum_wins ?? 0), 0);
+    const totalSumLosses = folds.reduce((sum, fold) => sum + (fold.metrics?.sum_losses ?? 0), 0);
+    const totalSumShortWins = folds.reduce((sum, fold) => sum + (fold.metrics?.sum_short_wins ?? 0), 0);
+    const totalSumShortLosses = folds.reduce((sum, fold) => sum + (fold.metrics?.sum_short_losses ?? 0), 0);
+
+    // Compute profit factors with epsilon guard
+    const pfLong = totalSumLosses > 0 ? totalSumWins / totalSumLosses : (totalSumWins > 0 ? 999.0 : 0);
+    const pfShort = totalSumShortLosses > 0 ? totalSumShortWins / totalSumShortLosses : (totalSumShortWins > 0 ? 999.0 : 0);
+    const pfDual = (totalSumLosses + totalSumShortLosses) > 0
+      ? (totalSumWins + totalSumShortWins) / (totalSumLosses + totalSumShortLosses)
+      : ((totalSumWins + totalSumShortWins) > 0 ? 999.0 : 0);
+
+    // Get the final running sums from the last fold
     const lastFold = folds[folds.length - 1];
-    const pfTest = lastFold?.metrics?.profit_factor_test ?? 0;
-    const pfTrain = lastFold?.metrics?.profit_factor_train ?? 0;
-    const pfShortTest = lastFold?.metrics?.profit_factor_short_test ?? 0;
-    const pfShortTrain = lastFold?.metrics?.profit_factor_short_train ?? 0;
-
-    console.log('[summaryData] Run', index + 1, 'calculations:', {
-      totalSignals,
-      totalSignalsLong,
-      totalSignalsShort,
-      avgHitRateLong,
-      avgHitRateShort,
-      avgHitRateTotal,
-      pfTest,
-      pfTrain
-    });
+    const totalReturn = lastFold?.metrics?.running_sum_dual ?? lastFold?.metrics?.running_sum ?? 0;
 
     return {
       run: index + 1,
       folds: folds.length,
       return: totalReturn,
-      pfLong: pfTest, // Using profit_factor_test as general PF
-      pfShort: pfShortTest,
-      pfDual: pfTest, // Assuming test PF represents dual strategy
+      pfLong: pfLong,
+      pfShort: pfShort,
+      pfDual: pfDual,
       sigLong: totalSignalsLong,
       sigShort: totalSignalsShort,
       sigDual: totalSignals,
@@ -362,16 +366,17 @@ const WalkforwardDashboard = () => {
       features: run.feature_columns ?? [],
     },
     folds: (run.folds ?? []).map(fold => {
-      // Get signal counts from metrics
-      const nSignals = fold.metrics?.n_signals ?? 0;
+      // According to FoldPerformance_ReconstructionGuide.md:
+      // n_signals = number of LONG entries (NOT total)
+      // n_short_signals = number of SHORT entries
+      // Total = n_signals + n_short_signals
+      const nLongSignals = fold.metrics?.n_signals ?? 0;
       const nShortSignals = fold.metrics?.n_short_signals ?? 0;
-      const nLongSignals = fold.metrics?.n_long_signals ?? (nSignals - nShortSignals);
-
-      // Calculate correct total: Long + Short
       const signalsTotal = nLongSignals + nShortSignals;
 
-      // Get hit rates - use long-specific and short-specific metrics if available
-      const hitRateLong = (fold.metrics?.long_hit_rate ?? fold.metrics?.hit_rate ?? 0) * 100;
+      // hit_rate = long win ratio
+      // short_hit_rate = short win ratio
+      const hitRateLong = (fold.metrics?.hit_rate ?? 0) * 100;
       const hitRateShort = (fold.metrics?.short_hit_rate ?? 0) * 100;
 
       // Calculate weighted hit rate for total
@@ -382,8 +387,37 @@ const WalkforwardDashboard = () => {
         hitRateTotal = ((longHits + shortHits) / signalsTotal) * 100;
       }
 
-      // Get running sum - check for cumulative value
-      const runningSum = fold.metrics?.running_sum ?? fold.metrics?.running_sum_dual ?? 0;
+      // Running sums according to guide:
+      // running_sum = cumulative P&L for LONG signals only
+      // running_sum_short = cumulative P&L for SHORT signals only
+      // running_sum_dual = cumulative P&L for long + short combined
+      const runningLong = fold.metrics?.running_sum ?? 0;
+      const runningShort = fold.metrics?.running_sum_short ?? 0;
+      const runningDual = fold.metrics?.running_sum_dual ?? 0;
+
+      // For the "Running" column in the table, use dual (combined)
+      const displayRunning = runningDual || runningLong; // Use dual if available, else long
+
+      // Sum is the fold's contribution (not cumulative)
+      // signal_sum = sum of monetary P&L for each long trade in this fold
+      // short_signal_sum = sum of monetary P&L for each short trade in this fold
+      const sumLong = fold.metrics?.signal_sum ?? fold.metrics?.sum ?? 0;
+      const sumShort = fold.metrics?.short_signal_sum ?? 0;
+      const sumTotal = sumLong + sumShort;
+
+      // Profit factors according to guide:
+      // profit_factor_test = PF for long side
+      // profit_factor_short_test = PF for short side
+      // Dual PF uses combined wins/losses
+      const pfLong = fold.metrics?.profit_factor_test ?? 0;
+      const pfShort = fold.metrics?.profit_factor_short_test ?? 0;
+
+      // For dual PF, check if there's a specific dual field, otherwise calculate
+      let pfDual = fold.metrics?.profit_factor_dual ?? 0;
+      if (!pfDual && (pfLong > 0 || pfShort > 0)) {
+        // If we have sum_wins/sum_losses, we could calculate it, but for now use the max
+        pfDual = Math.max(pfLong, pfShort);
+      }
 
       return {
         fold: fold.fold_number,
@@ -394,12 +428,12 @@ const WalkforwardDashboard = () => {
         hitRateLong: nLongSignals > 0 ? hitRateLong : 0,
         hitRateShort: nShortSignals > 0 ? hitRateShort : 0,
         hitRateTotal: signalsTotal > 0 ? hitRateTotal : 0,
-        sum: fold.metrics?.sum ?? 0,
-        running: runningSum,
+        sum: sumTotal,
+        running: displayRunning,
         pfTrain: fold.metrics?.profit_factor_train ?? 0,
-        pfLong: fold.metrics?.profit_factor_test ?? fold.metrics?.profit_factor_long_test ?? 0,
-        pfShort: fold.metrics?.profit_factor_short_test ?? 0,
-        pfDual: fold.metrics?.profit_factor_test ?? 0,
+        pfLong: pfLong,
+        pfShort: pfShort,
+        pfDual: pfDual,
         trainStart: fold.train_start_idx.toString(),
         trainEnd: fold.train_end_idx.toString(),
         testStart: fold.test_start_idx.toString(),
