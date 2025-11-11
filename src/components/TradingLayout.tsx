@@ -1,9 +1,18 @@
-import { useState } from "react";
+import { useState, cloneElement, isValidElement, ReactElement } from "react";
 import { TradingSidebar } from "./TradingSidebar";
-import { Activity, Bell, Power, WifiOff, ChevronLeft, ChevronRight } from "lucide-react";
+import { Activity, Bell, Power, WifiOff, ChevronLeft, ChevronRight, Database } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useStage1Datasets } from "@/apps/walkforward/lib/hooks";
 
 interface TradingLayoutProps {
   children: React.ReactNode;
@@ -11,11 +20,14 @@ interface TradingLayoutProps {
 
 export function TradingLayout({ children }: TradingLayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
   const [systemHealth, setSystemHealth] = useState({
     overallStatus: "good" as "good" | "warning" | "error",
     tradingEnabled: true,
     alertsCount: 0,
   });
+
+  const { data: datasets, isLoading: datasetsLoading } = useStage1Datasets();
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -67,6 +79,30 @@ export function TradingLayout({ children }: TradingLayoutProps) {
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Dataset Selector */}
+            <div className="flex items-center gap-2">
+              <Database className="h-4 w-4 text-muted-foreground" />
+              <label className="text-sm font-medium text-muted-foreground">Dataset:</label>
+              {datasetsLoading ? (
+                <Skeleton className="h-9 w-[200px]" />
+              ) : (
+                <Select value={selectedDataset || undefined} onValueChange={setSelectedDataset}>
+                  <SelectTrigger className="w-[200px] h-9">
+                    <SelectValue placeholder="Select dataset" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {datasets?.map((dataset) => (
+                      <SelectItem key={dataset.dataset_id} value={dataset.dataset_id}>
+                        {dataset.dataset_slug} ({dataset.symbol})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+
+            <div className="h-6 w-px bg-border" />
+
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <span className={`status-indicator ${getStatusColor(systemHealth.overallStatus)}`} />
               System Status
@@ -106,7 +142,14 @@ export function TradingLayout({ children }: TradingLayoutProps) {
         </header>
 
         <main className="flex-1 overflow-auto">
-          <div className="min-h-full px-6 py-6">{children}</div>
+          <div className="min-h-full px-6 py-6">
+            {isValidElement(children)
+              ? cloneElement(children as ReactElement<any>, {
+                  selectedDataset,
+                  onDatasetChange: setSelectedDataset,
+                })
+              : children}
+          </div>
         </main>
       </div>
     </div>

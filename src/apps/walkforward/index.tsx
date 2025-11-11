@@ -14,9 +14,16 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import type { Stage1RunDetail } from "@/lib/stage1/types";
 
-const WalkforwardDashboard = () => {
-  // Dataset and run selection
-  const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
+interface WalkforwardDashboardProps {
+  selectedDataset?: string | null;
+  onDatasetChange?: (datasetId: string) => void;
+}
+
+const WalkforwardDashboard = ({
+  selectedDataset = null,
+  onDatasetChange
+}: WalkforwardDashboardProps) => {
+  // Run selection
   const [loadRunModalOpen, setLoadRunModalOpen] = useState(false);
   const [loadedRuns, setLoadedRuns] = useState<Stage1RunDetail[]>([]);
   const [activeRunIndex, setActiveRunIndex] = useState(0);
@@ -461,7 +468,6 @@ const WalkforwardDashboard = () => {
         model={model}
         onModelChange={setModel}
         selectedDataset={selectedDataset}
-        onDatasetChange={setSelectedDataset}
       />
 
       {isRunning && (
