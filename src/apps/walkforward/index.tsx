@@ -13,16 +13,10 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import type { Stage1RunDetail } from "@/lib/stage1/types";
+import { useDatasetContext } from "@/contexts/DatasetContext";
 
-interface WalkforwardDashboardProps {
-  selectedDataset?: string | null;
-  onDatasetChange?: (datasetId: string) => void;
-}
-
-const WalkforwardDashboard = ({
-  selectedDataset = null,
-  onDatasetChange
-}: WalkforwardDashboardProps) => {
+const WalkforwardDashboard = () => {
+  const { selectedDataset } = useDatasetContext();
   // Run selection
   const [loadRunModalOpen, setLoadRunModalOpen] = useState(false);
   const [loadedRuns, setLoadedRuns] = useState<Stage1RunDetail[]>([]);

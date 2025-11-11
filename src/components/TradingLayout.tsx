@@ -1,4 +1,4 @@
-import { useState, cloneElement, isValidElement, ReactElement } from "react";
+import { useState } from "react";
 import { TradingSidebar } from "./TradingSidebar";
 import { Activity, Bell, Power, WifiOff, ChevronLeft, ChevronRight, Database } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useStage1Datasets } from "@/apps/walkforward/lib/hooks";
+import { useDatasetContext } from "@/contexts/DatasetContext";
 
 interface TradingLayoutProps {
   children: React.ReactNode;
@@ -20,7 +21,7 @@ interface TradingLayoutProps {
 
 export function TradingLayout({ children }: TradingLayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
+  const { selectedDataset, setSelectedDataset } = useDatasetContext();
   const [systemHealth, setSystemHealth] = useState({
     overallStatus: "good" as "good" | "warning" | "error",
     tradingEnabled: true,
@@ -142,14 +143,7 @@ export function TradingLayout({ children }: TradingLayoutProps) {
         </header>
 
         <main className="flex-1 overflow-auto">
-          <div className="min-h-full px-6 py-6">
-            {isValidElement(children)
-              ? cloneElement(children as ReactElement<any>, {
-                  selectedDataset,
-                  onDatasetChange: setSelectedDataset,
-                })
-              : children}
-          </div>
+          <div className="min-h-full px-6 py-6">{children}</div>
         </main>
       </div>
     </div>

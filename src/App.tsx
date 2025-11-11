@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { TradingLayout } from "./components/TradingLayout";
 import { SystemHealthDashboard } from "./components/SystemHealthDashboard";
+import { DatasetProvider } from "./contexts/DatasetContext";
 import { TradingOverview } from "./components/TradingOverview";
 import { PositionsTable } from "./components/PositionsTable";
 import { BalancesTable } from "./components/BalancesTable";
@@ -37,8 +38,9 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter basename="/trade">
-        <TradingLayout>
-          <Routes>
+        <DatasetProvider>
+          <TradingLayout>
+            <Routes>
             <Route path="/" element={<SystemHealthDashboard />} />
             <Route path="/trading" element={<TradingOverview />} />
             <Route path="/positions" element={<PositionsTable />} />
@@ -57,6 +59,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
         </TradingLayout>
+        </DatasetProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
