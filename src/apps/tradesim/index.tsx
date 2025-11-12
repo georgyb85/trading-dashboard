@@ -29,52 +29,6 @@ const TradesimDashboard = () => {
   const [selectedRunId, setSelectedRunId] = useState<string>("");
   const [selectedRunName, setSelectedRunName] = useState<string>("");
 
-  // Restore last used run on mount
-  useEffect(() => {
-    if (lastTradesimRunId && !selectedRunId) {
-      const cachedRun = getCachedRun(lastTradesimRunId);
-      if (cachedRun) {
-        console.log(`[TradesimDashboard] Restoring last run ${lastTradesimRunId.substring(0, 8)} from cache`);
-        setSelectedRunId(cachedRun.run_id);
-        setSelectedRunName(`Run ${cachedRun.run_id.substring(0, 8)}`);
-      }
-    }
-  }, [lastTradesimRunId, selectedRunId, getCachedRun]);
-
-  // Restore cached simulation when dataset and run are available
-  useEffect(() => {
-    if (selectedDataset && selectedRunId && !simulationResults) {
-      const cached = getCachedSimulation(selectedDataset, selectedRunId);
-      if (cached) {
-        console.log(`[TradesimDashboard] Restoring cached simulation for ${selectedDataset}:${selectedRunId.substring(0, 8)}`);
-        setSimulationResults(cached.results);
-        setTradeConfig(cached.tradeConfig);
-        setStressTestConfig(cached.stressTestConfig);
-        setActiveTab(cached.activeTab);
-        setTradeFilter(cached.tradeFilter);
-        toast({
-          title: "Simulation restored",
-          description: "Loaded cached simulation results",
-        });
-      }
-    }
-  }, [selectedDataset, selectedRunId, simulationResults, getCachedSimulation]);
-
-  // Update cache when activeTab or tradeFilter changes (preserve user's view state)
-  useEffect(() => {
-    if (selectedDataset && selectedRunId && simulationResults) {
-      cacheSimulation({
-        results: simulationResults,
-        datasetId: selectedDataset,
-        runId: selectedRunId,
-        tradeConfig: tradeConfig,
-        stressTestConfig: stressTestConfig,
-        activeTab: activeTab,
-        tradeFilter: tradeFilter,
-      });
-    }
-  }, [activeTab, tradeFilter]);
-
   // Trade configuration (controlled by ConfigSidebar)
   const [tradeConfig, setTradeConfig] = useState<TradeConfig>({
     position_size: 1000,
@@ -132,6 +86,52 @@ const TradesimDashboard = () => {
     winRate: (filteredTrades.filter(t => t.pnl > 0).length / filteredTrades.length) * 100,
     cumulativeReturn: filteredTrades[filteredTrades.length - 1]?.cumulative_return_pct || 0,
   } : null;
+
+  // Restore last used run on mount
+  useEffect(() => {
+    if (lastTradesimRunId && !selectedRunId) {
+      const cachedRun = getCachedRun(lastTradesimRunId);
+      if (cachedRun) {
+        console.log(`[TradesimDashboard] Restoring last run ${lastTradesimRunId.substring(0, 8)} from cache`);
+        setSelectedRunId(cachedRun.run_id);
+        setSelectedRunName(`Run ${cachedRun.run_id.substring(0, 8)}`);
+      }
+    }
+  }, [lastTradesimRunId, selectedRunId, getCachedRun]);
+
+  // Restore cached simulation when dataset and run are available
+  useEffect(() => {
+    if (selectedDataset && selectedRunId && !simulationResults) {
+      const cached = getCachedSimulation(selectedDataset, selectedRunId);
+      if (cached) {
+        console.log(`[TradesimDashboard] Restoring cached simulation for ${selectedDataset}:${selectedRunId.substring(0, 8)}`);
+        setSimulationResults(cached.results);
+        setTradeConfig(cached.tradeConfig);
+        setStressTestConfig(cached.stressTestConfig);
+        setActiveTab(cached.activeTab);
+        setTradeFilter(cached.tradeFilter);
+        toast({
+          title: "Simulation restored",
+          description: "Loaded cached simulation results",
+        });
+      }
+    }
+  }, [selectedDataset, selectedRunId, simulationResults, getCachedSimulation]);
+
+  // Update cache when activeTab or tradeFilter changes (preserve user's view state)
+  useEffect(() => {
+    if (selectedDataset && selectedRunId && simulationResults) {
+      cacheSimulation({
+        results: simulationResults,
+        datasetId: selectedDataset,
+        runId: selectedRunId,
+        tradeConfig: tradeConfig,
+        stressTestConfig: stressTestConfig,
+        activeTab: activeTab,
+        tradeFilter: tradeFilter,
+      });
+    }
+  }, [activeTab, tradeFilter]);
 
   const handleLoadRun = (run: any) => {
     setSelectedRunId(run.run_id);
