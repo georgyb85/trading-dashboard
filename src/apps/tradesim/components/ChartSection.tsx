@@ -1,6 +1,6 @@
 import { useMemo, memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area } from "recharts";
 import type { SimulateTradesResponse } from "@/lib/stage1/types";
 
 interface ChartSectionProps {
@@ -333,6 +333,15 @@ const ChartSectionComponent = ({ results, tradeFilter }: ChartSectionProps) => {
                   formatter={(value: any, name) => [`${(value ?? 0).toFixed(2)}%`, name]}
                 />
                 <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="3 3" />
+                {/* Shaded area between y=0 and strategy drawdown line */}
+                <Area
+                  type="monotone"
+                  dataKey="strategyDrawdown"
+                  stroke="none"
+                  fill="hsl(var(--success))"
+                  fillOpacity={0.15}
+                  connectNulls
+                />
                 <Line
                   type="monotone"
                   dataKey="strategyDrawdown"
