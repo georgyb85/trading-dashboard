@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Menu, RotateCcw, Database } from "lucide-react";
@@ -73,21 +73,23 @@ const TradesimDashboard = () => {
   // Trade filter
   const [tradeFilter, setTradeFilter] = useState<"all" | "long" | "short">("all");
 
-  // Filter trades based on selection
-  const filteredTrades = simulationResults?.trades
-    ? simulationResults.trades.filter(trade => {
-        if (tradeFilter === "all") return true;
-        return trade.side === tradeFilter;
-      })
-    : [];
+  // Memoize filtered trades to avoid recalculating on every render
+  const filteredTrades = useMemo(() => {
+    if (!simulationResults?.trades) return [];
+    if (tradeFilter === "all") return simulationResults.trades;
+    return simulationResults.trades.filter(trade => trade.side === tradeFilter);
+  }, [simulationResults?.trades, tradeFilter]);
 
-  // Calculate filtered metrics
-  const filteredMetrics = filteredTrades.length > 0 ? {
-    totalTrades: filteredTrades.length,
-    totalPnL: filteredTrades.reduce((sum, t) => sum + t.pnl, 0),
-    winRate: (filteredTrades.filter(t => t.pnl > 0).length / filteredTrades.length) * 100,
-    cumulativeReturn: filteredTrades[filteredTrades.length - 1]?.cumulative_return_pct || 0,
-  } : null;
+  // Memoize filtered metrics calculation
+  const filteredMetrics = useMemo(() => {
+    if (filteredTrades.length === 0) return null;
+    return {
+      totalTrades: filteredTrades.length,
+      totalPnL: filteredTrades.reduce((sum, t) => sum + t.pnl, 0),
+      winRate: (filteredTrades.filter(t => t.pnl > 0).length / filteredTrades.length) * 100,
+      cumulativeReturn: filteredTrades[filteredTrades.length - 1]?.cumulative_return_pct || 0,
+    };
+  }, [filteredTrades]);
 
   // Restore last used run on mount
   useEffect(() => {
