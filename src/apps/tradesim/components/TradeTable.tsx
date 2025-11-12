@@ -48,11 +48,11 @@ export const TradeTable = ({ trades }: TradeTableProps) => {
                 <TableCell className="font-mono">{trade.entry_signal.toFixed(3)}</TableCell>
                 <TableCell className="font-mono">{trade.exit_signal.toFixed(3)}</TableCell>
                 <TableCell className="text-xs">
-                  <span className={`px-2 py-1 rounded ${
-                    trade.exit_reason === 'take_profit' ? 'bg-green-900/30 text-green-400' :
-                    trade.exit_reason === 'stop_loss' ? 'bg-red-900/30 text-red-400' :
-                    trade.exit_reason === 'time_exit' ? 'bg-yellow-900/30 text-yellow-400' :
-                    'bg-blue-900/30 text-blue-400'
+                  <span className={`px-2 py-1 rounded font-medium ${
+                    trade.exit_reason === 'take_profit' ? 'bg-success/20 text-success border border-success/30' :
+                    trade.exit_reason === 'stop_loss' ? 'bg-destructive/20 text-destructive border border-destructive/30' :
+                    trade.exit_reason === 'time_exit' ? 'bg-warning/20 text-warning border border-warning/30' :
+                    'bg-primary/20 text-primary border border-primary/30'
                   }`}>
                     {trade.exit_reason.replace(/_/g, ' ')}
                   </span>

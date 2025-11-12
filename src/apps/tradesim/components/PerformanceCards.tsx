@@ -1,14 +1,26 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, Activity, Target } from "lucide-react";
-import type { SimulateTradesResponse } from "@/lib/stage1/types";
+import type { SimulateTradesResponse, Trade } from "@/lib/stage1/types";
 
 interface PerformanceCardsProps {
   results: SimulateTradesResponse;
+  tradeFilter: "all" | "long" | "short";
+  filteredTrades: Trade[];
 }
 
-export const PerformanceCards = ({ results }: PerformanceCardsProps) => {
-  const performance = results.performance;
+export const PerformanceCards = ({ results, tradeFilter, filteredTrades }: PerformanceCardsProps) => {
+  // Select the appropriate performance metrics based on filter
+  const performance = tradeFilter === "all"
+    ? results.performance
+    : tradeFilter === "long"
+      ? results.long_only
+      : results.short_only;
   const buyHold = results.buy_hold;
+
+  // Calculate win rate from filtered trades (more accurate than API metrics)
+  const winRate = filteredTrades.length > 0
+    ? (filteredTrades.filter(t => t.pnl > 0).length / filteredTrades.length) * 100
+    : 0;
 
   console.log('[PerformanceCards] Performance data:', performance);
   console.log('[PerformanceCards] Buy&Hold data:', buyHold);
@@ -38,8 +50,8 @@ export const PerformanceCards = ({ results }: PerformanceCardsProps) => {
     },
     {
       title: "Win Rate",
-      value: `${((performance.win_rate || 0) * 100).toFixed(1)}%`,
-      subtitle: `${performance.total_trades || 0} trades`,
+      value: `${winRate.toFixed(1)}%`,
+      subtitle: `${filteredTrades.length} trades`,
       icon: Target,
     },
     {

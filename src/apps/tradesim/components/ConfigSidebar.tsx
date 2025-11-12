@@ -1,8 +1,9 @@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Play, Loader2 } from "lucide-react";
 import type { TradeConfig, StressTestConfig } from "@/lib/stage1/types";
 
 interface ConfigSidebarProps {
@@ -12,6 +13,9 @@ interface ConfigSidebarProps {
   onTradeConfigChange: (config: TradeConfig) => void;
   stressTestConfig: StressTestConfig;
   onStressTestConfigChange: (config: StressTestConfig) => void;
+  onRunSimulation: () => void;
+  isRunning: boolean;
+  canRun: boolean;
 }
 
 export const ConfigSidebar = ({
@@ -21,6 +25,9 @@ export const ConfigSidebar = ({
   onTradeConfigChange,
   stressTestConfig,
   onStressTestConfigChange,
+  onRunSimulation,
+  isRunning,
+  canRun,
 }: ConfigSidebarProps) => {
   const updateTradeConfig = (updates: Partial<TradeConfig>) => {
     onTradeConfigChange({ ...tradeConfig, ...updates });
@@ -359,6 +366,27 @@ export const ConfigSidebar = ({
               step={1}
             />
           </div>
+        </div>
+
+        {/* Run Simulation Button */}
+        <div className="pt-4 border-t border-sidebar-border">
+          <Button
+            className="w-full gap-2"
+            onClick={onRunSimulation}
+            disabled={!canRun}
+          >
+            {isRunning ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Running Simulation...
+              </>
+            ) : (
+              <>
+                <Play className="h-4 w-4" />
+                Run Simulation
+              </>
+            )}
+          </Button>
         </div>
       </div>
     </aside>

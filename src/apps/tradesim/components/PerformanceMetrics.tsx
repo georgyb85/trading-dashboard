@@ -4,6 +4,7 @@ import type { SimulateTradesResponse, PerformanceMetrics as Metrics } from "@/li
 
 interface PerformanceMetricsProps {
   results: SimulateTradesResponse;
+  tradeFilter: "all" | "long" | "short";
 }
 
 const formatMetric = (value: any, isPercent: boolean = false): string => {
@@ -17,7 +18,7 @@ const formatMetric = (value: any, isPercent: boolean = false): string => {
   return num.toFixed(2);
 };
 
-export const PerformanceMetrics = ({ results }: PerformanceMetricsProps) => {
+export const PerformanceMetrics = ({ results, tradeFilter }: PerformanceMetricsProps) => {
   const combined = results.performance;
   const longOnly = results.long_only;
   const shortOnly = results.short_only;
@@ -86,9 +87,15 @@ export const PerformanceMetrics = ({ results }: PerformanceMetricsProps) => {
               <TableHeader>
                 <TableRow className="bg-secondary hover:bg-secondary">
                   <TableHead className="text-foreground font-semibold">Metric</TableHead>
-                  <TableHead className="text-foreground font-semibold">Combined</TableHead>
-                  <TableHead className="text-foreground font-semibold">Long Only</TableHead>
-                  <TableHead className="text-foreground font-semibold">Short Only</TableHead>
+                  <TableHead className={`text-foreground font-semibold ${tradeFilter === "all" ? "bg-primary/20" : ""}`}>
+                    Combined {tradeFilter === "all" && "✓"}
+                  </TableHead>
+                  <TableHead className={`text-foreground font-semibold ${tradeFilter === "long" ? "bg-primary/20" : ""}`}>
+                    Long Only {tradeFilter === "long" && "✓"}
+                  </TableHead>
+                  <TableHead className={`text-foreground font-semibold ${tradeFilter === "short" ? "bg-primary/20" : ""}`}>
+                    Short Only {tradeFilter === "short" && "✓"}
+                  </TableHead>
                   <TableHead className="text-foreground font-semibold">Buy & Hold</TableHead>
                 </TableRow>
               </TableHeader>
@@ -97,6 +104,8 @@ export const PerformanceMetrics = ({ results }: PerformanceMetricsProps) => {
                   <TableRow key={index} className="hover:bg-secondary/50">
                     <TableCell className="font-medium text-muted-foreground">{metric.name}</TableCell>
                     <TableCell className={`font-mono font-semibold ${
+                      tradeFilter === "all" ? "bg-primary/10" : ""
+                    } ${
                       metric.combined.includes('+') ? 'profit-text' :
                       metric.combined.includes('-') ? 'loss-text' :
                       'text-foreground'
@@ -104,6 +113,8 @@ export const PerformanceMetrics = ({ results }: PerformanceMetricsProps) => {
                       {metric.combined}
                     </TableCell>
                     <TableCell className={`font-mono ${
+                      tradeFilter === "long" ? "bg-primary/10" : ""
+                    } ${
                       metric.longOnly.includes('+') ? 'profit-text' :
                       metric.longOnly.includes('-') ? 'loss-text' :
                       'text-foreground'
@@ -111,6 +122,8 @@ export const PerformanceMetrics = ({ results }: PerformanceMetricsProps) => {
                       {metric.longOnly}
                     </TableCell>
                     <TableCell className={`font-mono ${
+                      tradeFilter === "short" ? "bg-primary/10" : ""
+                    } ${
                       metric.shortOnly.includes('+') ? 'profit-text' :
                       metric.shortOnly.includes('-') ? 'loss-text' :
                       'text-foreground'

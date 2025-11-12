@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Menu, Play, RotateCcw, Loader2, Database } from "lucide-react";
+import { Menu, RotateCcw, Database } from "lucide-react";
 import { ConfigSidebar } from "@/apps/tradesim/components/ConfigSidebar";
 import { PerformanceCards } from "@/apps/tradesim/components/PerformanceCards";
 import { TradeTable } from "@/apps/tradesim/components/TradeTable";
@@ -75,6 +75,9 @@ const TradesimDashboard = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [simulationResults, setSimulationResults] = useState<SimulateTradesResponse | null>(null);
 
+  // Active tab tracking
+  const [activeTab, setActiveTab] = useState<string>("trades");
+
   // Trade filter
   const [tradeFilter, setTradeFilter] = useState<"all" | "long" | "short">("all");
 
@@ -125,7 +128,7 @@ const TradesimDashboard = () => {
     }
 
     setIsRunning(true);
-    setSimulationResults(null);
+    // Don't clear results - just update them to avoid resetting the UI
 
     try {
       const response = await simulateTrades({
@@ -178,6 +181,7 @@ const TradesimDashboard = () => {
   const handleClearResults = () => {
     setSimulationResults(null);
     setTradeFilter("all");
+    setActiveTab("trades");
   };
 
   return (
@@ -189,6 +193,9 @@ const TradesimDashboard = () => {
         onTradeConfigChange={setTradeConfig}
         stressTestConfig={stressTestConfig}
         onStressTestConfigChange={setStressTestConfig}
+        onRunSimulation={handleRunSimulation}
+        isRunning={isRunning}
+        canRun={!isRunning && !!selectedRunId && !!selectedDataset}
       />
 
       <main className="flex-1 flex flex-col">
@@ -227,24 +234,6 @@ const TradesimDashboard = () => {
                 <RotateCcw className="h-4 w-4" />
                 Clear Results
               </Button>
-              <Button
-                size="sm"
-                className="gap-2"
-                onClick={handleRunSimulation}
-                disabled={isRunning || !selectedRunId || !selectedDataset}
-              >
-                {isRunning ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Running...
-                  </>
-                ) : (
-                  <>
-                    <Play className="h-4 w-4" />
-                    Run Simulation
-                  </>
-                )}
-              </Button>
             </div>
           </div>
         </header>
@@ -271,40 +260,7 @@ const TradesimDashboard = () => {
           {/* Results Section - Only show if we have simulation results */}
           {simulationResults && (
             <>
-              {/* Summary Stats */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-foreground">Results Summary (Filtered)</h2>
-                  {filteredMetrics && (
-                    <div className="flex items-center gap-6">
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">Filtered Trades: </span>
-                        <span className="text-foreground font-semibold">
-                          {filteredMetrics.totalTrades} / {simulationResults.trades?.length || 0}
-                        </span>
-                      </div>
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">Filtered P&L: </span>
-                        <span className={`font-semibold ${filteredMetrics.totalPnL >= 0 ? 'profit-text' : 'loss-text'}`}>
-                          {filteredMetrics.totalPnL.toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">Filtered Win Rate: </span>
-                        <span className="text-foreground font-semibold">{filteredMetrics.winRate.toFixed(1)}%</span>
-                      </div>
-                      <div className="text-sm">
-                        <span className="text-muted-foreground">Cumulative Return: </span>
-                        <span className={`font-semibold ${filteredMetrics.cumulativeReturn >= 0 ? 'profit-text' : 'loss-text'}`}>
-                          {filteredMetrics.cumulativeReturn.toFixed(2)}%
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <PerformanceCards results={simulationResults} />
+              <PerformanceCards results={simulationResults} tradeFilter={tradeFilter} filteredTrades={filteredTrades} />
 
               {/* Trade Filter */}
               <div className="flex items-center gap-4">
@@ -326,7 +282,7 @@ const TradesimDashboard = () => {
               </div>
 
               {/* Tabs */}
-              <Tabs defaultValue="trades" className="space-y-4">
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
                 <TabsList className="bg-secondary">
                   <TabsTrigger value="trades">Trade List</TabsTrigger>
                   <TabsTrigger value="performance">Performance Report</TabsTrigger>
@@ -338,11 +294,11 @@ const TradesimDashboard = () => {
                 </TabsContent>
 
                 <TabsContent value="performance" className="space-y-4">
-                  <PerformanceMetrics results={simulationResults} />
+                  <PerformanceMetrics results={simulationResults} tradeFilter={tradeFilter} />
                 </TabsContent>
 
                 <TabsContent value="charts" className="space-y-4">
-                  <ChartSection results={simulationResults} />
+                  <ChartSection results={simulationResults} tradeFilter={tradeFilter} />
                 </TabsContent>
               </Tabs>
             </>
