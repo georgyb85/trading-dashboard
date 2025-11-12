@@ -297,7 +297,10 @@ const ChartSectionComponent = ({ results, tradeFilter }: ChartSectionProps) => {
                 onClick={() => toggleLine('strategy')}
                 className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
               >
-                <div className={`w-3 h-3 rounded-full bg-success ${!visibleLines.strategy ? 'opacity-30' : ''}`}></div>
+                <div
+                  className={`w-3 h-3 rounded-full ${!visibleLines.strategy ? 'opacity-30' : ''}`}
+                  style={{ backgroundColor: 'hsl(var(--success))' }}
+                ></div>
                 <span className={`text-muted-foreground ${!visibleLines.strategy ? 'line-through opacity-50' : ''}`}>
                   Test Strategy
                 </span>
@@ -306,7 +309,10 @@ const ChartSectionComponent = ({ results, tradeFilter }: ChartSectionProps) => {
                 onClick={() => toggleLine('buyHold')}
                 className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
               >
-                <div className={`w-3 h-3 rounded-full bg-primary ${!visibleLines.buyHold ? 'opacity-30' : ''}`}></div>
+                <div
+                  className={`w-3 h-3 rounded-full ${!visibleLines.buyHold ? 'opacity-30' : ''}`}
+                  style={{ backgroundColor: 'hsl(var(--primary))' }}
+                ></div>
                 <span className={`text-muted-foreground ${!visibleLines.buyHold ? 'line-through opacity-50' : ''}`}>
                   Buy & Hold
                 </span>
@@ -398,7 +404,10 @@ const ChartSectionComponent = ({ results, tradeFilter }: ChartSectionProps) => {
                   onClick={() => toggleLine('strategy')}
                   className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
                 >
-                  <div className={`w-3 h-3 rounded-full bg-success ${!visibleLines.strategy ? 'opacity-30' : ''}`}></div>
+                  <div
+                    className={`w-3 h-3 rounded-full ${!visibleLines.strategy ? 'opacity-30' : ''}`}
+                    style={{ backgroundColor: 'hsl(var(--success))' }}
+                  ></div>
                   <span className={`text-muted-foreground ${!visibleLines.strategy ? 'line-through opacity-50' : ''}`}>
                     Test Strategy
                   </span>
@@ -407,7 +416,10 @@ const ChartSectionComponent = ({ results, tradeFilter }: ChartSectionProps) => {
                   onClick={() => toggleLine('buyHold')}
                   className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
                 >
-                  <div className={`w-3 h-3 rounded-full bg-primary ${!visibleLines.buyHold ? 'opacity-30' : ''}`}></div>
+                  <div
+                    className={`w-3 h-3 rounded-full ${!visibleLines.buyHold ? 'opacity-30' : ''}`}
+                    style={{ backgroundColor: 'hsl(var(--primary))' }}
+                  ></div>
                   <span className={`text-muted-foreground ${!visibleLines.buyHold ? 'line-through opacity-50' : ''}`}>
                     Buy & Hold
                   </span>
