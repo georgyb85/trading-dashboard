@@ -40,18 +40,17 @@ export function TradingLayout({ children }: TradingLayoutProps) {
   };
 
   return (
-    <div className="flex h-screen w-full bg-background text-foreground">
+    <div className="h-screen w-full bg-background text-foreground">
       {/* Left Navigation */}
       <aside
-        className={`relative border-r border-border transition-all duration-300 ${
-          isSidebarOpen ? "w-80" : "w-0"
+        className={`fixed left-0 top-0 h-full w-80 border-r border-border bg-sidebar shadow-lg z-30 transition-transform duration-300 ease-in-out ${
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
+        style={{ willChange: 'transform' }}
       >
-        {isSidebarOpen && (
-          <div className="flex h-full flex-col bg-sidebar shadow-lg">
-            <TradingSidebar />
-          </div>
-        )}
+        <div className="flex h-full flex-col">
+          <TradingSidebar />
+        </div>
         <Button
           variant="ghost"
           size="sm"
@@ -67,7 +66,10 @@ export function TradingLayout({ children }: TradingLayoutProps) {
       </aside>
 
       {/* Main Content */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div
+        className="flex flex-col h-screen overflow-hidden transition-all duration-300 ease-in-out"
+        style={{ marginLeft: isSidebarOpen ? '320px' : '0' }}
+      >
         <header className="flex items-center justify-between border-b border-border bg-card px-6 py-4 shadow-sm">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">

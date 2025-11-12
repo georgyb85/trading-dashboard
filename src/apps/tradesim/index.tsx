@@ -283,7 +283,7 @@ const TradesimDashboard = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-background w-full">
+    <div className="min-h-screen bg-background w-full">
       <ConfigSidebar
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
@@ -300,7 +300,10 @@ const TradesimDashboard = () => {
         canRun={!isRunning && !!selectedRunId && !!selectedDataset}
       />
 
-      <main className="flex-1 flex flex-col">
+      <main
+        className="flex flex-col min-h-screen transition-all duration-300 ease-in-out"
+        style={{ marginLeft: sidebarOpen ? '320px' : '0' }}
+      >
         {/* Header */}
         <header className="border-b border-border bg-card">
           <div className="flex items-center justify-between p-4">
