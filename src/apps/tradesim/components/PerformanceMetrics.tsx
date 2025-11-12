@@ -55,6 +55,50 @@ const formatPValue = (value?: number) => {
   return value.toFixed(4);
 };
 
+const renderStressSection = (title: string, stressTest?: StressTestResult) => {
+  if (!stressTest) return null;
+
+  return (
+    <div key={title} className="space-y-3">
+      <h4 className="text-sm font-semibold text-foreground">{title}</h4>
+      <div className="space-y-2 text-sm">
+        {stressTest.sharpe && (
+          <div>
+            <div className="text-muted-foreground">Sharpe Ratio</div>
+            <div className="font-mono">Est: {formatIntervalEstimate(stressTest.sharpe, false)}</div>
+            {stressTest.sharpe.ci90_low !== undefined && stressTest.sharpe.ci90_high !== undefined && (
+              <div className="font-mono text-xs text-muted-foreground">
+                90% CI: {formatIntervalRange(stressTest.sharpe.ci90_low, stressTest.sharpe.ci90_high, false)}
+              </div>
+            )}
+            {stressTest.sharpe.ci95_low !== undefined && stressTest.sharpe.ci95_high !== undefined && (
+              <div className="font-mono text-xs text-muted-foreground">
+                95% CI: {formatIntervalRange(stressTest.sharpe.ci95_low, stressTest.sharpe.ci95_high, false)}
+              </div>
+            )}
+          </div>
+        )}
+        {stressTest.max_drawdown && (
+          <div>
+            <div className="text-muted-foreground">Max Drawdown</div>
+            <div className="font-mono">{formatIntervalEstimate(stressTest.max_drawdown, true)}</div>
+            {stressTest.max_drawdown.ci90_low !== undefined && stressTest.max_drawdown.ci90_high !== undefined && (
+              <div className="font-mono text-xs text-muted-foreground">
+                90% CI: {formatIntervalRange(stressTest.max_drawdown.ci90_low, stressTest.max_drawdown.ci90_high, true)}
+              </div>
+            )}
+            {stressTest.max_drawdown.ci95_low !== undefined && stressTest.max_drawdown.ci95_high !== undefined && (
+              <div className="font-mono text-xs text-muted-foreground">
+                95% CI: {formatIntervalRange(stressTest.max_drawdown.ci95_low, stressTest.max_drawdown.ci95_high, true)}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export const PerformanceMetrics = ({ results, tradeFilter }: PerformanceMetricsProps) => {
   const combined = results.performance;
   const longOnly = results.long_only;
