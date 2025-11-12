@@ -47,13 +47,13 @@ export const ConfigSidebar = ({
 
   return (
     <aside
-      className={`fixed left-0 top-0 h-full w-80 border-r border-border bg-sidebar z-40 transition-transform duration-300 ease-in-out ${
-        isOpen ? 'translate-x-0' : '-translate-x-full'
+      className={`relative border-r border-border transition-all duration-300 ${
+        isOpen ? 'w-80' : 'w-0'
       }`}
-      style={{ willChange: 'transform' }}
     >
-      <div className="p-6 space-y-6 h-full overflow-y-auto"
-        <div className="flex items-center justify-between">
+      {isOpen && (
+        <div className="p-6 space-y-6 w-80 h-full overflow-y-auto">
+          <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-sidebar-foreground">Configuration</h2>
           <button onClick={onToggle} className="p-1 hover:bg-sidebar-accent rounded">
             <ChevronLeft className="h-5 w-5" />
@@ -431,7 +431,8 @@ export const ConfigSidebar = ({
             )}
           </Button>
         </div>
-      </div>
+        </div>
+      )}
     </aside>
   );
 };
