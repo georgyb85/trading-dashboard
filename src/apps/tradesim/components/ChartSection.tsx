@@ -1,6 +1,6 @@
-import { useMemo, memo } from "react";
+import { useMemo, memo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LineChart, AreaChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, Legend } from "recharts";
+import { LineChart, AreaChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area } from "recharts";
 import type { SimulateTradesResponse } from "@/lib/stage1/types";
 
 interface ChartSectionProps {
@@ -67,6 +67,16 @@ const buildBuyHoldDrawdown = (
 };
 
 const ChartSectionComponent = ({ results, tradeFilter }: ChartSectionProps) => {
+  // State for toggling line visibility
+  const [visibleLines, setVisibleLines] = useState({
+    strategy: true,
+    buyHold: true,
+  });
+
+  const toggleLine = (line: 'strategy' | 'buyHold') => {
+    setVisibleLines(prev => ({ ...prev, [line]: !prev[line] }));
+  };
+
   if (!results.strategy_pnl || !results.buy_hold_pnl) {
     console.log('[ChartSection] Missing PnL data:', {
       hasStrategyPnl: !!results.strategy_pnl,
@@ -257,39 +267,58 @@ const ChartSectionComponent = ({ results, tradeFilter }: ChartSectionProps) => {
                 formatter={(value: any, name) => [`$${(value ?? 0).toFixed(2)}`, name]}
               />
               <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="3 3" />
-              <Line
-                type="monotone"
-                dataKey="strategy"
-                name="Test Strategy"
-                stroke="hsl(var(--success))"
-                strokeWidth={2}
-                dot={false}
-                connectNulls
-              />
-              <Line
-                type="monotone"
-                dataKey="buyHold"
-                name="Buy & Hold"
-                stroke="hsl(var(--primary))"
-                strokeWidth={2}
-                dot={false}
-                connectNulls
-              />
-              <Legend
-                wrapperStyle={{ paddingTop: '20px' }}
-                iconType="circle"
-                onClick={(data) => {
-                  // Legend click handler is built into Recharts
-                }}
-              />
+              {visibleLines.strategy && (
+                <Line
+                  type="monotone"
+                  dataKey="strategy"
+                  name="Test Strategy"
+                  stroke="hsl(var(--success))"
+                  strokeWidth={2}
+                  dot={false}
+                  connectNulls
+                />
+              )}
+              {visibleLines.buyHold && (
+                <Line
+                  type="monotone"
+                  dataKey="buyHold"
+                  name="Buy & Hold"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  dot={false}
+                  connectNulls
+                />
+              )}
             </LineChart>
           </ResponsiveContainer>
-          {maxDrawdown !== '--' && (
-            <div className="mt-3 text-sm text-right">
-              <span className="text-muted-foreground">Max Drawdown: </span>
-              <span className="font-semibold text-destructive">{maxDrawdown}%</span>
+          <div className="mt-3 flex items-center justify-between text-sm">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => toggleLine('strategy')}
+                className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
+              >
+                <div className={`w-3 h-3 rounded-full bg-success ${!visibleLines.strategy ? 'opacity-30' : ''}`}></div>
+                <span className={`text-muted-foreground ${!visibleLines.strategy ? 'line-through opacity-50' : ''}`}>
+                  Test Strategy
+                </span>
+              </button>
+              <button
+                onClick={() => toggleLine('buyHold')}
+                className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
+              >
+                <div className={`w-3 h-3 rounded-full bg-primary ${!visibleLines.buyHold ? 'opacity-30' : ''}`}></div>
+                <span className={`text-muted-foreground ${!visibleLines.buyHold ? 'line-through opacity-50' : ''}`}>
+                  Buy & Hold
+                </span>
+              </button>
             </div>
-          )}
+            {maxDrawdown !== '--' && (
+              <div>
+                <span className="text-muted-foreground">Max Drawdown: </span>
+                <span className="font-semibold text-destructive">{maxDrawdown}%</span>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -337,48 +366,67 @@ const ChartSectionComponent = ({ results, tradeFilter }: ChartSectionProps) => {
                 />
                 <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="3 3" />
                 {/* Shaded area between y=0 and strategy drawdown line */}
-                <Area
-                  type="monotone"
-                  dataKey="strategyDrawdown"
-                  name="Test Strategy"
-                  stroke="hsl(var(--success))"
-                  strokeWidth={2}
-                  fill="url(#strategyDrawdownGradient)"
-                  connectNulls
-                  isAnimationActive={false}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="buyHoldDrawdown"
-                  name="Buy & Hold"
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                  fill="none"
-                  connectNulls
-                  isAnimationActive={false}
-                />
-                <Legend
-                  wrapperStyle={{ paddingTop: '20px' }}
-                  iconType="circle"
-                  onClick={(data) => {
-                    // Legend click handler is built into Recharts
-                  }}
-                />
+                {visibleLines.strategy && (
+                  <Area
+                    type="monotone"
+                    dataKey="strategyDrawdown"
+                    name="Test Strategy"
+                    stroke="hsl(var(--success))"
+                    strokeWidth={2}
+                    fill="url(#strategyDrawdownGradient)"
+                    connectNulls
+                    isAnimationActive={false}
+                  />
+                )}
+                {visibleLines.buyHold && (
+                  <Area
+                    type="monotone"
+                    dataKey="buyHoldDrawdown"
+                    name="Buy & Hold"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={2}
+                    fill="none"
+                    connectNulls
+                    isAnimationActive={false}
+                  />
+                )}
               </AreaChart>
             </ResponsiveContainer>
-            <div className="mt-3 flex gap-4 text-sm justify-end">
-              {maxDrawdown !== '--' && (
-                <div>
-                  <span className="text-muted-foreground">Test Strategy Max DD: </span>
-                  <span className="font-semibold text-destructive">-{maxDrawdown}%</span>
-                </div>
-              )}
-              {buyHoldMaxDrawdown !== '--' && (
-                <div>
-                  <span className="text-muted-foreground">Buy & Hold Max DD: </span>
-                  <span className="font-semibold text-destructive">-{buyHoldMaxDrawdown}%</span>
-                </div>
-              )}
+            <div className="mt-3 flex items-center justify-between text-sm">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => toggleLine('strategy')}
+                  className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
+                >
+                  <div className={`w-3 h-3 rounded-full bg-success ${!visibleLines.strategy ? 'opacity-30' : ''}`}></div>
+                  <span className={`text-muted-foreground ${!visibleLines.strategy ? 'line-through opacity-50' : ''}`}>
+                    Test Strategy
+                  </span>
+                </button>
+                <button
+                  onClick={() => toggleLine('buyHold')}
+                  className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
+                >
+                  <div className={`w-3 h-3 rounded-full bg-primary ${!visibleLines.buyHold ? 'opacity-30' : ''}`}></div>
+                  <span className={`text-muted-foreground ${!visibleLines.buyHold ? 'line-through opacity-50' : ''}`}>
+                    Buy & Hold
+                  </span>
+                </button>
+              </div>
+              <div className="flex gap-4">
+                {maxDrawdown !== '--' && (
+                  <div>
+                    <span className="text-muted-foreground">Test Strategy Max DD: </span>
+                    <span className="font-semibold text-destructive">-{maxDrawdown}%</span>
+                  </div>
+                )}
+                {buyHoldMaxDrawdown !== '--' && (
+                  <div>
+                    <span className="text-muted-foreground">Buy & Hold Max DD: </span>
+                    <span className="font-semibold text-destructive">-{buyHoldMaxDrawdown}%</span>
+                  </div>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
