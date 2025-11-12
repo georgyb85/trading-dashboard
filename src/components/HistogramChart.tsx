@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
@@ -16,7 +16,7 @@ interface HistogramCacheEntry {
   allValues: number[];
   dataMin: number;
   dataMax: number;
-  lastSettings: {
+  lastSettings?: {
     binCount: number;
     rangeMin: string;
     rangeMax: string;
@@ -62,20 +62,12 @@ const HistogramChart = ({ data, selectedColumn, indicatorRanges }: HistogramChar
     }
 
     if (!cacheEntry) {
-      // Create new cache entry
+      // Create new cache entry without lastSettings (will be set when user customizes)
       cacheEntry = {
         allValues: values,
         dataMin: min,
         dataMax: max,
-        lastSettings: {
-          binCount: 40,
-          rangeMin: min.toFixed(2),
-          rangeMax: max.toFixed(2),
-          rangeMinPercent: 0,
-          rangeMaxPercent: 100,
-          showTails: true,
-          normalize: false,
-        },
+        lastSettings: undefined, // Don't initialize - only set when user changes settings
         cachedBins: new Map(),
       };
       cache.set(selectedColumn, cacheEntry);
@@ -85,17 +77,9 @@ const HistogramChart = ({ data, selectedColumn, indicatorRanges }: HistogramChar
       console.log(`[HistogramChart] Updating cache for ${selectedColumn}: [${cacheEntry.dataMin}, ${cacheEntry.dataMax}] -> [${min}, ${max}]`);
       cacheEntry.dataMin = min;
       cacheEntry.dataMax = max;
-      // Update lastSettings ONLY if they were never customized (still at 0-100%)
+      // Reset lastSettings to undefined if they were at defaults (data range changed)
       if (!cacheEntry.lastSettings || (cacheEntry.lastSettings.rangeMinPercent === 0 && cacheEntry.lastSettings.rangeMaxPercent === 100)) {
-        cacheEntry.lastSettings = {
-          binCount: 40,
-          rangeMin: min.toFixed(2),
-          rangeMax: max.toFixed(2),
-          rangeMinPercent: 0,
-          rangeMaxPercent: 100,
-          showTails: true,
-          normalize: false,
-        };
+        cacheEntry.lastSettings = undefined;
       }
     }
 
@@ -119,18 +103,10 @@ const HistogramChart = ({ data, selectedColumn, indicatorRanges }: HistogramChar
   useEffect(() => {
     const entry = cacheRef.current.get(selectedColumn);
 
-    // Check if this indicator has been customized (lastSettings exist and differ from defaults)
-    const hasCustomSettings = entry?.lastSettings && (
-      entry.lastSettings.rangeMinPercent !== 0 ||
-      entry.lastSettings.rangeMaxPercent !== 100 ||
-      entry.lastSettings.binCount !== 40 ||
-      entry.lastSettings.showTails !== true ||
-      entry.lastSettings.normalize !== false
-    );
-
-    if (hasCustomSettings) {
+    // Check if this indicator has customized settings saved
+    if (entry?.lastSettings) {
       // Restore cached CUSTOMIZED settings for this indicator
-      const settings = entry.lastSettings!;
+      const settings = entry.lastSettings;
       setBinCount([settings.binCount]);
       setRangeMin(settings.rangeMin);
       setRangeMax(settings.rangeMax);
@@ -140,7 +116,7 @@ const HistogramChart = ({ data, selectedColumn, indicatorRanges }: HistogramChar
       setNormalize(settings.normalize);
       console.log(`[HistogramChart] Restored customized settings for ${selectedColumn}:`, settings);
     } else {
-      // Initialize with THIS indicator's min/max from cache (already correct from useMemo)
+      // Initialize with THIS indicator's min/max from cache (defaults)
       setBinCount([40]);
       setRangeMin(dataMin.toFixed(2));
       setRangeMax(dataMax.toFixed(2));
@@ -148,10 +124,41 @@ const HistogramChart = ({ data, selectedColumn, indicatorRanges }: HistogramChar
       setRangeMaxPercent([100]);
       setShowTails(true);
       setNormalize(false);
-      console.log(`[HistogramChart] Initialized ${selectedColumn} with range [${dataMin.toFixed(2)}, ${dataMax.toFixed(2)}]`);
+      console.log(`[HistogramChart] Initialized ${selectedColumn} with default range [${dataMin.toFixed(2)}, ${dataMax.toFixed(2)}]`);
     }
   }, [selectedColumn, dataMin, dataMax]);
-  
+
+  // Save settings when user changes them (not when restoring from cache)
+  useEffect(() => {
+    const entry = cacheRef.current.get(selectedColumn);
+    if (!entry) return;
+
+    // Check if current settings differ from defaults
+    const isDefaultSettings = (
+      binCount[0] === 40 &&
+      rangeMinPercent[0] === 0 &&
+      rangeMaxPercent[0] === 100 &&
+      showTails === true &&
+      normalize === false
+    );
+
+    // Only save if settings have been customized
+    if (!isDefaultSettings) {
+      entry.lastSettings = {
+        binCount: binCount[0],
+        rangeMin,
+        rangeMax,
+        rangeMinPercent: rangeMinPercent[0],
+        rangeMaxPercent: rangeMaxPercent[0],
+        showTails,
+        normalize,
+      };
+      console.log(`[HistogramChart] Saved customized settings for ${selectedColumn}`);
+    }
+    // Note: We don't clear lastSettings when returning to defaults, so users can
+    // switch away and back and still have their custom settings preserved
+  }, [selectedColumn, binCount, rangeMin, rangeMax, rangeMinPercent, rangeMaxPercent, showTails, normalize]);
+
   // Sync text inputs with sliders
   const handleMinPercentChange = (value: number[]) => {
     setRangeMinPercent(value);
@@ -185,12 +192,13 @@ const HistogramChart = ({ data, selectedColumn, indicatorRanges }: HistogramChar
     }
   };
   
-  const handleAutoRange = () => {
+  // Memoize callback functions
+  const handleAutoRange = useCallback(() => {
     setRangeMin(dataMin.toFixed(2));
     setRangeMax(dataMax.toFixed(2));
     setRangeMinPercent([0]);
     setRangeMaxPercent([100]);
-  };
+  }, [dataMin, dataMax]);
 
   const { bins, statistics, lowerTailCount, upperTailCount } = useMemo(() => {
     if (allValues.length === 0) return { bins: [], statistics: null, lowerTailCount: 0, upperTailCount: 0 };
@@ -276,16 +284,8 @@ const HistogramChart = ({ data, selectedColumn, indicatorRanges }: HistogramChar
     // Cache the result
     if (entry) {
       entry.cachedBins.set(cacheKey, result);
-      // Save current settings
-      entry.lastSettings = {
-        binCount: binCount[0],
-        rangeMin,
-        rangeMax,
-        rangeMinPercent: rangeMinPercent[0],
-        rangeMaxPercent: rangeMaxPercent[0],
-        showTails,
-        normalize,
-      };
+      // Note: settings are NOT saved here anymore - they're saved in a separate useEffect
+      // to prevent overwriting default settings when switching indicators
     }
 
     return result;
@@ -493,5 +493,9 @@ const HistogramChart = ({ data, selectedColumn, indicatorRanges }: HistogramChar
     </div>
   );
 };
+
+// Note: React.memo() is NOT used here because this component has complex internal state
+// that must reset properly when selectedColumn changes. The component is already highly
+// optimized with useMemo for bin calculations and useRef for caching.
 
 export default HistogramChart;

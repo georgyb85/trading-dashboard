@@ -690,105 +690,93 @@ export function SystemHealthDashboard() {
         </Card>
       </div>
 
-      {/* GPU Service Monitors */}
-      {gpuInstances.map((instance) => {
-        const { systemInfo, usageMetrics } = instance;
+      {/* GPU and DB Service Monitors */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* GPU Service Monitors */}
+        {gpuInstances.map((instance) => {
+          const { systemInfo, usageMetrics } = instance;
 
-        return (
-          <Card key={instance.id} className="trading-card">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Zap className="h-5 w-5" />
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span>{instance.name}</span>
-                      {systemInfo && (
-                        <span className="text-xs font-mono text-muted-foreground">
-                          ({systemInfo.hostname})
-                        </span>
-                      )}
+          return (
+            <Card key={instance.id} className="trading-card">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center justify-between text-base">
+                  <div className="flex items-center gap-2">
+                    <Zap className="h-4 w-4" />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span>{instance.name}</span>
+                        {systemInfo && (
+                          <span className="text-xs font-mono text-muted-foreground">
+                            ({systemInfo.hostname})
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs font-normal text-muted-foreground">{instance.ip}</div>
                     </div>
-                    <div className="text-xs font-normal text-muted-foreground">{instance.ip}</div>
                   </div>
-                </div>
-                <Badge variant={instance.connected ? "default" : "destructive"}>
-                  {instance.connected ? "Connected" : "Disconnected"}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
+                  <Badge variant={instance.connected ? "default" : "destructive"} className="text-xs">
+                    {instance.connected ? "Connected" : "Disconnected"}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
               {/* System Information */}
               {systemInfo && (
-                <div className="space-y-3 p-4 rounded-lg bg-muted/30">
-                  <h3 className="text-sm font-semibold flex items-center gap-2">
-                    <Cpu className="h-4 w-4" />
+                <div className="space-y-2 p-3 rounded-lg bg-muted/30">
+                  <h3 className="text-xs font-semibold flex items-center gap-2">
+                    <Cpu className="h-3 w-3" />
                     System Information
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">CPU:</span>{' '}
-                      <span className="font-mono text-xs">{systemInfo.cpu_model}</span>
-                    </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
                       <span className="text-muted-foreground">Cores:</span>{' '}
                       <span className="font-semibold">{systemInfo.cpu_count}</span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Total RAM:</span>{' '}
+                      <span className="text-muted-foreground">RAM:</span>{' '}
                       <span className="font-semibold">
                         {(systemInfo.ram_total_mb / 1024).toFixed(1)} GB
                       </span>
                     </div>
-                    <div>
-                      <span className="text-muted-foreground">GPUs:</span>{' '}
-                      <span className="font-semibold">{systemInfo.gpu_count}</span>
-                    </div>
-                  </div>
-
-                  {/* GPU Information */}
-                  {systemInfo.gpus && systemInfo.gpus.length > 0 && (
-                    <div className="mt-3 space-y-2">
-                      {systemInfo.gpus.map((gpu) => (
-                        <div key={gpu.index} className="flex items-center justify-between p-2 rounded bg-background/50">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-xs">GPU {gpu.index}</Badge>
-                            <span className="text-sm font-medium">{gpu.name}</span>
-                          </div>
-                          <span className="text-xs text-muted-foreground">
-                            {(gpu.memory_mb / 1024).toFixed(1)} GB
+                    {systemInfo.gpus && systemInfo.gpus.length > 0 && (
+                      <>
+                        <div>
+                          <span className="text-muted-foreground">GPUs:</span>{' '}
+                          <span className="font-semibold">{systemInfo.gpu_count}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">VRAM:</span>{' '}
+                          <span className="font-semibold">
+                            {(systemInfo.gpus[0].memory_mb / 1024).toFixed(1)} GB
                           </span>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      </>
+                    )}
+                  </div>
                 </div>
               )}
 
               {/* Real-time Usage Metrics */}
               {usageMetrics && (
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold flex items-center gap-2">
-                    <Activity className="h-4 w-4" />
+                <div className="space-y-3">
+                  <h3 className="text-xs font-semibold flex items-center gap-2">
+                    <Activity className="h-3 w-3" />
                     Real-time Usage
                   </h3>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 gap-3">
                     {/* CPU Usage */}
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">CPU Usage</span>
+                        <span className="text-xs text-muted-foreground">CPU</span>
                         <span className={`text-sm font-bold ${getUtilizationColor(usageMetrics.cpu_percent)}`}>
                           {usageMetrics.cpu_percent.toFixed(1)}%
                         </span>
                       </div>
-                      <Progress value={usageMetrics.cpu_percent} className="h-2" />
-                      {/* Spacer to align with RAM/GPU which have memory info */}
-                      <div className="h-4"></div>
 
                       {/* CPU Trend Chart */}
                       {instance.usageHistory.length > 1 && (
-                        <div className="h-20 mt-2">
+                        <div className="h-16">
                           <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={instance.usageHistory}>
                               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground) / 0.1)" />
@@ -821,21 +809,17 @@ export function SystemHealthDashboard() {
                     </div>
 
                     {/* RAM Usage */}
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">RAM Usage</span>
+                        <span className="text-xs text-muted-foreground">RAM</span>
                         <span className={`text-sm font-bold ${getUtilizationColor(usageMetrics.ram_percent)}`}>
                           {usageMetrics.ram_percent.toFixed(1)}%
                         </span>
                       </div>
-                      <Progress value={usageMetrics.ram_percent} className="h-2" />
-                      <p className="text-xs text-muted-foreground">
-                        {(usageMetrics.ram_used_mb / 1024).toFixed(1)} / {(usageMetrics.ram_total_mb / 1024).toFixed(1)} GB
-                      </p>
 
                       {/* RAM Trend Chart */}
                       {instance.usageHistory.length > 1 && (
-                        <div className="h-20 mt-2">
+                        <div className="h-16">
                           <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={instance.usageHistory}>
                               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground) / 0.1)" />
@@ -869,23 +853,17 @@ export function SystemHealthDashboard() {
 
                     {/* GPU Usage */}
                     {usageMetrics.gpu_percent !== undefined && (
-                      <div className="space-y-2">
+                      <div className="space-y-1">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">GPU Usage</span>
+                          <span className="text-xs text-muted-foreground">GPU</span>
                           <span className={`text-sm font-bold ${getUtilizationColor(usageMetrics.gpu_percent)}`}>
                             {usageMetrics.gpu_percent}%
                           </span>
                         </div>
-                        <Progress value={usageMetrics.gpu_percent} className="h-2" />
-                        {usageMetrics.gpu_mem_used_mb !== undefined && usageMetrics.gpu_mem_total_mb !== undefined && (
-                          <p className="text-xs text-muted-foreground">
-                            {(usageMetrics.gpu_mem_used_mb / 1024).toFixed(1)} / {(usageMetrics.gpu_mem_total_mb / 1024).toFixed(1)} GB
-                          </p>
-                        )}
 
                         {/* GPU Trend Chart */}
                         {instance.usageHistory.length > 1 && instance.usageHistory.some(h => h.gpu !== undefined) && (
-                          <div className="h-20 mt-2">
+                          <div className="h-16">
                             <ResponsiveContainer width="100%" height="100%">
                               <AreaChart data={instance.usageHistory}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground) / 0.1)" />
@@ -921,27 +899,23 @@ export function SystemHealthDashboard() {
 
                   {/* Ring Buffer Status - Only show for GPU Server 1 */}
                   {instance.id === 'gpu1' && Object.keys(ringBuffers).length > 0 && (
-                    <div className="mt-6 space-y-4 pt-6 border-t border-border">
-                      <h3 className="text-sm font-semibold flex items-center gap-2">
-                        <Activity className="h-4 w-4" />
+                    <div className="mt-3 space-y-2 pt-3 border-t border-border">
+                      <h3 className="text-xs font-semibold flex items-center gap-2">
+                        <Activity className="h-3 w-3" />
                         Ring Buffer Status
                       </h3>
                       {Object.entries(ringBuffers).map(([name, stats]) => (
-                        <div key={name} className="space-y-2">
+                        <div key={name} className="space-y-1">
                           <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium">{name}</span>
-                            <div className="flex items-center gap-4">
+                            <span className="text-xs font-medium">{name}</span>
+                            <div className="flex items-center gap-2">
                               <span className="text-xs text-muted-foreground">
-                                {stats.unconsumed.toLocaleString()} unconsumed
+                                {stats.unconsumed.toLocaleString()} / Max: {stats.max12h.toLocaleString()}
                               </span>
                               <span className={`text-sm font-bold ${getUtilizationColor(stats.utilization)}`}>
                                 {stats.utilization.toFixed(1)}%
                               </span>
                             </div>
-                          </div>
-                          <Progress value={Math.min(stats.utilization, 100)} className="h-2" />
-                          <div className="text-xs text-muted-foreground text-right">
-                            Max 12h: {stats.max12h.toLocaleString()}
                           </div>
                         </div>
                       ))}
@@ -949,25 +923,25 @@ export function SystemHealthDashboard() {
                   )}
 
                   {/* Last Update */}
-                  <div className="text-xs text-muted-foreground text-right">
-                    Last update: {new Date(usageMetrics.timestamp * 1000).toLocaleTimeString()}
+                  <div className="text-xs text-muted-foreground text-right mt-2">
+                    {new Date(usageMetrics.timestamp * 1000).toLocaleTimeString()}
                   </div>
                 </div>
               )}
 
               {/* Loading State */}
               {instance.connected && !usageMetrics && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Activity className="h-8 w-8 animate-pulse mx-auto mb-2" />
-                  <p className="text-sm">Waiting for usage data...</p>
+                <div className="text-center py-4 text-muted-foreground">
+                  <Activity className="h-6 w-6 animate-pulse mx-auto mb-2" />
+                  <p className="text-xs">Waiting for usage data...</p>
                 </div>
               )}
 
               {/* Disconnected State */}
               {!instance.connected && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <WifiOff className="h-8 w-8 mx-auto mb-2" />
-                  <p className="text-sm">Not connected</p>
+                <div className="text-center py-4 text-muted-foreground">
+                  <WifiOff className="h-6 w-6 mx-auto mb-2" />
+                  <p className="text-xs">Not connected</p>
                 </div>
               )}
             </CardContent>
@@ -975,83 +949,77 @@ export function SystemHealthDashboard() {
         );
       })}
 
-      {/* DB Service Monitors */}
-      {dbInstances.map((instance) => {
-        const { systemInfo, usageMetrics } = instance;
+        {/* DB Service Monitors */}
+        {dbInstances.map((instance) => {
+          const { systemInfo, usageMetrics } = instance;
 
-        return (
-          <Card key={instance.id} className="trading-card">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Activity className="h-5 w-5" />
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span>{instance.name}</span>
-                      {systemInfo && (
-                        <span className="text-xs font-mono text-muted-foreground">
-                          ({systemInfo.hostname})
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs font-normal text-muted-foreground">{instance.host}</div>
-                  </div>
-                </div>
-                <Badge variant={instance.connected ? "default" : "destructive"}>
-                  {instance.connected ? "Connected" : "Disconnected"}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* System Information */}
-              {systemInfo && (
-                <div className="space-y-3 p-4 rounded-lg bg-muted/30">
-                  <h3 className="text-sm font-semibold flex items-center gap-2">
-                    <Cpu className="h-4 w-4" />
-                    System Information
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">CPU:</span>{' '}
-                      <span className="font-mono text-xs">{systemInfo.cpu_model}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Cores:</span>{' '}
-                      <span className="font-semibold">{systemInfo.cpu_count}</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Total RAM:</span>{' '}
-                      <span className="font-semibold">
-                        {(systemInfo.ram_total_mb / 1024).toFixed(1)} GB
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Real-time Usage Metrics */}
-              {usageMetrics && (
-                <div className="space-y-4">
-                  <h3 className="text-sm font-semibold flex items-center gap-2">
+          return (
+            <Card key={instance.id} className="trading-card">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center justify-between text-base">
+                  <div className="flex items-center gap-2">
                     <Activity className="h-4 w-4" />
-                    Real-time Usage
-                  </h3>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* CPU Usage */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">CPU Usage</span>
-                        <span className={`text-sm font-bold ${getUtilizationColor(usageMetrics.cpu_percent)}`}>
-                          {usageMetrics.cpu_percent.toFixed(1)}%
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span>{instance.name}</span>
+                        {systemInfo && (
+                          <span className="text-xs font-mono text-muted-foreground">
+                            ({systemInfo.hostname})
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs font-normal text-muted-foreground">{instance.host}</div>
+                    </div>
+                  </div>
+                  <Badge variant={instance.connected ? "default" : "destructive"} className="text-xs">
+                    {instance.connected ? "Connected" : "Disconnected"}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* System Information */}
+                {systemInfo && (
+                  <div className="space-y-2 p-3 rounded-lg bg-muted/30">
+                    <h3 className="text-xs font-semibold flex items-center gap-2">
+                      <Cpu className="h-3 w-3" />
+                      System Information
+                    </h3>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">Cores:</span>{' '}
+                        <span className="font-semibold">{systemInfo.cpu_count}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">RAM:</span>{' '}
+                        <span className="font-semibold">
+                          {(systemInfo.ram_total_mb / 1024).toFixed(1)} GB
                         </span>
                       </div>
-                      <Progress value={usageMetrics.cpu_percent} className="h-2" />
-                      <div className="h-4"></div>
+                    </div>
+                  </div>
+                )}
 
-                      {/* CPU Trend Chart */}
-                      {instance.usageHistory.length > 1 && (
-                        <div className="h-20 mt-2">
+                {/* Real-time Usage Metrics */}
+                {usageMetrics && (
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-semibold flex items-center gap-2">
+                      <Activity className="h-3 w-3" />
+                      Real-time Usage
+                    </h3>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* CPU Usage */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">CPU</span>
+                          <span className={`text-sm font-bold ${getUtilizationColor(usageMetrics.cpu_percent)}`}>
+                            {usageMetrics.cpu_percent.toFixed(1)}%
+                          </span>
+                        </div>
+
+                        {/* CPU Trend Chart */}
+                        {instance.usageHistory.length > 1 && (
+                          <div className="h-16">
                           <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={instance.usageHistory}>
                               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground) / 0.1)" />
@@ -1080,107 +1048,74 @@ export function SystemHealthDashboard() {
                       )}
                     </div>
 
-                    {/* RAM Usage */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">RAM Usage</span>
-                        <span className={`text-sm font-bold ${getUtilizationColor(usageMetrics.ram_percent)}`}>
-                          {usageMetrics.ram_percent.toFixed(1)}%
-                        </span>
-                      </div>
-                      <Progress value={usageMetrics.ram_percent} className="h-2" />
-                      <p className="text-xs text-muted-foreground">
-                        {(usageMetrics.ram_used_mb / 1024).toFixed(1)} / {(usageMetrics.ram_total_mb / 1024).toFixed(1)} GB
-                      </p>
+                      {/* RAM Usage */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">RAM</span>
+                          <span className={`text-sm font-bold ${getUtilizationColor(usageMetrics.ram_percent)}`}>
+                            {usageMetrics.ram_percent.toFixed(1)}%
+                          </span>
+                        </div>
 
-                      {/* RAM Trend Chart */}
-                      {instance.usageHistory.length > 1 && (
-                        <div className="h-20 mt-2">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <AreaChart data={instance.usageHistory}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground) / 0.1)" />
-                              <XAxis hide />
-                              <YAxis domain={[0, 100]} hide />
-                              <Tooltip
-                                contentStyle={{
-                                  background: 'hsl(var(--background))',
-                                  border: '1px solid hsl(var(--border))',
-                                  borderRadius: '6px',
-                                  fontSize: '12px'
-                                }}
-                                formatter={(value: number) => [`${value.toFixed(1)}%`, 'RAM']}
-                                labelFormatter={(label) => `Point ${label + 1}`}
-                              />
-                              <Area
-                                type="monotone"
-                                dataKey="ram"
-                                stroke="#8b5cf6"
-                                fill="rgb(139, 92, 246, 0.2)"
-                                strokeWidth={2}
-                              />
-                            </AreaChart>
-                          </ResponsiveContainer>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Message Rates - if provided */}
-                  {usageMetrics.message_rates && (
-                    <div className="mt-6 space-y-3 pt-6 border-t border-border">
-                      <h3 className="text-sm font-semibold">Message Rates</h3>
-                      <div className="grid grid-cols-3 gap-4 text-sm">
-                        <div className="text-center">
-                          <div className="text-xs text-muted-foreground">Total</div>
-                          <div className="text-lg font-bold font-mono">
-                            {usageMetrics.message_rates.total_per_sec}
-                            <span className="text-xs text-muted-foreground ml-1">/s</span>
+                        {/* RAM Trend Chart */}
+                        {instance.usageHistory.length > 1 && (
+                          <div className="h-16">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <AreaChart data={instance.usageHistory}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground) / 0.1)" />
+                                <XAxis hide />
+                                <YAxis domain={[0, 100]} hide />
+                                <Tooltip
+                                  contentStyle={{
+                                    background: 'hsl(var(--background))',
+                                    border: '1px solid hsl(var(--border))',
+                                    borderRadius: '6px',
+                                    fontSize: '12px'
+                                  }}
+                                  formatter={(value: number) => [`${value.toFixed(1)}%`, 'RAM']}
+                                  labelFormatter={(label) => `Point ${label + 1}`}
+                                />
+                                <Area
+                                  type="monotone"
+                                  dataKey="ram"
+                                  stroke="#8b5cf6"
+                                  fill="rgb(139, 92, 246, 0.2)"
+                                  strokeWidth={2}
+                                />
+                              </AreaChart>
+                            </ResponsiveContainer>
                           </div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-xs text-muted-foreground">Trades</div>
-                          <div className="text-lg font-bold font-mono text-success">
-                            {usageMetrics.message_rates.trades_per_sec}
-                            <span className="text-xs text-muted-foreground ml-1">/s</span>
-                          </div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-xs text-muted-foreground">Orderbooks</div>
-                          <div className="text-lg font-bold font-mono text-blue-500">
-                            {usageMetrics.message_rates.orderbooks_per_sec}
-                            <span className="text-xs text-muted-foreground ml-1">/s</span>
-                          </div>
-                        </div>
+                        )}
                       </div>
                     </div>
-                  )}
 
-                  {/* Last Update */}
-                  <div className="text-xs text-muted-foreground text-right">
-                    Last update: {new Date(usageMetrics.timestamp * 1000).toLocaleTimeString()}
+                    {/* Last Update */}
+                    <div className="text-xs text-muted-foreground text-right mt-2">
+                      {new Date(usageMetrics.timestamp * 1000).toLocaleTimeString()}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
               {/* Loading State */}
               {instance.connected && !usageMetrics && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Activity className="h-8 w-8 animate-pulse mx-auto mb-2" />
-                  <p className="text-sm">Waiting for usage data...</p>
+                <div className="text-center py-4 text-muted-foreground">
+                  <Activity className="h-6 w-6 animate-pulse mx-auto mb-2" />
+                  <p className="text-xs">Waiting for usage data...</p>
                 </div>
               )}
 
               {/* Disconnected State */}
               {!instance.connected && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <WifiOff className="h-8 w-8 mx-auto mb-2" />
-                  <p className="text-sm">Not connected</p>
+                <div className="text-center py-4 text-muted-foreground">
+                  <WifiOff className="h-6 w-6 mx-auto mb-2" />
+                  <p className="text-xs">Not connected</p>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        );
-      })}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
 
       {/* System Threads Status */}
       <Card className="trading-card">
