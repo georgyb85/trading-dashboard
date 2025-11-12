@@ -21,43 +21,48 @@ export const ChartSection = ({ results }: ChartSectionProps) => {
 
   console.log('[ChartSection] Strategy PnL points:', results.strategy_pnl.length);
   console.log('[ChartSection] Buy&Hold PnL points:', results.buy_hold_pnl.length);
-  console.log('[ChartSection] First strategy point:', results.strategy_pnl[0]);
-  console.log('[ChartSection] First buy&hold point:', results.buy_hold_pnl[0]);
-  console.log('[ChartSection] Last strategy point:', results.strategy_pnl[results.strategy_pnl.length - 1]);
-  console.log('[ChartSection] Last buy&hold point:', results.buy_hold_pnl[results.buy_hold_pnl.length - 1]);
 
-  // Transform PnL data for charts
-  const pnlData = results.strategy_pnl.map((point, idx) => {
-    const buyHoldPoint = results.buy_hold_pnl?.[idx];
-    return {
-      timestamp: new Date(point.timestamp).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }),
-      strategy: point.pnl,
-      buyHold: buyHoldPoint?.pnl || 0,
-    };
+  // Merge both series on timestamp so we can respect their individual sampling rates
+  const timeline = new Map<number, { timestamp: number; strategy?: number; buyHold?: number }>();
+  results.buy_hold_pnl.forEach((point) => {
+    timeline.set(point.timestamp, { timestamp: point.timestamp, buyHold: point.pnl });
+  });
+  results.strategy_pnl.forEach((point) => {
+    const existing = timeline.get(point.timestamp);
+    if (existing) {
+      existing.strategy = point.pnl;
+    } else {
+      timeline.set(point.timestamp, { timestamp: point.timestamp, strategy: point.pnl });
+    }
   });
 
-  // DETAILED DEBUGGING: Check data mapping
-  console.log('[ChartSection] ===== DATA MAPPING VERIFICATION =====');
-  console.log('[ChartSection] Array lengths match?', results.strategy_pnl.length === results.buy_hold_pnl.length);
+  const merged = Array.from(timeline.values()).sort((a, b) => a.timestamp - b.timestamp);
 
-  // Sample points at beginning, middle, end
-  const midIdx = Math.floor(results.strategy_pnl.length / 2);
-  const endIdx = results.strategy_pnl.length - 1;
+  // Forward-fill values so lines remain continuous between sampling points
+  let lastStrategy: number | null = null;
+  let lastBuyHold: number | null = null;
+  merged.forEach((point) => {
+    if (typeof point.strategy === 'number') {
+      lastStrategy = point.strategy;
+    } else if (lastStrategy !== null) {
+      point.strategy = lastStrategy;
+    }
+    if (typeof point.buyHold === 'number') {
+      lastBuyHold = point.buyHold;
+    } else if (lastBuyHold !== null) {
+      point.buyHold = lastBuyHold;
+    }
+  });
 
-  console.log('[ChartSection] RAW DATA samples:');
-  console.log('  [0] Strategy PnL:', results.strategy_pnl[0]?.pnl, 'Buy&Hold PnL:', results.buy_hold_pnl[0]?.pnl);
-  console.log(`  [${midIdx}] Strategy PnL:`, results.strategy_pnl[midIdx]?.pnl, 'Buy&Hold PnL:', results.buy_hold_pnl[midIdx]?.pnl);
-  console.log(`  [${endIdx}] Strategy PnL:`, results.strategy_pnl[endIdx]?.pnl, 'Buy&Hold PnL:', results.buy_hold_pnl[endIdx]?.pnl);
+  const pnlData = merged.map((point) => ({
+    timestamp: point.timestamp,
+    strategy: point.strategy ?? null,
+    buyHold: point.buyHold ?? null,
+  }));
 
-  console.log('[ChartSection] TRANSFORMED DATA samples:');
-  console.log('  [0]:', pnlData[0]);
-  console.log(`  [${midIdx}]:`, pnlData[midIdx]);
-  console.log(`  [${endIdx}]:`, pnlData[endIdx]);
-
-  console.log('[ChartSection] Chart will plot:');
-  console.log('  GREEN line (Strategy) dataKey="strategy" from results.strategy_pnl[i].pnl');
-  console.log('  BLUE line (Buy&Hold) dataKey="buyHold" from results.buy_hold_pnl[i].pnl');
-  console.log('[ChartSection] ===== END VERIFICATION =====');
+  console.log('[ChartSection] Combined timeline points:', pnlData.length);
+  console.log('[ChartSection] First merged point:', pnlData[0]);
+  console.log('[ChartSection] Last merged point:', pnlData[pnlData.length - 1]);
 
   // Calculate max drawdown from performance metrics (handle both field name variants)
   const maxDrawdownValue = results.performance?.max_drawdown ?? results.performance?.max_drawdown_pct;
@@ -78,8 +83,14 @@ export const ChartSection = ({ results }: ChartSectionProps) => {
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis
                 dataKey="timestamp"
+                type="number"
+                scale="time"
+                domain={['dataMin', 'dataMax']}
                 stroke="hsl(var(--muted-foreground))"
                 style={{ fontSize: '12px' }}
+                tickFormatter={(value) =>
+                  new Date(value as number).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })
+                }
               />
               <YAxis
                 stroke="hsl(var(--muted-foreground))"
@@ -93,7 +104,8 @@ export const ChartSection = ({ results }: ChartSectionProps) => {
                   borderRadius: '6px'
                 }}
                 labelStyle={{ color: 'hsl(var(--foreground))' }}
-                formatter={(value: any) => [`$${value.toFixed(2)}`, '']}
+                labelFormatter={(value) => new Date(value as number).toLocaleString()}
+                formatter={(value: any, name) => [`$${(value ?? 0).toFixed(2)}`, name]}
               />
               <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="3 3" />
               <Line
@@ -103,6 +115,7 @@ export const ChartSection = ({ results }: ChartSectionProps) => {
                 stroke="hsl(var(--success))"
                 strokeWidth={2}
                 dot={false}
+                connectNulls
               />
               <Line
                 type="monotone"
@@ -111,6 +124,7 @@ export const ChartSection = ({ results }: ChartSectionProps) => {
                 stroke="hsl(var(--primary))"
                 strokeWidth={2}
                 dot={false}
+                connectNulls
               />
             </LineChart>
           </ResponsiveContainer>

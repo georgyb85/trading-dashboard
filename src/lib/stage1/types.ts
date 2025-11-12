@@ -113,17 +113,30 @@ export interface BuildIndicatorsResponse {
 }
 
 // Trade Simulation API types
+export type ThresholdChoice = 'OptimalROC' | 'Percentile95_5' | 'ZeroCrossover';
+
 export interface TradeConfig {
   position_size: number;
   use_signal_exit: boolean;
-  threshold_choice: string;
+  exit_strength_pct: number;
+  honor_signal_reversal: boolean;
+  threshold_choice: ThresholdChoice;
   use_stop_loss: boolean;
+  use_atr_stop_loss: boolean;
   stop_loss_pct: number;
-  stop_loss_cooldown?: number;
+  atr_multiplier: number;
+  atr_period: number;
+  stop_loss_cooldown_bars: number;
   use_take_profit: boolean;
+  use_atr_take_profit: boolean;
   take_profit_pct: number;
+  atr_tp_multiplier: number;
+  atr_tp_period: number;
   use_time_exit: boolean;
   max_holding_bars: number;
+  use_limit_orders: boolean;
+  limit_order_window: number;
+  limit_order_offset: number;
 }
 
 export interface StressTestConfig {

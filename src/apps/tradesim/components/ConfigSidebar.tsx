@@ -61,19 +61,19 @@ export const ConfigSidebar = ({
             <Label className="text-sm">Entry Thresholds</Label>
             <RadioGroup
               value={tradeConfig.threshold_choice}
-              onValueChange={(val) => updateTradeConfig({ threshold_choice: val })}
+              onValueChange={(val) => updateTradeConfig({ threshold_choice: val as TradeConfig['threshold_choice'] })}
               className="space-y-2"
             >
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="optimal_roc" id="optimal" />
+                <RadioGroupItem value="OptimalROC" id="optimal" />
                 <Label htmlFor="optimal" className="text-sm cursor-pointer">Optimal ROC thresholds</Label>
               </div>
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="percentile_95_5" id="percentile" />
+                <RadioGroupItem value="Percentile95_5" id="percentile" />
                 <Label htmlFor="percentile" className="text-sm cursor-pointer">Percentile 95/5 thresholds</Label>
               </div>
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="zero_cross" id="zero" />
+                <RadioGroupItem value="ZeroCrossover" id="zero" />
                 <Label htmlFor="zero" className="text-sm cursor-pointer">Zero crossover</Label>
               </div>
             </RadioGroup>
@@ -85,13 +85,39 @@ export const ConfigSidebar = ({
           <h3 className="text-sm font-medium text-sidebar-foreground">Exit Methods</h3>
 
           {/* Signal Exit */}
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="signal-exit"
-              checked={tradeConfig.use_signal_exit}
-              onCheckedChange={(checked) => updateTradeConfig({ use_signal_exit: checked as boolean })}
-            />
-            <Label htmlFor="signal-exit" className="text-sm cursor-pointer">Use Signal Exit</Label>
+          <div className="space-y-3">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="signal-exit"
+                checked={tradeConfig.use_signal_exit}
+                onCheckedChange={(checked) => updateTradeConfig({ use_signal_exit: checked as boolean })}
+              />
+              <Label htmlFor="signal-exit" className="text-sm cursor-pointer">Use Signal Exit</Label>
+            </div>
+            {tradeConfig.use_signal_exit && (
+              <div className="ml-6 space-y-2">
+                <Label className="text-sm">Exit Strength (0-1)</Label>
+                <Input
+                  type="number"
+                  value={tradeConfig.exit_strength_pct}
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  onChange={(e) => updateTradeConfig({ exit_strength_pct: parseFloat(e.target.value) || 0 })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Exit when signal falls below entry signal × threshold (0.8 = 80% of entry strength).
+                </p>
+              </div>
+            )}
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="signal-reversal"
+                checked={tradeConfig.honor_signal_reversal}
+                onCheckedChange={(checked) => updateTradeConfig({ honor_signal_reversal: checked as boolean })}
+              />
+              <Label htmlFor="signal-reversal" className="text-sm cursor-pointer">Honor Signal Reversal</Label>
+            </div>
           </div>
 
           {/* Take Profit */}
@@ -106,16 +132,52 @@ export const ConfigSidebar = ({
             </div>
 
             {tradeConfig.use_take_profit && (
-              <div className="ml-6 space-y-2">
-                <Label className="text-sm">Take Profit %</Label>
-                <Input
-                  type="number"
-                  value={tradeConfig.take_profit_pct}
-                  onChange={(e) => updateTradeConfig({ take_profit_pct: parseFloat(e.target.value) || 5.0 })}
-                  min={0.1}
-                  max={100}
-                  step={0.1}
-                />
+              <div className="ml-6 space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="atr-tp"
+                    checked={tradeConfig.use_atr_take_profit}
+                    onCheckedChange={(checked) => updateTradeConfig({ use_atr_take_profit: checked as boolean })}
+                  />
+                  <Label htmlFor="atr-tp" className="text-sm cursor-pointer">Use ATR-based Take Profit</Label>
+                </div>
+
+                {tradeConfig.use_atr_take_profit ? (
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-sm">ATR Multiplier</Label>
+                      <Input
+                        type="number"
+                        value={tradeConfig.atr_tp_multiplier}
+                        step={0.1}
+                        min={0.1}
+                        onChange={(e) => updateTradeConfig({ atr_tp_multiplier: parseFloat(e.target.value) || 1 })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm">ATR Period</Label>
+                      <Input
+                        type="number"
+                        value={tradeConfig.atr_tp_period}
+                        min={1}
+                        step={1}
+                        onChange={(e) => updateTradeConfig({ atr_tp_period: parseInt(e.target.value) || 1 })}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label className="text-sm">Take Profit %</Label>
+                    <Input
+                      type="number"
+                      value={tradeConfig.take_profit_pct}
+                      onChange={(e) => updateTradeConfig({ take_profit_pct: parseFloat(e.target.value) || 0 })}
+                      min={0.1}
+                      max={100}
+                      step={0.1}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -133,23 +195,58 @@ export const ConfigSidebar = ({
 
             {tradeConfig.use_stop_loss && (
               <div className="ml-6 space-y-3">
-                <div className="space-y-2">
-                  <Label className="text-sm">Stop Loss %</Label>
-                  <Input
-                    type="number"
-                    value={tradeConfig.stop_loss_pct}
-                    onChange={(e) => updateTradeConfig({ stop_loss_pct: parseFloat(e.target.value) || 2.0 })}
-                    min={0.1}
-                    max={100}
-                    step={0.1}
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="atr-stop-loss"
+                    checked={tradeConfig.use_atr_stop_loss}
+                    onCheckedChange={(checked) => updateTradeConfig({ use_atr_stop_loss: checked as boolean })}
                   />
+                  <Label htmlFor="atr-stop-loss" className="text-sm cursor-pointer">Use ATR-based Stop Loss</Label>
                 </div>
+
+                {tradeConfig.use_atr_stop_loss ? (
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-sm">ATR Multiplier</Label>
+                      <Input
+                        type="number"
+                        value={tradeConfig.atr_multiplier}
+                        step={0.1}
+                        min={0.1}
+                        onChange={(e) => updateTradeConfig({ atr_multiplier: parseFloat(e.target.value) || 1 })}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm">ATR Period</Label>
+                      <Input
+                        type="number"
+                        value={tradeConfig.atr_period}
+                        min={1}
+                        step={1}
+                        onChange={(e) => updateTradeConfig({ atr_period: parseInt(e.target.value) || 1 })}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label className="text-sm">Stop Loss %</Label>
+                    <Input
+                      type="number"
+                      value={tradeConfig.stop_loss_pct}
+                      onChange={(e) => updateTradeConfig({ stop_loss_pct: parseFloat(e.target.value) || 0 })}
+                      min={0.1}
+                      max={100}
+                      step={0.1}
+                    />
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <Label className="text-sm">Stop Loss Cooldown (bars)</Label>
                   <Input
                     type="number"
-                    value={tradeConfig.stop_loss_cooldown ?? 0}
-                    onChange={(e) => updateTradeConfig({ stop_loss_cooldown: parseInt(e.target.value) || 0 })}
+                    value={tradeConfig.stop_loss_cooldown_bars}
+                    onChange={(e) => updateTradeConfig({ stop_loss_cooldown_bars: parseInt(e.target.value) || 0 })}
                     min={0}
                     max={100}
                     step={1}
@@ -185,6 +282,43 @@ export const ConfigSidebar = ({
               </div>
             )}
           </div>
+        </div>
+
+        {/* Order Execution */}
+        <div className="space-y-3">
+          <h3 className="text-sm font-medium text-sidebar-foreground">Order Execution</h3>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="limit-orders"
+              checked={tradeConfig.use_limit_orders}
+              onCheckedChange={(checked) => updateTradeConfig({ use_limit_orders: checked as boolean })}
+            />
+            <Label htmlFor="limit-orders" className="text-sm cursor-pointer">Use Limit Orders</Label>
+          </div>
+          {tradeConfig.use_limit_orders && (
+            <div className="ml-6 space-y-2">
+              <div>
+                <Label className="text-sm">Order Window (bars)</Label>
+                <Input
+                  type="number"
+                  value={tradeConfig.limit_order_window}
+                  min={1}
+                  step={1}
+                  onChange={(e) => updateTradeConfig({ limit_order_window: parseInt(e.target.value) || 1 })}
+                />
+              </div>
+              <div>
+                <Label className="text-sm">Limit Offset (decimal)</Label>
+                <Input
+                  type="number"
+                  step={0.0005}
+                  value={tradeConfig.limit_order_offset}
+                  onChange={(e) => updateTradeConfig({ limit_order_offset: parseFloat(e.target.value) || 0 })}
+                />
+                <p className="text-xs text-muted-foreground">0.001 ≈ 0.1% away from signal bar close.</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Stress Testing Configuration */}
