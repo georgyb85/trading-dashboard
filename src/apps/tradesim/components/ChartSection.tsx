@@ -1,6 +1,6 @@
 import { useMemo, memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LineChart, AreaChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area } from "recharts";
+import { LineChart, AreaChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area, Legend } from "recharts";
 import type { SimulateTradesResponse } from "@/lib/stage1/types";
 
 interface ChartSectionProps {
@@ -260,7 +260,7 @@ const ChartSectionComponent = ({ results, tradeFilter }: ChartSectionProps) => {
               <Line
                 type="monotone"
                 dataKey="strategy"
-                name="Strategy"
+                name="Test Strategy"
                 stroke="hsl(var(--success))"
                 strokeWidth={2}
                 dot={false}
@@ -275,24 +275,21 @@ const ChartSectionComponent = ({ results, tradeFilter }: ChartSectionProps) => {
                 dot={false}
                 connectNulls
               />
+              <Legend
+                wrapperStyle={{ paddingTop: '20px' }}
+                iconType="circle"
+                onClick={(data) => {
+                  // Legend click handler is built into Recharts
+                }}
+              />
             </LineChart>
           </ResponsiveContainer>
-          <div className="mt-3 flex items-center gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-success"></div>
-              <span className="text-muted-foreground">Strategy</span>
+          {maxDrawdown !== '--' && (
+            <div className="mt-3 text-sm text-right">
+              <span className="text-muted-foreground">Max Drawdown: </span>
+              <span className="font-semibold text-destructive">{maxDrawdown}%</span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-primary"></div>
-              <span className="text-muted-foreground">Buy & Hold</span>
-            </div>
-            {maxDrawdown !== '--' && (
-              <div className="ml-auto">
-                <span className="text-sm text-muted-foreground">Max Drawdown: </span>
-                <span className="text-sm font-semibold text-destructive">{maxDrawdown}%</span>
-              </div>
-            )}
-          </div>
+          )}
         </CardContent>
       </Card>
 
@@ -343,7 +340,7 @@ const ChartSectionComponent = ({ results, tradeFilter }: ChartSectionProps) => {
                 <Area
                   type="monotone"
                   dataKey="strategyDrawdown"
-                  name="Strategy DD"
+                  name="Test Strategy"
                   stroke="hsl(var(--success))"
                   strokeWidth={2}
                   fill="url(#strategyDrawdownGradient)"
@@ -353,38 +350,35 @@ const ChartSectionComponent = ({ results, tradeFilter }: ChartSectionProps) => {
                 <Area
                   type="monotone"
                   dataKey="buyHoldDrawdown"
-                  name="Buy & Hold DD"
+                  name="Buy & Hold"
                   stroke="hsl(var(--primary))"
                   strokeWidth={2}
                   fill="none"
                   connectNulls
                   isAnimationActive={false}
                 />
+                <Legend
+                  wrapperStyle={{ paddingTop: '20px' }}
+                  iconType="circle"
+                  onClick={(data) => {
+                    // Legend click handler is built into Recharts
+                  }}
+                />
               </AreaChart>
             </ResponsiveContainer>
-            <div className="mt-3 flex items-center gap-4 text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-success"></div>
-                <span className="text-muted-foreground">Strategy</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-primary"></div>
-                <span className="text-muted-foreground">Buy & Hold</span>
-              </div>
-              <div className="ml-auto flex gap-4">
-                {maxDrawdown !== '--' && (
-                  <div>
-                    <span className="text-sm text-muted-foreground">Strategy Max DD: </span>
-                    <span className="text-sm font-semibold text-destructive">-{maxDrawdown}%</span>
-                  </div>
-                )}
-                {buyHoldMaxDrawdown !== '--' && (
-                  <div>
-                    <span className="text-sm text-muted-foreground">Buy & Hold Max DD: </span>
-                    <span className="text-sm font-semibold text-destructive">-{buyHoldMaxDrawdown}%</span>
-                  </div>
-                )}
-              </div>
+            <div className="mt-3 flex gap-4 text-sm justify-end">
+              {maxDrawdown !== '--' && (
+                <div>
+                  <span className="text-muted-foreground">Test Strategy Max DD: </span>
+                  <span className="font-semibold text-destructive">-{maxDrawdown}%</span>
+                </div>
+              )}
+              {buyHoldMaxDrawdown !== '--' && (
+                <div>
+                  <span className="text-muted-foreground">Buy & Hold Max DD: </span>
+                  <span className="font-semibold text-destructive">-{buyHoldMaxDrawdown}%</span>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
