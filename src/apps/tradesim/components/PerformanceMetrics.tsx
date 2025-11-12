@@ -1,6 +1,11 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { SimulateTradesResponse, PerformanceMetrics as Metrics } from "@/lib/stage1/types";
+import type {
+  SimulateTradesResponse,
+  PerformanceMetrics as Metrics,
+  StressTestInterval,
+  StressTestResult,
+} from "@/lib/stage1/types";
 
 interface PerformanceMetricsProps {
   results: SimulateTradesResponse;
@@ -16,6 +21,38 @@ const formatMetric = (value: any, isPercent: boolean = false): string => {
     return `${num >= 0 ? '+' : ''}${num.toFixed(2)}%`;
   }
   return num.toFixed(2);
+};
+
+const scaleMetric = (value: number | undefined, isPercent: boolean): number | null => {
+  if (value === undefined || value === null || Number.isNaN(value)) {
+    return null;
+  }
+  return isPercent ? value * 100 : value;
+};
+
+const formatIntervalEstimate = (interval?: StressTestInterval, isPercent = false, decimals = isPercent ? 2 : 3) => {
+  const scaled = scaleMetric(interval?.estimate, isPercent);
+  if (scaled === null) return '--';
+  return `${scaled.toFixed(decimals)}${isPercent ? '%' : ''}`;
+};
+
+const formatIntervalRange = (
+  low?: number,
+  high?: number,
+  isPercent = false,
+  decimals = isPercent ? 2 : 3
+) => {
+  const lowScaled = scaleMetric(low, isPercent);
+  const highScaled = scaleMetric(high, isPercent);
+  if (lowScaled === null || highScaled === null) return '--';
+  const suffix = isPercent ? '%' : '';
+  return `[${lowScaled.toFixed(decimals)}${suffix}, ${highScaled.toFixed(decimals)}${suffix}]`;
+};
+
+const formatPValue = (value?: number) => {
+  if (value === undefined || value === null || Number.isNaN(value)) return '--';
+  if (value < 0.0001) return '<0.0001';
+  return value.toFixed(4);
 };
 
 export const PerformanceMetrics = ({ results, tradeFilter }: PerformanceMetricsProps) => {
@@ -146,109 +183,10 @@ export const PerformanceMetrics = ({ results, tradeFilter }: PerformanceMetricsP
             <CardTitle className="text-foreground">Stress Test Results (Confidence Intervals)</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Combined */}
-              {stressTests.combined && (
-                <div className="space-y-3">
-                  <h4 className="text-sm font-semibold text-foreground">Combined Strategy</h4>
-                  <div className="space-y-2 text-sm">
-                    {stressTests.combined.sharpe && stressTests.combined.sharpe.estimate !== undefined && (
-                      <div>
-                        <div className="text-muted-foreground">Sharpe Ratio</div>
-                        <div className="font-mono">Est: {stressTests.combined.sharpe.estimate.toFixed(3)}</div>
-                        {stressTests.combined.sharpe.ci90_low !== undefined && stressTests.combined.sharpe.ci90_high !== undefined && (
-                          <div className="font-mono text-xs text-muted-foreground">
-                            90% CI: [{stressTests.combined.sharpe.ci90_low.toFixed(3)}, {stressTests.combined.sharpe.ci90_high.toFixed(3)}]
-                          </div>
-                        )}
-                        {stressTests.combined.sharpe.ci95_low !== undefined && stressTests.combined.sharpe.ci95_high !== undefined && (
-                          <div className="font-mono text-xs text-muted-foreground">
-                            95% CI: [{stressTests.combined.sharpe.ci95_low.toFixed(3)}, {stressTests.combined.sharpe.ci95_high.toFixed(3)}]
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {stressTests.combined.max_drawdown && stressTests.combined.max_drawdown.estimate !== undefined && (
-                      <div>
-                        <div className="text-muted-foreground">Max Drawdown</div>
-                        <div className="font-mono">{(stressTests.combined.max_drawdown.estimate * 100).toFixed(2)}%</div>
-                        {stressTests.combined.max_drawdown.ci90_low !== undefined && stressTests.combined.max_drawdown.ci90_high !== undefined && (
-                          <div className="font-mono text-xs text-muted-foreground">
-                            90% CI: [{(stressTests.combined.max_drawdown.ci90_low * 100).toFixed(2)}%, {(stressTests.combined.max_drawdown.ci90_high * 100).toFixed(2)}%]
-                          </div>
-                        )}
-                        {stressTests.combined.max_drawdown.ci95_low !== undefined && stressTests.combined.max_drawdown.ci95_high !== undefined && (
-                          <div className="font-mono text-xs text-muted-foreground">
-                            95% CI: [{(stressTests.combined.max_drawdown.ci95_low * 100).toFixed(2)}%, {(stressTests.combined.max_drawdown.ci95_high * 100).toFixed(2)}%]
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Long Only */}
-              {stressTests.long_only && (
-                <div className="space-y-3">
-                  <h4 className="text-sm font-semibold text-foreground">Long Only</h4>
-                  <div className="space-y-2 text-sm">
-                    {stressTests.long_only.sharpe && stressTests.long_only.sharpe.estimate !== undefined && (
-                      <div>
-                        <div className="text-muted-foreground">Sharpe Ratio</div>
-                        <div className="font-mono">Est: {stressTests.long_only.sharpe.estimate.toFixed(3)}</div>
-                        {stressTests.long_only.sharpe.ci90_low !== undefined && stressTests.long_only.sharpe.ci90_high !== undefined && (
-                          <div className="font-mono text-xs text-muted-foreground">
-                            90% CI: [{stressTests.long_only.sharpe.ci90_low.toFixed(3)}, {stressTests.long_only.sharpe.ci90_high.toFixed(3)}]
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {stressTests.long_only.max_drawdown && stressTests.long_only.max_drawdown.estimate !== undefined && (
-                      <div>
-                        <div className="text-muted-foreground">Max Drawdown</div>
-                        <div className="font-mono">{(stressTests.long_only.max_drawdown.estimate * 100).toFixed(2)}%</div>
-                        {stressTests.long_only.max_drawdown.ci90_low !== undefined && stressTests.long_only.max_drawdown.ci90_high !== undefined && (
-                          <div className="font-mono text-xs text-muted-foreground">
-                            90% CI: [{(stressTests.long_only.max_drawdown.ci90_low * 100).toFixed(2)}%, {(stressTests.long_only.max_drawdown.ci90_high * 100).toFixed(2)}%]
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Short Only */}
-              {stressTests.short_only && (
-                <div className="space-y-3">
-                  <h4 className="text-sm font-semibold text-foreground">Short Only</h4>
-                  <div className="space-y-2 text-sm">
-                    {stressTests.short_only.sharpe && stressTests.short_only.sharpe.estimate !== undefined && (
-                      <div>
-                        <div className="text-muted-foreground">Sharpe Ratio</div>
-                        <div className="font-mono">Est: {stressTests.short_only.sharpe.estimate.toFixed(3)}</div>
-                        {stressTests.short_only.sharpe.ci90_low !== undefined && stressTests.short_only.sharpe.ci90_high !== undefined && (
-                          <div className="font-mono text-xs text-muted-foreground">
-                            90% CI: [{stressTests.short_only.sharpe.ci90_low.toFixed(3)}, {stressTests.short_only.sharpe.ci90_high.toFixed(3)}]
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {stressTests.short_only.max_drawdown && stressTests.short_only.max_drawdown.estimate !== undefined && (
-                      <div>
-                        <div className="text-muted-foreground">Max Drawdown</div>
-                        <div className="font-mono">{(stressTests.short_only.max_drawdown.estimate * 100).toFixed(2)}%</div>
-                        {stressTests.short_only.max_drawdown.ci90_low !== undefined && stressTests.short_only.max_drawdown.ci90_high !== undefined && (
-                          <div className="font-mono text-xs text-muted-foreground">
-                            90% CI: [{(stressTests.short_only.max_drawdown.ci90_low * 100).toFixed(2)}%, {(stressTests.short_only.max_drawdown.ci90_high * 100).toFixed(2)}%]
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {renderStressSection("Combined Strategy", stressTests.combined)}
+              {renderStressSection("Long Only", stressTests.long_only)}
+              {renderStressSection("Short Only", stressTests.short_only)}
             </div>
           </CardContent>
         </Card>

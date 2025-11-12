@@ -7,6 +7,64 @@ interface ChartSectionProps {
   tradeFilter: "all" | "long" | "short";
 }
 
+type DrawdownPoint = { timestamp: number; value: number };
+
+const buildStrategyDrawdown = (trades: NonNullable<SimulateTradesResponse['trades']>) : DrawdownPoint[] => {
+  if (!trades.length) return [];
+
+  const points: DrawdownPoint[] = [];
+  const firstEntryTs = new Date(trades[0].entry_time).getTime();
+  points.push({ timestamp: firstEntryTs, value: 0 });
+
+  let cumulativeReturn = 0; // percent
+  let peakEquity = 100; // base 100%
+
+  trades.forEach((trade) => {
+    cumulativeReturn += trade.return_pct;
+    const equity = 100 + cumulativeReturn;
+    if (equity > peakEquity) {
+      peakEquity = equity;
+    }
+    const drawdown = peakEquity > 0 ? ((equity - peakEquity) / peakEquity) * 100 : 0;
+    points.push({
+      timestamp: new Date(trade.exit_time).getTime(),
+      value: drawdown,
+    });
+  });
+
+  return points;
+};
+
+const buildBuyHoldDrawdown = (
+  buyHoldSeries: NonNullable<SimulateTradesResponse['buy_hold_pnl']>,
+  totalReturnPct?: number
+): DrawdownPoint[] => {
+  if (!buyHoldSeries.length) return [];
+
+  const finalPnl = buyHoldSeries[buyHoldSeries.length - 1]?.pnl ?? 0;
+  let baseCapital = 1000;
+  if (totalReturnPct && Math.abs(totalReturnPct) > 1e-6) {
+    const impliedBase = finalPnl / (totalReturnPct / 100);
+    if (isFinite(impliedBase) && Math.abs(impliedBase) > 1e-3) {
+      baseCapital = impliedBase;
+    }
+  }
+
+  let peakEquity = baseCapital;
+  const points: DrawdownPoint[] = [];
+
+  buyHoldSeries.forEach((point) => {
+    const equity = baseCapital + point.pnl;
+    if (equity > peakEquity) {
+      peakEquity = equity;
+    }
+    const drawdown = peakEquity > 0 ? ((equity - peakEquity) / peakEquity) * 100 : 0;
+    points.push({ timestamp: point.timestamp, value: drawdown });
+  });
+
+  return points;
+};
+
 export const ChartSection = ({ results, tradeFilter }: ChartSectionProps) => {
   if (!results.strategy_pnl || !results.buy_hold_pnl) {
     console.log('[ChartSection] Missing PnL data:', {
@@ -24,19 +82,15 @@ export const ChartSection = ({ results, tradeFilter }: ChartSectionProps) => {
   console.log('[ChartSection] Buy&Hold PnL points:', results.buy_hold_pnl.length);
   console.log('[ChartSection] Trade filter:', tradeFilter);
 
-  // Filter trades and recalculate strategy PnL based on filter
+  const allTrades = results.trades ?? [];
+  let filteredTrades = allTrades;
   let strategyPnl = results.strategy_pnl;
   let filteredPerformance = results.performance;
 
-  if (tradeFilter !== "all" && results.trades) {
-    // Filter trades by side
-    const filteredTrades = results.trades.filter(trade => trade.side === tradeFilter);
-    console.log('[ChartSection] Filtered trades:', filteredTrades.length, 'of', results.trades.length);
-
-    // Use long_only or short_only performance metrics
+  if (tradeFilter !== "all") {
+    filteredTrades = allTrades.filter(trade => trade.side === tradeFilter);
     filteredPerformance = tradeFilter === "long" ? results.long_only : results.short_only;
 
-    // Recalculate cumulative PnL from filtered trades
     if (filteredTrades.length > 0) {
       let cumulativePnl = 0;
       const pnlPoints = filteredTrades.map(trade => {
@@ -46,11 +100,8 @@ export const ChartSection = ({ results, tradeFilter }: ChartSectionProps) => {
           pnl: cumulativePnl,
         };
       });
-
-      // Add starting point at 0
       const startTime = new Date(filteredTrades[0].entry_time).getTime();
       strategyPnl = [{ timestamp: startTime, pnl: 0 }, ...pnlPoints];
-      console.log('[ChartSection] Recalculated strategy PnL points:', strategyPnl.length);
     } else {
       strategyPnl = [];
     }
@@ -98,32 +149,52 @@ export const ChartSection = ({ results, tradeFilter }: ChartSectionProps) => {
   console.log('[ChartSection] First merged point:', pnlData[0]);
   console.log('[ChartSection] Last merged point:', pnlData[pnlData.length - 1]);
 
-  // Calculate drawdown data for both strategy and buy&hold
-  const drawdownData = pnlData.map((point, idx, arr) => {
-    // Calculate strategy drawdown
-    let strategyDrawdown = 0;
-    if (point.strategy !== null && point.strategy !== undefined) {
-      const strategyPeakSoFar = Math.max(...arr.slice(0, idx + 1).map(p => p.strategy ?? -Infinity));
-      if (strategyPeakSoFar > 0) {
-        strategyDrawdown = ((point.strategy - strategyPeakSoFar) / strategyPeakSoFar) * 100;
-      }
-    }
+  // Build drawdown series similar to desktop ImGui implementation
+  const strategyDrawdownPoints = filteredTrades.length
+    ? buildStrategyDrawdown(filteredTrades)
+    : [];
 
-    // Calculate buy&hold drawdown
-    let buyHoldDrawdown = 0;
-    if (point.buyHold !== null && point.buyHold !== undefined) {
-      const buyHoldPeakSoFar = Math.max(...arr.slice(0, idx + 1).map(p => p.buyHold ?? -Infinity));
-      if (buyHoldPeakSoFar > 0) {
-        buyHoldDrawdown = ((point.buyHold - buyHoldPeakSoFar) / buyHoldPeakSoFar) * 100;
-      }
-    }
+  const buyHoldDrawdownPoints = buildBuyHoldDrawdown(
+    results.buy_hold_pnl,
+    results.buy_hold?.total_return_pct ?? results.buy_hold?.return_pct
+  );
 
-    return {
-      timestamp: point.timestamp,
-      strategyDrawdown: strategyDrawdown < 0 ? strategyDrawdown : 0,
-      buyHoldDrawdown: buyHoldDrawdown < 0 ? buyHoldDrawdown : 0,
-    };
+  const showDrawdownChart = strategyDrawdownPoints.length > 0 || buyHoldDrawdownPoints.length > 0;
+
+  const drawdownTimeline = new Map<number, { timestamp: number; strategy?: number; buyHold?: number }>();
+  strategyDrawdownPoints.forEach(point => {
+    drawdownTimeline.set(point.timestamp, { timestamp: point.timestamp, strategy: point.value });
   });
+  buyHoldDrawdownPoints.forEach(point => {
+    const existing = drawdownTimeline.get(point.timestamp);
+    if (existing) {
+      existing.buyHold = point.value;
+    } else {
+      drawdownTimeline.set(point.timestamp, { timestamp: point.timestamp, buyHold: point.value });
+    }
+  });
+
+  const mergedDrawdowns = Array.from(drawdownTimeline.values()).sort((a, b) => a.timestamp - b.timestamp);
+  let lastStrategyDd = 0;
+  let lastBuyHoldDd = 0;
+  mergedDrawdowns.forEach(point => {
+    if (typeof point.strategy === 'number') {
+      lastStrategyDd = point.strategy;
+    } else {
+      point.strategy = lastStrategyDd;
+    }
+    if (typeof point.buyHold === 'number') {
+      lastBuyHoldDd = point.buyHold;
+    } else {
+      point.buyHold = lastBuyHoldDd;
+    }
+  });
+
+  const drawdownData = mergedDrawdowns.map(point => ({
+    timestamp: point.timestamp,
+    strategyDrawdown: point.strategy ?? 0,
+    buyHoldDrawdown: point.buyHold ?? 0,
+  }));
 
   // Calculate max drawdown from performance metrics (handle both field name variants)
   const maxDrawdownValue = filteredPerformance?.max_drawdown ?? filteredPerformance?.max_drawdown_pct;
@@ -214,87 +285,100 @@ export const ChartSection = ({ results, tradeFilter }: ChartSectionProps) => {
       </Card>
 
       {/* Drawdown Comparison Chart */}
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <CardTitle className="text-foreground">Drawdown Comparison</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={drawdownData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis
-                dataKey="timestamp"
-                type="number"
-                scale="time"
-                domain={['dataMin', 'dataMax']}
-                stroke="hsl(var(--muted-foreground))"
-                style={{ fontSize: '12px' }}
-                tickFormatter={(value) =>
-                  new Date(value as number).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })
-                }
-              />
-              <YAxis
-                stroke="hsl(var(--muted-foreground))"
-                style={{ fontSize: '12px' }}
-                tickFormatter={(value) => `${value.toFixed(1)}%`}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '6px'
-                }}
-                labelStyle={{ color: 'hsl(var(--foreground))' }}
-                labelFormatter={(value) => new Date(value as number).toLocaleString()}
-                formatter={(value: any, name) => [`${(value ?? 0).toFixed(2)}%`, name]}
-              />
-              <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="3 3" />
-              <Line
-                type="monotone"
-                dataKey="strategyDrawdown"
-                name="Strategy DD"
-                stroke="hsl(var(--success))"
-                strokeWidth={2}
-                dot={false}
-                connectNulls
-              />
-              <Line
-                type="monotone"
-                dataKey="buyHoldDrawdown"
-                name="Buy & Hold DD"
-                stroke="hsl(var(--primary))"
-                strokeWidth={2}
-                dot={false}
-                connectNulls
-              />
-            </LineChart>
-          </ResponsiveContainer>
-          <div className="mt-3 flex items-center gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-success"></div>
-              <span className="text-muted-foreground">Strategy</span>
+      {showDrawdownChart ? (
+        <Card className="bg-card border-border">
+          <CardHeader>
+            <CardTitle className="text-foreground">Drawdown Comparison</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={drawdownData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis
+                  dataKey="timestamp"
+                  type="number"
+                  scale="time"
+                  domain={['dataMin', 'dataMax']}
+                  stroke="hsl(var(--muted-foreground))"
+                  style={{ fontSize: '12px' }}
+                  tickFormatter={(value) =>
+                    new Date(value as number).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })
+                  }
+                />
+                <YAxis
+                  stroke="hsl(var(--muted-foreground))"
+                  style={{ fontSize: '12px' }}
+                  tickFormatter={(value) => `${value.toFixed(1)}%`}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--card))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '6px'
+                  }}
+                  labelStyle={{ color: 'hsl(var(--foreground))' }}
+                  labelFormatter={(value) => new Date(value as number).toLocaleString()}
+                  formatter={(value: any, name) => [`${(value ?? 0).toFixed(2)}%`, name]}
+                />
+                <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="3 3" />
+                <Line
+                  type="monotone"
+                  dataKey="strategyDrawdown"
+                  name="Strategy DD"
+                  stroke="hsl(var(--success))"
+                  strokeWidth={2}
+                  dot={false}
+                  connectNulls
+                />
+                <Line
+                  type="monotone"
+                  dataKey="buyHoldDrawdown"
+                  name="Buy & Hold DD"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  dot={false}
+                  connectNulls
+                />
+              </LineChart>
+            </ResponsiveContainer>
+            <div className="mt-3 flex items-center gap-4 text-sm">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-success"></div>
+                <span className="text-muted-foreground">Strategy</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-primary"></div>
+                <span className="text-muted-foreground">Buy & Hold</span>
+              </div>
+              <div className="ml-auto flex gap-4">
+                {maxDrawdown !== '--' && (
+                  <div>
+                    <span className="text-sm text-muted-foreground">Strategy Max DD: </span>
+                    <span className="text-sm font-semibold text-destructive">-{maxDrawdown}%</span>
+                  </div>
+                )}
+                {buyHoldMaxDrawdown !== '--' && (
+                  <div>
+                    <span className="text-sm text-muted-foreground">Buy & Hold Max DD: </span>
+                    <span className="text-sm font-semibold text-destructive">-{buyHoldMaxDrawdown}%</span>
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-primary"></div>
-              <span className="text-muted-foreground">Buy & Hold</span>
-            </div>
-            <div className="ml-auto flex gap-4">
-              {maxDrawdown !== '--' && (
-                <div>
-                  <span className="text-sm text-muted-foreground">Strategy Max DD: </span>
-                  <span className="text-sm font-semibold text-destructive">-{maxDrawdown}%</span>
-                </div>
-              )}
-              {buyHoldMaxDrawdown !== '--' && (
-                <div>
-                  <span className="text-sm text-muted-foreground">Buy & Hold Max DD: </span>
-                  <span className="text-sm font-semibold text-destructive">-{buyHoldMaxDrawdown}%</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="bg-card border-border">
+          <CardHeader>
+            <CardTitle className="text-foreground">Drawdown Comparison</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Not enough data to compute drawdowns for this filter.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Returns Distribution Chart */}
       <Card className="bg-card border-border">

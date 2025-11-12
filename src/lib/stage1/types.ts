@@ -181,23 +181,35 @@ export interface PerformanceMetrics {
   [key: string]: any;
 }
 
+export interface StressTestInterval {
+  estimate: number;
+  ci90_low: number;
+  ci90_high: number;
+  ci95_low: number;
+  ci95_high: number;
+}
+
 export interface StressTestResult {
   sample_size: number;
-  sharpe?: {
-    estimate: number;
-    ci90_low: number;
-    ci90_high: number;
-    ci95_low: number;
-    ci95_high: number;
+  bootstrap_iterations?: number;
+  mcpt_iterations?: number;
+  computed?: boolean;
+  sharpe?: StressTestInterval;
+  profit_factor?: StressTestInterval;
+  total_return_pct?: StressTestInterval;
+  max_drawdown?: StressTestInterval;
+  drawdown?: {
+    q50: number;
+    q90: number;
+    q95: number;
+    q99: number;
   };
-  max_drawdown?: {
-    estimate: number;
-    ci90_low: number;
-    ci90_high: number;
-    ci95_low: number;
-    ci95_high: number;
+  pvalues?: {
+    total_return?: number;
+    max_drawdown?: number;
+    sharpe?: number;
+    profit_factor?: number;
   };
-  [key: string]: any;
 }
 
 export interface PnLPoint {
