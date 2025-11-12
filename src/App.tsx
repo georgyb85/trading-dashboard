@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { TradingLayout } from "./components/TradingLayout";
 import { SystemHealthDashboard } from "./components/SystemHealthDashboard";
 import { DatasetProvider } from "./contexts/DatasetContext";
+import { RunsProvider } from "./contexts/RunsContext";
 import { TradingOverview } from "./components/TradingOverview";
 import { PositionsTable } from "./components/PositionsTable";
 import { BalancesTable } from "./components/BalancesTable";
@@ -39,8 +40,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter basename="/trade">
         <DatasetProvider>
-          <TradingLayout>
-            <Routes>
+          <RunsProvider>
+            <TradingLayout>
+              <Routes>
             <Route path="/" element={<SystemHealthDashboard />} />
             <Route path="/trading" element={<TradingOverview />} />
             <Route path="/positions" element={<PositionsTable />} />
@@ -59,6 +61,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
         </TradingLayout>
+          </RunsProvider>
         </DatasetProvider>
       </BrowserRouter>
     </TooltipProvider>

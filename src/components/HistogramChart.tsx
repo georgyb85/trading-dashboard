@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
@@ -9,25 +9,148 @@ import { Button } from '@/components/ui/button';
 interface HistogramChartProps {
   data: any[];
   selectedColumn: string;
+  indicatorRanges?: Record<string, { min: number; max: number }>;
 }
 
-const HistogramChart = ({ data, selectedColumn }: HistogramChartProps) => {
-  const allValues = useMemo(() => 
-    data.map((row) => row[selectedColumn]).filter((v) => v !== null && v !== undefined && !isNaN(v)),
-    [data, selectedColumn]
-  );
-  
-  const dataMin = useMemo(() => Math.min(...allValues), [allValues]);
-  const dataMax = useMemo(() => Math.max(...allValues), [allValues]);
+interface HistogramCacheEntry {
+  allValues: number[];
+  dataMin: number;
+  dataMax: number;
+  lastSettings: {
+    binCount: number;
+    rangeMin: string;
+    rangeMax: string;
+    rangeMinPercent: number;
+    rangeMaxPercent: number;
+    showTails: boolean;
+    normalize: boolean;
+  };
+  cachedBins: Map<string, any>;
+}
+
+const HistogramChart = ({ data, selectedColumn, indicatorRanges }: HistogramChartProps) => {
+  // Cache per indicator: stores processed values and histogram results
+  const cacheRef = useRef<Map<string, HistogramCacheEntry>>(new Map());
+
+  // Get or create cache entry for current indicator
+  const { allValues, dataMin, dataMax } = useMemo(() => {
+    const cache = cacheRef.current;
+    let cacheEntry = cache.get(selectedColumn);
+
+    const values = data
+      .map((row) => row[selectedColumn])
+      .filter((v) => v !== null && v !== undefined && !isNaN(v));
+
+    // Determine the correct min/max to use
+    let min: number;
+    let max: number;
+
+    if (indicatorRanges && indicatorRanges[selectedColumn]) {
+      // Use pre-calculated ranges (most reliable)
+      min = indicatorRanges[selectedColumn].min;
+      max = indicatorRanges[selectedColumn].max;
+      console.log(`[HistogramChart] Using pre-calculated range for ${selectedColumn}: [${min.toFixed(2)}, ${max.toFixed(2)}]`);
+    } else if (values.length > 0) {
+      // Fall back to computing from values
+      min = Math.min(...values);
+      max = Math.max(...values);
+      console.log(`[HistogramChart] Computing range for ${selectedColumn}: [${min.toFixed(2)}, ${max.toFixed(2)}]`);
+    } else {
+      min = 0;
+      max = 0;
+      console.warn(`[HistogramChart] No data for ${selectedColumn}, using 0-0 range`);
+    }
+
+    if (!cacheEntry) {
+      // Create new cache entry
+      cacheEntry = {
+        allValues: values,
+        dataMin: min,
+        dataMax: max,
+        lastSettings: {
+          binCount: 40,
+          rangeMin: min.toFixed(2),
+          rangeMax: max.toFixed(2),
+          rangeMinPercent: 0,
+          rangeMaxPercent: 100,
+          showTails: true,
+          normalize: false,
+        },
+        cachedBins: new Map(),
+      };
+      cache.set(selectedColumn, cacheEntry);
+      console.log(`[HistogramChart] Created new cache entry for ${selectedColumn}`);
+    } else if (cacheEntry.dataMin !== min || cacheEntry.dataMax !== max) {
+      // Update cache entry if min/max changed (e.g., indicatorRanges became available)
+      console.log(`[HistogramChart] Updating cache for ${selectedColumn}: [${cacheEntry.dataMin}, ${cacheEntry.dataMax}] -> [${min}, ${max}]`);
+      cacheEntry.dataMin = min;
+      cacheEntry.dataMax = max;
+      // Update lastSettings ONLY if they were never customized (still at 0-100%)
+      if (!cacheEntry.lastSettings || (cacheEntry.lastSettings.rangeMinPercent === 0 && cacheEntry.lastSettings.rangeMaxPercent === 100)) {
+        cacheEntry.lastSettings = {
+          binCount: 40,
+          rangeMin: min.toFixed(2),
+          rangeMax: max.toFixed(2),
+          rangeMinPercent: 0,
+          rangeMaxPercent: 100,
+          showTails: true,
+          normalize: false,
+        };
+      }
+    }
+
+    return {
+      allValues: cacheEntry.allValues,
+      dataMin: cacheEntry.dataMin,
+      dataMax: cacheEntry.dataMax,
+    };
+  }, [data, selectedColumn, indicatorRanges]);
   
   const [binCount, setBinCount] = useState([40]);
-  const [rangeMin, setRangeMin] = useState(dataMin.toFixed(2));
-  const [rangeMax, setRangeMax] = useState(dataMax.toFixed(2));
+  const [rangeMin, setRangeMin] = useState('0');
+  const [rangeMax, setRangeMax] = useState('0');
   const [rangeMinPercent, setRangeMinPercent] = useState([0]);
   const [rangeMaxPercent, setRangeMaxPercent] = useState([100]);
   const [showTails, setShowTails] = useState(true);
   const [showStats, setShowStats] = useState(true);
   const [normalize, setNormalize] = useState(false);
+
+  // Restore or initialize settings when indicator changes
+  useEffect(() => {
+    const entry = cacheRef.current.get(selectedColumn);
+
+    // Check if this indicator has been customized (lastSettings exist and differ from defaults)
+    const hasCustomSettings = entry?.lastSettings && (
+      entry.lastSettings.rangeMinPercent !== 0 ||
+      entry.lastSettings.rangeMaxPercent !== 100 ||
+      entry.lastSettings.binCount !== 40 ||
+      entry.lastSettings.showTails !== true ||
+      entry.lastSettings.normalize !== false
+    );
+
+    if (hasCustomSettings) {
+      // Restore cached CUSTOMIZED settings for this indicator
+      const settings = entry.lastSettings!;
+      setBinCount([settings.binCount]);
+      setRangeMin(settings.rangeMin);
+      setRangeMax(settings.rangeMax);
+      setRangeMinPercent([settings.rangeMinPercent]);
+      setRangeMaxPercent([settings.rangeMaxPercent]);
+      setShowTails(settings.showTails);
+      setNormalize(settings.normalize);
+      console.log(`[HistogramChart] Restored customized settings for ${selectedColumn}:`, settings);
+    } else {
+      // Initialize with THIS indicator's min/max from cache (already correct from useMemo)
+      setBinCount([40]);
+      setRangeMin(dataMin.toFixed(2));
+      setRangeMax(dataMax.toFixed(2));
+      setRangeMinPercent([0]);
+      setRangeMaxPercent([100]);
+      setShowTails(true);
+      setNormalize(false);
+      console.log(`[HistogramChart] Initialized ${selectedColumn} with range [${dataMin.toFixed(2)}, ${dataMax.toFixed(2)}]`);
+    }
+  }, [selectedColumn, dataMin, dataMax]);
   
   // Sync text inputs with sliders
   const handleMinPercentChange = (value: number[]) => {
@@ -71,7 +194,19 @@ const HistogramChart = ({ data, selectedColumn }: HistogramChartProps) => {
 
   const { bins, statistics, lowerTailCount, upperTailCount } = useMemo(() => {
     if (allValues.length === 0) return { bins: [], statistics: null, lowerTailCount: 0, upperTailCount: 0 };
-    
+
+    // Create cache key from all settings
+    const cacheKey = `${binCount[0]}_${rangeMin}_${rangeMax}_${showTails}_${normalize}`;
+    const entry = cacheRef.current.get(selectedColumn);
+
+    // Check cache first
+    if (entry?.cachedBins.has(cacheKey)) {
+      console.log(`[HistogramChart] Using cached bins for ${selectedColumn}`);
+      return entry.cachedBins.get(cacheKey);
+    }
+
+    console.log(`[HistogramChart] Computing bins for ${selectedColumn}`);
+
     const min = parseFloat(rangeMin);
     const max = parseFloat(rangeMax);
     const numBins = binCount[0];
@@ -131,13 +266,30 @@ const HistogramChart = ({ data, selectedColumn }: HistogramChartProps) => {
     const skewness = allValues.reduce((a, b) => a + Math.pow((b - mean) / stdDev, 3), 0) / allValues.length;
     const kurtosis = allValues.reduce((a, b) => a + Math.pow((b - mean) / stdDev, 4), 0) / allValues.length;
 
-    return {
+    const result = {
       bins: finalBins,
       statistics: { mean, median, stdDev, min: dataMin, max: dataMax, skewness, kurtosis },
       lowerTailCount: lowerTail,
       upperTailCount: upperTail,
     };
-  }, [allValues, rangeMin, rangeMax, binCount, showTails, normalize, dataMin, dataMax]);
+
+    // Cache the result
+    if (entry) {
+      entry.cachedBins.set(cacheKey, result);
+      // Save current settings
+      entry.lastSettings = {
+        binCount: binCount[0],
+        rangeMin,
+        rangeMax,
+        rangeMinPercent: rangeMinPercent[0],
+        rangeMaxPercent: rangeMaxPercent[0],
+        showTails,
+        normalize,
+      };
+    }
+
+    return result;
+  }, [allValues, rangeMin, rangeMax, binCount, showTails, normalize, dataMin, dataMax, selectedColumn, rangeMinPercent, rangeMaxPercent]);
 
   if (allValues.length === 0) {
     return (

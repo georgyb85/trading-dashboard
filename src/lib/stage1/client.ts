@@ -6,6 +6,12 @@ import type {
   Stage1RunSummary,
   Stage1RunDetail,
   Stage1ApiResponse,
+  ValidateScriptRequest,
+  ValidateScriptResponse,
+  BuildIndicatorsRequest,
+  BuildIndicatorsResponse,
+  SimulateTradesRequest,
+  SimulateTradesResponse,
 } from './types';
 
 class Stage1Client {
@@ -118,6 +124,36 @@ class Stage1Client {
   async getRunPredictions(runId: string, format = 'json'): Promise<Stage1ApiResponse<any>> {
     return this.request<any>(`/api/runs/${runId}/predictions?format=${format}`);
   }
+
+  /**
+   * Validate indicator script
+   */
+  async validateIndicatorScript(script: string): Promise<Stage1ApiResponse<ValidateScriptResponse>> {
+    return this.request<ValidateScriptResponse>('/api/indicators/validate', {
+      method: 'POST',
+      body: JSON.stringify({ script }),
+    });
+  }
+
+  /**
+   * Build indicators from script
+   */
+  async buildIndicators(request: BuildIndicatorsRequest): Promise<Stage1ApiResponse<BuildIndicatorsResponse>> {
+    return this.request<BuildIndicatorsResponse>('/api/indicators/build', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
+  /**
+   * Simulate trades for a run with given configuration
+   */
+  async simulateTrades(request: SimulateTradesRequest): Promise<Stage1ApiResponse<SimulateTradesResponse>> {
+    return this.request<SimulateTradesResponse>('/api/trades/simulate', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
 }
 
 // Export singleton instance
@@ -135,3 +171,12 @@ export const getRun = (runId: string) =>
 
 export const getRunPredictions = (runId: string, format?: string) =>
   stage1Client.getRunPredictions(runId, format);
+
+export const validateIndicatorScript = (script: string) =>
+  stage1Client.validateIndicatorScript(script);
+
+export const buildIndicators = (request: BuildIndicatorsRequest) =>
+  stage1Client.buildIndicators(request);
+
+export const simulateTrades = (request: SimulateTradesRequest) =>
+  stage1Client.simulateTrades(request);

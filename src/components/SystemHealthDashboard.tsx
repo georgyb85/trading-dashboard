@@ -130,7 +130,23 @@ const GPU_INSTANCES: Array<{id: string, ip: string, name: string}> = [
   // { id: 'gpu2', ip: '192.168.1.100', name: 'GPU Server 2' },
 ];
 
+// Database server instances
+const DB_INSTANCES: Array<{id: string, host: string, name: string}> = [
+  { id: 'db1', host: 'agenticresearch.info', name: 'DB Server 1' },
+];
+
 type GPUInstanceConfig = (typeof GPU_INSTANCES)[number];
+type DBInstanceConfig = (typeof DB_INSTANCES)[number];
+
+interface DBInstance {
+  id: string;
+  host: string;
+  name: string;
+  connected: boolean;
+  systemInfo: SystemInfo | null;
+  usageMetrics: UsageMetrics | null;
+  usageHistory: UsageHistory[];
+}
 
 export function SystemHealthDashboard() {
   const wsRefs = useRef<Map<string, WebSocket>>(new Map());
@@ -181,6 +197,16 @@ export function SystemHealthDashboard() {
       });
     }
     return GPU_INSTANCES.map(config => ({
+      ...config,
+      connected: false,
+      systemInfo: null,
+      usageMetrics: null,
+      usageHistory: []
+    }));
+  });
+
+  const [dbInstances, setDbInstances] = useState<DBInstance[]>(() => {
+    return DB_INSTANCES.map(config => ({
       ...config,
       connected: false,
       systemInfo: null,
@@ -343,6 +369,101 @@ export function SystemHealthDashboard() {
       wsMap.forEach(ws => ws.close());
       wsMap.clear();
       retryMap.clear();
+    };
+  }, []);
+
+  // WebSocket connections for DB services
+  useEffect(() => {
+    const dbWsRefs = new Map<string, WebSocket>();
+
+    function connectDB(config: DBInstanceConfig) {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const wsUrl = `${protocol}//${config.host}/usage`;
+
+      console.log(`[DB] Connecting to ${config.name}:`, wsUrl);
+
+      try {
+        const ws = new WebSocket(wsUrl);
+        dbWsRefs.set(config.id, ws);
+
+        ws.onopen = () => {
+          console.log(`[DB] WebSocket connected: ${config.name}`);
+          setDbInstances(prev =>
+            prev.map(db =>
+              db.id === config.id
+                ? { ...db, connected: true }
+                : db
+            )
+          );
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+
+            if (data.type === "system_info") {
+              console.log(`[DB] Received system info for ${config.name}:`, data);
+              setDbInstances(prev => prev.map(db =>
+                db.id === config.id
+                  ? { ...db, systemInfo: data }
+                  : db
+              ));
+            } else if (data.type === "usage_update") {
+              setDbInstances(prev => {
+                return prev.map(db => {
+                  if (db.id === config.id) {
+                    const newHistoryPoint: UsageHistory = {
+                      timestamp: data.timestamp,
+                      cpu: data.cpu_percent,
+                      ram: data.ram_percent,
+                    };
+
+                    const updatedHistory = [...db.usageHistory, newHistoryPoint].slice(-MAX_HISTORY_POINTS);
+
+                    return {
+                      ...db,
+                      usageMetrics: data,
+                      usageHistory: updatedHistory
+                    };
+                  }
+                  return db;
+                });
+              });
+            }
+          } catch (error) {
+            console.error(`[DB] Error parsing message for ${config.name}:`, error);
+          }
+        };
+
+        ws.onerror = (error) => {
+          console.error(`[DB] WebSocket error for ${config.name}:`, error);
+          setDbInstances(prev => prev.map(db =>
+            db.id === config.id
+              ? { ...db, connected: false }
+              : db
+          ));
+        };
+
+        ws.onclose = () => {
+          console.log(`[DB] WebSocket disconnected: ${config.name}, reconnecting in 5s...`);
+          setDbInstances(prev => prev.map(db =>
+            db.id === config.id
+              ? { ...db, connected: false }
+              : db
+          ));
+          setTimeout(() => connectDB(config), 5000);
+        };
+      } catch (error) {
+        console.error(`[DB] Failed to create WebSocket for ${config.name}:`, error);
+        setTimeout(() => connectDB(config), 5000);
+      }
+    }
+
+    DB_INSTANCES.forEach(config => connectDB(config));
+
+    return () => {
+      dbWsRefs.forEach(ws => ws.close());
+      dbWsRefs.clear();
     };
   }, []);
 
@@ -798,6 +919,35 @@ export function SystemHealthDashboard() {
                     )}
                   </div>
 
+                  {/* Ring Buffer Status - Only show for GPU Server 1 */}
+                  {instance.id === 'gpu1' && Object.keys(ringBuffers).length > 0 && (
+                    <div className="mt-6 space-y-4 pt-6 border-t border-border">
+                      <h3 className="text-sm font-semibold flex items-center gap-2">
+                        <Activity className="h-4 w-4" />
+                        Ring Buffer Status
+                      </h3>
+                      {Object.entries(ringBuffers).map(([name, stats]) => (
+                        <div key={name} className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium">{name}</span>
+                            <div className="flex items-center gap-4">
+                              <span className="text-xs text-muted-foreground">
+                                {stats.unconsumed.toLocaleString()} unconsumed
+                              </span>
+                              <span className={`text-sm font-bold ${getUtilizationColor(stats.utilization)}`}>
+                                {stats.utilization.toFixed(1)}%
+                              </span>
+                            </div>
+                          </div>
+                          <Progress value={Math.min(stats.utilization, 100)} className="h-2" />
+                          <div className="text-xs text-muted-foreground text-right">
+                            Max 12h: {stats.max12h.toLocaleString()}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Last Update */}
                   <div className="text-xs text-muted-foreground text-right">
                     Last update: {new Date(usageMetrics.timestamp * 1000).toLocaleTimeString()}
@@ -825,43 +975,212 @@ export function SystemHealthDashboard() {
         );
       })}
 
-      {/* Ring Buffer Status */}
-      {Object.keys(ringBuffers).length > 0 && (
-        <Card className="trading-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5" />
-              Ring Buffer Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {Object.entries(ringBuffers).map(([name, stats]) => (
-                <div key={name} className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{name}</span>
-                    <div className="flex items-center gap-4">
-                      <span className="text-xs text-muted-foreground">
-                        {stats.unconsumed.toLocaleString()} unconsumed
-                      </span>
-                      <span className={`text-sm font-bold ${
-                        stats.utilization < 50 ? 'text-success' :
-                        stats.utilization < 80 ? 'text-warning' : 'text-loss'
-                      }`}>
-                        {stats.utilization.toFixed(1)}%
+      {/* DB Service Monitors */}
+      {dbInstances.map((instance) => {
+        const { systemInfo, usageMetrics } = instance;
+
+        return (
+          <Card key={instance.id} className="trading-card">
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Activity className="h-5 w-5" />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span>{instance.name}</span>
+                      {systemInfo && (
+                        <span className="text-xs font-mono text-muted-foreground">
+                          ({systemInfo.hostname})
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs font-normal text-muted-foreground">{instance.host}</div>
+                  </div>
+                </div>
+                <Badge variant={instance.connected ? "default" : "destructive"}>
+                  {instance.connected ? "Connected" : "Disconnected"}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* System Information */}
+              {systemInfo && (
+                <div className="space-y-3 p-4 rounded-lg bg-muted/30">
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <Cpu className="h-4 w-4" />
+                    System Information
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">CPU:</span>{' '}
+                      <span className="font-mono text-xs">{systemInfo.cpu_model}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Cores:</span>{' '}
+                      <span className="font-semibold">{systemInfo.cpu_count}</span>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Total RAM:</span>{' '}
+                      <span className="font-semibold">
+                        {(systemInfo.ram_total_mb / 1024).toFixed(1)} GB
                       </span>
                     </div>
                   </div>
-                  <Progress value={Math.min(stats.utilization, 100)} className="h-2" />
+                </div>
+              )}
+
+              {/* Real-time Usage Metrics */}
+              {usageMetrics && (
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <Activity className="h-4 w-4" />
+                    Real-time Usage
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* CPU Usage */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">CPU Usage</span>
+                        <span className={`text-sm font-bold ${getUtilizationColor(usageMetrics.cpu_percent)}`}>
+                          {usageMetrics.cpu_percent.toFixed(1)}%
+                        </span>
+                      </div>
+                      <Progress value={usageMetrics.cpu_percent} className="h-2" />
+                      <div className="h-4"></div>
+
+                      {/* CPU Trend Chart */}
+                      {instance.usageHistory.length > 1 && (
+                        <div className="h-20 mt-2">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={instance.usageHistory}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground) / 0.1)" />
+                              <XAxis hide />
+                              <YAxis domain={[0, 100]} hide />
+                              <Tooltip
+                                contentStyle={{
+                                  background: 'hsl(var(--background))',
+                                  border: '1px solid hsl(var(--border))',
+                                  borderRadius: '6px',
+                                  fontSize: '12px'
+                                }}
+                                formatter={(value: number) => [`${value.toFixed(1)}%`, 'CPU']}
+                                labelFormatter={(label) => `Point ${label + 1}`}
+                              />
+                              <Area
+                                type="monotone"
+                                dataKey="cpu"
+                                stroke="hsl(var(--primary))"
+                                fill="hsl(var(--primary) / 0.2)"
+                                strokeWidth={2}
+                              />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* RAM Usage */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">RAM Usage</span>
+                        <span className={`text-sm font-bold ${getUtilizationColor(usageMetrics.ram_percent)}`}>
+                          {usageMetrics.ram_percent.toFixed(1)}%
+                        </span>
+                      </div>
+                      <Progress value={usageMetrics.ram_percent} className="h-2" />
+                      <p className="text-xs text-muted-foreground">
+                        {(usageMetrics.ram_used_mb / 1024).toFixed(1)} / {(usageMetrics.ram_total_mb / 1024).toFixed(1)} GB
+                      </p>
+
+                      {/* RAM Trend Chart */}
+                      {instance.usageHistory.length > 1 && (
+                        <div className="h-20 mt-2">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={instance.usageHistory}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground) / 0.1)" />
+                              <XAxis hide />
+                              <YAxis domain={[0, 100]} hide />
+                              <Tooltip
+                                contentStyle={{
+                                  background: 'hsl(var(--background))',
+                                  border: '1px solid hsl(var(--border))',
+                                  borderRadius: '6px',
+                                  fontSize: '12px'
+                                }}
+                                formatter={(value: number) => [`${value.toFixed(1)}%`, 'RAM']}
+                                labelFormatter={(label) => `Point ${label + 1}`}
+                              />
+                              <Area
+                                type="monotone"
+                                dataKey="ram"
+                                stroke="#8b5cf6"
+                                fill="rgb(139, 92, 246, 0.2)"
+                                strokeWidth={2}
+                              />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Message Rates - if provided */}
+                  {usageMetrics.message_rates && (
+                    <div className="mt-6 space-y-3 pt-6 border-t border-border">
+                      <h3 className="text-sm font-semibold">Message Rates</h3>
+                      <div className="grid grid-cols-3 gap-4 text-sm">
+                        <div className="text-center">
+                          <div className="text-xs text-muted-foreground">Total</div>
+                          <div className="text-lg font-bold font-mono">
+                            {usageMetrics.message_rates.total_per_sec}
+                            <span className="text-xs text-muted-foreground ml-1">/s</span>
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-xs text-muted-foreground">Trades</div>
+                          <div className="text-lg font-bold font-mono text-success">
+                            {usageMetrics.message_rates.trades_per_sec}
+                            <span className="text-xs text-muted-foreground ml-1">/s</span>
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-xs text-muted-foreground">Orderbooks</div>
+                          <div className="text-lg font-bold font-mono text-blue-500">
+                            {usageMetrics.message_rates.orderbooks_per_sec}
+                            <span className="text-xs text-muted-foreground ml-1">/s</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Last Update */}
                   <div className="text-xs text-muted-foreground text-right">
-                    Max 12h: {stats.max12h.toLocaleString()}
+                    Last update: {new Date(usageMetrics.timestamp * 1000).toLocaleTimeString()}
                   </div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+              )}
+
+              {/* Loading State */}
+              {instance.connected && !usageMetrics && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Activity className="h-8 w-8 animate-pulse mx-auto mb-2" />
+                  <p className="text-sm">Waiting for usage data...</p>
+                </div>
+              )}
+
+              {/* Disconnected State */}
+              {!instance.connected && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <WifiOff className="h-8 w-8 mx-auto mb-2" />
+                  <p className="text-sm">Not connected</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
 
       {/* System Threads Status */}
       <Card className="trading-card">

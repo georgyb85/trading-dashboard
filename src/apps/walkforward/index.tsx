@@ -170,6 +170,39 @@ const WalkforwardDashboard = () => {
       setTarget(parsedRun.target_column);
     }
 
+    // Update walk configuration from walk_config
+    if (parsedRun.walk_config && typeof parsedRun.walk_config === 'object') {
+      const wc = parsedRun.walk_config as any;
+      if (wc.train_size !== undefined) setTrainSize(wc.train_size);
+      if (wc.test_size !== undefined) setTestSize(wc.test_size);
+      if (wc.train_test_gap !== undefined) setTrainTestGap(wc.train_test_gap);
+      if (wc.step_size !== undefined) setStepSize(wc.step_size);
+      if (wc.start_fold !== undefined) setStartFold(wc.start_fold);
+      if (wc.end_fold !== undefined) setEndFold(wc.end_fold);
+      if (wc.initial_offset !== undefined) setInitialOffset(wc.initial_offset);
+      console.log('[handleLoadRun] Updated walk config:', wc);
+    }
+
+    // Update hyperparameters
+    if (parsedRun.hyperparameters && typeof parsedRun.hyperparameters === 'object') {
+      const hp = parsedRun.hyperparameters as any;
+      if (hp.max_depth !== undefined) setMaxDepth(hp.max_depth);
+      if (hp.min_child_weight !== undefined) setMinChildWeight(hp.min_child_weight);
+      if (hp.learning_rate !== undefined) setLearningRate(hp.learning_rate);
+      if (hp.num_boost_round !== undefined) setNumRounds(hp.num_boost_round);
+      if (hp.early_stopping_rounds !== undefined) setEarlyStopping(hp.early_stopping_rounds);
+      if (hp.min_rounds !== undefined) setMinRounds(hp.min_rounds);
+      if (hp.subsample !== undefined) setSubsample(hp.subsample);
+      if (hp.colsample_bytree !== undefined) setColsampleBytree(hp.colsample_bytree);
+      if (hp.lambda !== undefined) setLambda(hp.lambda);
+      if (hp.force_minimum_training !== undefined) setForceMinimumTraining(hp.force_minimum_training);
+      if (hp.objective !== undefined) setObjective(hp.objective);
+      if (hp.quantile_alpha !== undefined) setQuantileAlpha(hp.quantile_alpha);
+      if (hp.threshold_method !== undefined) setThresholdMethod(hp.threshold_method);
+      console.log('[handleLoadRun] Updated hyperparameters:', hp);
+      console.log('[handleLoadRun] Objective value:', hp.objective);
+    }
+
     // Check if run already loaded
     const existingIndex = loadedRuns.findIndex(r => r.run_id === parsedRun.run_id);
 
@@ -251,6 +284,10 @@ const WalkforwardDashboard = () => {
         // Get the maximum number of folds across all runs
         const maxFolds = Math.max(...loadedRuns.map(run => run.folds?.length ?? 0));
 
+        console.log('[chartData] Loaded runs count:', loadedRuns.length);
+        console.log('[chartData] Fold counts per run:', loadedRuns.map(run => run.folds?.length));
+        console.log('[chartData] maxFolds calculated:', maxFolds);
+
         // Create data points for each fold
         const data: Array<{ fold: number; [key: string]: number }> = [];
 
@@ -286,6 +323,10 @@ const WalkforwardDashboard = () => {
   // Generate summary data from Stage1 runs
   const summaryData = loadedRuns.map((run, index) => {
     const folds = run.folds ?? [];
+
+    console.log(`[summaryData] Run ${index + 1} - folds.length:`, folds.length);
+    console.log(`[summaryData] Run ${index + 1} - run.folds?.length:`, run.folds?.length);
+    console.log(`[summaryData] Run ${index + 1} - summary_metrics.folds:`, (run as any).summary_metrics?.folds);
 
     // According to FoldPerformance_ReconstructionGuide.md aggregation formulas:
     // total_long_signals  = Σ fold.n_signals
@@ -355,17 +396,44 @@ const WalkforwardDashboard = () => {
   });
 
   // Convert Stage1 runs to the format expected by RunDetails
-  const runsForDetails = loadedRuns.map((run, index) => ({
-    run: index + 1,
-    run_id: run.run_id,
-    config: {
-      ...(run.hyperparameters ?? {}),
-      ...(run.walk_config ?? {}),
-      model,
-      dataSource: run.dataset_slug ?? "",
-      target: run.target_column ?? "",
-      features: run.feature_columns ?? [],
-    },
+  const runsForDetails = loadedRuns.map((run, index) => {
+    const hp = (run.hyperparameters ?? {}) as any;
+    const wc = (run.walk_config ?? {}) as any;
+
+    return {
+      run: index + 1,
+      run_id: run.run_id,
+      config: {
+        // Model metadata
+        model,
+        dataSource: run.dataset_slug ?? "",
+        target: run.target_column ?? "",
+        features: run.feature_columns ?? [],
+
+        // Walk configuration (convert snake_case to camelCase)
+        trainSize: wc.train_size ?? 0,
+        testSize: wc.test_size ?? 0,
+        trainTestGap: wc.train_test_gap ?? 0,
+        stepSize: wc.step_size ?? 0,
+        startFold: wc.start_fold ?? 0,
+        endFold: wc.end_fold ?? -1,
+        initialOffset: wc.initial_offset ?? 0,
+
+        // Hyperparameters (convert snake_case to camelCase)
+        maxDepth: hp.max_depth ?? 0,
+        minChildWeight: hp.min_child_weight ?? 0,
+        learningRate: hp.learning_rate ?? 0,
+        numRounds: hp.num_boost_round ?? 0,
+        earlyStopping: hp.early_stopping_rounds ?? 0,
+        minRounds: hp.min_rounds ?? 0,
+        subsample: hp.subsample ?? 0,
+        colsampleBytree: hp.colsample_bytree ?? 0,
+        lambda: hp.lambda ?? 0,
+        forceMinimumTraining: hp.force_minimum_training ?? false,
+        objective: hp.objective ?? "",
+        quantileAlpha: hp.quantile_alpha ?? 0,
+        thresholdMethod: hp.threshold_method ?? "",
+      },
     folds: (run.folds ?? []).map(fold => {
       // According to FoldPerformance_ReconstructionGuide.md:
       // n_signals = number of LONG entries (NOT total)
@@ -450,7 +518,8 @@ const WalkforwardDashboard = () => {
         metrics: fold.metrics,
       };
     }),
-  }));
+  };
+  });
 
   return (
     <div className="flex h-full flex-col bg-background">

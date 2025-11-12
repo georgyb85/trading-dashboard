@@ -1,30 +1,56 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, Activity, Target } from "lucide-react";
+import type { SimulateTradesResponse } from "@/lib/stage1/types";
 
-export const PerformanceCards = () => {
+interface PerformanceCardsProps {
+  results: SimulateTradesResponse;
+}
+
+export const PerformanceCards = ({ results }: PerformanceCardsProps) => {
+  const performance = results.performance;
+  const buyHold = results.buy_hold;
+
+  console.log('[PerformanceCards] Performance data:', performance);
+  console.log('[PerformanceCards] Buy&Hold data:', buyHold);
+
+  if (!performance) {
+    return null;
+  }
+
+  // Handle both field name variants from backend
+  const totalReturn = performance.total_return_pct ?? performance.return_pct ?? 0;
+  const buyHoldReturn = buyHold?.total_return_pct ?? buyHold?.return_pct ?? 0;
+  const outperformance = totalReturn - buyHoldReturn;
+
+  console.log('[PerformanceCards] Total return:', totalReturn);
+  console.log('[PerformanceCards] Buy&Hold return:', buyHoldReturn);
+  console.log('[PerformanceCards] Outperformance:', outperformance);
+
   const metrics = [
     {
       title: "Total Return",
-      value: "+48.49%",
-      change: "+11.74%",
-      isPositive: true,
-      icon: TrendingUp,
+      value: `${totalReturn >= 0 ? '+' : ''}${totalReturn.toFixed(2)}%`,
+      change: `${outperformance >= 0 ? '+' : ''}${outperformance.toFixed(2)}%`,
+      subtitle: "vs buy & hold",
+      isPositive: totalReturn >= 0,
+      changePositive: outperformance >= 0,
+      icon: totalReturn >= 0 ? TrendingUp : TrendingDown,
     },
     {
       title: "Win Rate",
-      value: "60.6%",
-      subtitle: "33 / 70 trades",
+      value: `${((performance.win_rate || 0) * 100).toFixed(1)}%`,
+      subtitle: `${performance.total_trades || 0} trades`,
       icon: Target,
     },
     {
       title: "Profit Factor",
-      value: "1.17",
+      value: (performance.profit_factor || 0).toFixed(2),
       subtitle: "Combined",
       icon: Activity,
     },
     {
       title: "Sharpe Ratio",
-      value: "3.67",
+      value: (performance.sharpe_ratio || 0).toFixed(2),
       subtitle: "Risk-adjusted",
       icon: TrendingUp,
     },
@@ -41,13 +67,19 @@ export const PerformanceCards = () => {
             <metric.icon className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">{metric.value}</div>
+            <div className={`text-2xl font-bold ${
+              metric.isPositive !== undefined
+                ? (metric.isPositive ? 'profit-text' : 'loss-text')
+                : 'text-foreground'
+            }`}>
+              {metric.value}
+            </div>
             {metric.change && (
-              <p className={`text-xs ${metric.isPositive ? 'profit-text' : 'loss-text'}`}>
-                {metric.change} vs benchmark
+              <p className={`text-xs ${metric.changePositive ? 'profit-text' : 'loss-text'}`}>
+                {metric.change} {metric.subtitle}
               </p>
             )}
-            {metric.subtitle && (
+            {!metric.change && metric.subtitle && (
               <p className="text-xs text-muted-foreground">{metric.subtitle}</p>
             )}
           </CardContent>

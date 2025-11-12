@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { Slider } from '@/components/ui/slider';
 import { lttbDownsample } from '@/lib/utils';
@@ -8,17 +8,60 @@ interface TimeSeriesChartProps {
   selectedColumn: string;
 }
 
+interface CacheEntry {
+  fullData: any[];
+  downsampledCache: Map<number, any[]>;
+}
+
 const TimeSeriesChart = ({ data, selectedColumn }: TimeSeriesChartProps) => {
   const [threshold, setThreshold] = useState([500]);
-  
+
+  // Cache per indicator: stores both full data and downsampled results per threshold
+  const cacheRef = useRef<Map<string, CacheEntry>>(new Map());
+
+  // Reset threshold when column changes
+  useEffect(() => {
+    const cache = cacheRef.current.get(selectedColumn);
+    if (cache) {
+      // Restore the last used threshold for this indicator if available
+      // Otherwise reset to 500
+      setThreshold([500]);
+    }
+  }, [selectedColumn]);
+
   const chartData = useMemo(() => {
-    const fullData = data.map((row, index) => ({
-      timestamp: new Date(row.timestamp).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }),
-      value: row[selectedColumn],
-      index,
-    }));
-    
-    return lttbDownsample(fullData, threshold[0]);
+    const cache = cacheRef.current;
+    let cacheEntry = cache.get(selectedColumn);
+
+    // Step 1: Get or create full data for this indicator
+    if (!cacheEntry) {
+      const fullData = data.map((row, index) => ({
+        timestamp: new Date(row.timestamp).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }),
+        value: row[selectedColumn],
+        index,
+      }));
+
+      cacheEntry = {
+        fullData,
+        downsampledCache: new Map(),
+      };
+      cache.set(selectedColumn, cacheEntry);
+      console.log(`[TimeSeriesChart] Created cache for ${selectedColumn}`);
+    }
+
+    // Step 2: Get or create downsampled data for this threshold
+    const thresholdKey = threshold[0];
+    let downsampledData = cacheEntry.downsampledCache.get(thresholdKey);
+
+    if (!downsampledData) {
+      downsampledData = lttbDownsample(cacheEntry.fullData, thresholdKey);
+      cacheEntry.downsampledCache.set(thresholdKey, downsampledData);
+      console.log(`[TimeSeriesChart] Cached downsample for ${selectedColumn} at threshold ${thresholdKey}`);
+    } else {
+      console.log(`[TimeSeriesChart] Using cached downsample for ${selectedColumn} at threshold ${thresholdKey}`);
+    }
+
+    return downsampledData;
   }, [data, selectedColumn, threshold]);
 
   const pointsReduction = data.length > 0 

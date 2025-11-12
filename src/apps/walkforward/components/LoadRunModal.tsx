@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -18,9 +18,10 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2, CheckCircle } from "lucide-react";
 import { useStage1Runs, useStage1RunDetail } from "@/apps/walkforward/lib/hooks";
 import type { Stage1RunDetail } from "@/lib/stage1/types";
+import { useRunsContext } from "@/contexts/RunsContext";
 
 interface LoadRunModalProps {
   open: boolean;
@@ -36,6 +37,7 @@ export const LoadRunModal = ({
   onLoadRun,
 }: LoadRunModalProps) => {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const { getCachedRun, cacheRun, isRunCached } = useRunsContext();
 
   const {
     data: runs,
@@ -49,8 +51,29 @@ export const LoadRunModal = ({
     error: detailError,
   } = useStage1RunDetail(selectedRunId);
 
+  // Cache the run detail when it's fetched
+  useEffect(() => {
+    if (runDetail && selectedRunId) {
+      cacheRun(runDetail);
+    }
+  }, [runDetail, selectedRunId, cacheRun]);
+
   const handleLoadRun = () => {
+    if (!selectedRunId) return;
+
+    // Try to load from cache first
+    const cachedRun = getCachedRun(selectedRunId);
+    if (cachedRun) {
+      console.log(`[LoadRunModal] Loading run ${selectedRunId.substring(0, 8)} from cache`);
+      onLoadRun(cachedRun);
+      onOpenChange(false);
+      setSelectedRunId(null);
+      return;
+    }
+
+    // Otherwise use the fetched run detail
     if (runDetail) {
+      console.log(`[LoadRunModal] Loading run ${selectedRunId.substring(0, 8)} from API`);
       onLoadRun(runDetail);
       onOpenChange(false);
       setSelectedRunId(null);
@@ -159,6 +182,7 @@ export const LoadRunModal = ({
                     <TableHead>Folds</TableHead>
                     <TableHead>Features</TableHead>
                     <TableHead>Created</TableHead>
+                    <TableHead className="w-16">Cache</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -189,6 +213,11 @@ export const LoadRunModal = ({
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {formatDate(run.created_at)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {isRunCached(run.run_id) && (
+                          <CheckCircle className="h-4 w-4 text-green-600 inline" title="Cached" />
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
