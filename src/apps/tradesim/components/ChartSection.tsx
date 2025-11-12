@@ -1,6 +1,6 @@
 import { useMemo, memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area } from "recharts";
+import { LineChart, AreaChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Area } from "recharts";
 import type { SimulateTradesResponse } from "@/lib/stage1/types";
 
 interface ChartSectionProps {
@@ -304,7 +304,13 @@ const ChartSectionComponent = ({ results, tradeFilter }: ChartSectionProps) => {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={drawdownData}>
+              <AreaChart data={drawdownData}>
+                <defs>
+                  <linearGradient id="strategyDrawdownGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity={0.1} />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis
                   dataKey="timestamp"
@@ -337,30 +343,24 @@ const ChartSectionComponent = ({ results, tradeFilter }: ChartSectionProps) => {
                 <Area
                   type="monotone"
                   dataKey="strategyDrawdown"
-                  stroke="none"
-                  fill="hsl(var(--success))"
-                  fillOpacity={0.15}
-                  connectNulls
-                />
-                <Line
-                  type="monotone"
-                  dataKey="strategyDrawdown"
                   name="Strategy DD"
                   stroke="hsl(var(--success))"
                   strokeWidth={2}
-                  dot={false}
+                  fill="url(#strategyDrawdownGradient)"
                   connectNulls
+                  isAnimationActive={false}
                 />
-                <Line
+                <Area
                   type="monotone"
                   dataKey="buyHoldDrawdown"
                   name="Buy & Hold DD"
                   stroke="hsl(var(--primary))"
                   strokeWidth={2}
-                  dot={false}
+                  fill="none"
                   connectNulls
+                  isAnimationActive={false}
                 />
-              </LineChart>
+              </AreaChart>
             </ResponsiveContainer>
             <div className="mt-3 flex items-center gap-4 text-sm">
               <div className="flex items-center gap-2">
