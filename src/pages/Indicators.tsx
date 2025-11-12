@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Loader2, CheckCircle, AlertCircle, Check } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import IndicatorDataTable from '@/components/IndicatorDataTable';
 import TimeSeriesChart from '@/components/TimeSeriesChart';
 import HistogramChart from '@/components/HistogramChart';
@@ -20,17 +21,14 @@ ATR_RATIO_S: ATR RATIO 14 2`;
 
 const Indicators = () => {
   const { selectedDataset } = useDatasetContext();
+  const { toast } = useToast();
   const [script, setScript] = useState(DEFAULT_SCRIPT);
   const [maxRows, setMaxRows] = useState(1000);
   const [selectedColumn, setSelectedColumn] = useState<string>('');
 
   // Validation state
   const [isValidating, setIsValidating] = useState(false);
-  const [validationResult, setValidationResult] = useState<{
-    success: boolean;
-    message: string;
-    definitions?: IndicatorDefinition[];
-  } | null>(null);
+  const [isValidated, setIsValidated] = useState(false);
 
   // Build state
   const [isBuilding, setIsBuilding] = useState(false);
@@ -38,35 +36,50 @@ const Indicators = () => {
 
   const handleValidate = async () => {
     if (!script.trim()) {
-      setValidationResult({
-        success: false,
-        message: 'Script cannot be empty',
+      toast({
+        variant: 'destructive',
+        title: 'Validation Error',
+        description: 'Script cannot be empty',
       });
       return;
     }
 
     setIsValidating(true);
-    setValidationResult(null);
+    setIsValidated(false);
 
     try {
       const response = await validateIndicatorScript(script);
 
       if (response.success && response.data) {
-        setValidationResult({
-          success: response.data.success,
-          message: response.data.message,
-          definitions: response.data.definitions,
-        });
+        if (response.data.success) {
+          setIsValidated(true);
+          const indicatorCount = response.data.definitions?.length || 0;
+          toast({
+            title: '✓ Script Validated',
+            description: `${indicatorCount} indicator${indicatorCount !== 1 ? 's' : ''} validated successfully`,
+          });
+        } else {
+          setIsValidated(false);
+          toast({
+            variant: 'destructive',
+            title: 'Validation Failed',
+            description: response.data.message,
+          });
+        }
       } else {
-        setValidationResult({
-          success: false,
-          message: response.error || 'Validation failed',
+        setIsValidated(false);
+        toast({
+          variant: 'destructive',
+          title: 'Validation Error',
+          description: response.error || 'Validation failed',
         });
       }
     } catch (error) {
-      setValidationResult({
-        success: false,
-        message: error instanceof Error ? error.message : 'Unknown error',
+      setIsValidated(false);
+      toast({
+        variant: 'destructive',
+        title: 'Validation Error',
+        description: error instanceof Error ? error.message : 'Unknown error',
       });
     } finally {
       setIsValidating(false);
@@ -75,12 +88,20 @@ const Indicators = () => {
 
   const handleBuild = async () => {
     if (!selectedDataset) {
-      alert('Please select a dataset from the top panel');
+      toast({
+        variant: 'destructive',
+        title: 'Build Error',
+        description: 'Please select a dataset from the top panel',
+      });
       return;
     }
 
     if (!script.trim()) {
-      alert('Script cannot be empty');
+      toast({
+        variant: 'destructive',
+        title: 'Build Error',
+        description: 'Script cannot be empty',
+      });
       return;
     }
 
@@ -101,16 +122,33 @@ const Indicators = () => {
         if (response.data.indicator_names && response.data.indicator_names.length > 0) {
           setSelectedColumn(response.data.indicator_names[0]);
         }
+
+        toast({
+          title: '✓ Build Successful',
+          description: `Built ${response.data.indicator_names?.length || 0} indicator(s) across ${response.data.row_count || 0} rows`,
+        });
       } else {
+        const errorMsg = response.error || 'Build failed';
         setBuildResult({
           success: false,
-          message: response.error || 'Build failed',
+          message: errorMsg,
+        });
+        toast({
+          variant: 'destructive',
+          title: 'Build Failed',
+          description: errorMsg,
         });
       }
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       setBuildResult({
         success: false,
-        message: error instanceof Error ? error.message : 'Unknown error',
+        message: errorMsg,
+      });
+      toast({
+        variant: 'destructive',
+        title: 'Build Error',
+        description: errorMsg,
       });
     } finally {
       setIsBuilding(false);
@@ -172,14 +210,24 @@ const Indicators = () => {
           {/* Script Textarea */}
           <div className="space-y-2">
             <Label htmlFor="script">Script (one indicator per line)</Label>
-            <Textarea
-              id="script"
-              value={script}
-              onChange={(e) => setScript(e.target.value)}
-              placeholder="RSI_S: RSI 14"
-              rows={8}
-              className="font-mono text-sm"
-            />
+            <div className="relative">
+              <Textarea
+                id="script"
+                value={script}
+                onChange={(e) => {
+                  setScript(e.target.value);
+                  setIsValidated(false); // Reset validation when script changes
+                }}
+                placeholder="RSI_S: RSI 14"
+                rows={8}
+                className={`font-mono text-sm ${isValidated ? 'border-green-500 focus-visible:ring-green-500' : ''}`}
+              />
+              {isValidated && (
+                <div className="absolute top-2 right-2 text-green-500">
+                  <Check className="h-5 w-5" />
+                </div>
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">
               Format: VARIABLE_NAME: INDICATOR_TYPE param1 param2 ...
             </p>
@@ -215,11 +263,17 @@ const Indicators = () => {
               onClick={handleValidate}
               variant="outline"
               disabled={isValidating || !script.trim()}
+              className={isValidated ? 'border-green-500 text-green-600' : ''}
             >
               {isValidating ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Validating...
+                </>
+              ) : isValidated ? (
+                <>
+                  <Check className="mr-2 h-4 w-4" />
+                  Validated
                 </>
               ) : (
                 'Validate Script'
@@ -241,37 +295,10 @@ const Indicators = () => {
             </Button>
           </div>
 
-          {/* Validation Result */}
-          {validationResult && (
-            <Alert variant={validationResult.success ? 'default' : 'destructive'}>
-              {validationResult.success ? (
-                <CheckCircle className="h-4 w-4" />
-              ) : (
-                <AlertCircle className="h-4 w-4" />
-              )}
-              <AlertDescription>
-                <div>{validationResult.message}</div>
-                {validationResult.definitions && validationResult.definitions.length > 0 && (
-                  <div className="mt-2 text-xs font-mono space-y-1">
-                    {validationResult.definitions.map((def, idx) => (
-                      <div key={idx}>
-                        {def.variable_name}: {def.indicator_type}({def.params.join(', ')})
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* Build Result Message */}
-          {buildResult && (
-            <Alert variant={buildResult.success ? 'default' : 'destructive'}>
-              {buildResult.success ? (
-                <CheckCircle className="h-4 w-4" />
-              ) : (
-                <AlertCircle className="h-4 w-4" />
-              )}
+          {/* Build Error Alert - Only show persistent error for build failures */}
+          {buildResult && !buildResult.success && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
               <AlertDescription>{buildResult.message}</AlertDescription>
             </Alert>
           )}
