@@ -1,5 +1,6 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChartSection } from "./ChartSection";
 import type {
   SimulateTradesResponse,
   PerformanceMetrics as Metrics,
@@ -12,12 +13,16 @@ interface PerformanceMetricsProps {
   tradeFilter: "all" | "long" | "short";
 }
 
-const formatMetric = (value: any, isPercent: boolean = false): string => {
+const formatMetric = (value: any, isPercent: boolean = false, isDrawdown: boolean = false): string => {
   if (value === null || value === undefined) return '--';
   const num = typeof value === 'number' ? value : parseFloat(value);
   if (isNaN(num)) return '--';
 
   if (isPercent) {
+    // For drawdown, don't add + sign even if positive
+    if (isDrawdown) {
+      return `${num.toFixed(2)}%`;
+    }
     return `${num >= 0 ? '+' : ''}${num.toFixed(2)}%`;
   }
   return num.toFixed(2);
@@ -30,9 +35,10 @@ const scaleMetric = (value: number | undefined, isPercent: boolean): number | nu
   return isPercent ? value * 100 : value;
 };
 
-const formatIntervalEstimate = (interval?: StressTestInterval, isPercent = false, decimals = isPercent ? 2 : 3) => {
-  const scaled = scaleMetric(interval?.estimate, isPercent);
-  if (scaled === null) return '--';
+const formatIntervalEstimate = (interval?: StressTestInterval, isPercent = false, decimals = isPercent ? 2 : 3, alreadyScaled = false) => {
+  // If alreadyScaled is true, don't multiply by 100 again
+  const scaled = alreadyScaled ? interval?.estimate : scaleMetric(interval?.estimate, isPercent);
+  if (scaled === null || scaled === undefined) return '--';
   return `${scaled.toFixed(decimals)}${isPercent ? '%' : ''}`;
 };
 
@@ -40,11 +46,13 @@ const formatIntervalRange = (
   low?: number,
   high?: number,
   isPercent = false,
-  decimals = isPercent ? 2 : 3
+  decimals = isPercent ? 2 : 3,
+  alreadyScaled = false
 ) => {
-  const lowScaled = scaleMetric(low, isPercent);
-  const highScaled = scaleMetric(high, isPercent);
-  if (lowScaled === null || highScaled === null) return '--';
+  // If alreadyScaled is true, don't multiply by 100 again
+  const lowScaled = alreadyScaled ? low : scaleMetric(low, isPercent);
+  const highScaled = alreadyScaled ? high : scaleMetric(high, isPercent);
+  if (lowScaled === null || lowScaled === undefined || highScaled === null || highScaled === undefined) return '--';
   const suffix = isPercent ? '%' : '';
   return `[${lowScaled.toFixed(decimals)}${suffix}, ${highScaled.toFixed(decimals)}${suffix}]`;
 };
@@ -62,28 +70,29 @@ const renderStressSection = (title: string, data?: StressTestResult) => {
     key: keyof StressTestResult;
     label: string;
     isPercent?: boolean;
+    alreadyScaled?: boolean;
     pKey: keyof NonNullable<StressTestResult['pvalues']>;
   }> = [
     { key: 'sharpe', label: 'Sharpe Ratio', pKey: 'sharpe' },
     { key: 'profit_factor', label: 'Profit Factor', pKey: 'profit_factor' },
-    { key: 'total_return_pct', label: 'Total Return %', isPercent: true, pKey: 'total_return' },
-    { key: 'max_drawdown', label: 'Max Drawdown %', isPercent: true, pKey: 'max_drawdown' },
+    { key: 'total_return_pct', label: 'Total Return', isPercent: true, alreadyScaled: true, pKey: 'total_return' },
+    { key: 'max_drawdown', label: 'Max Drawdown', isPercent: true, alreadyScaled: true, pKey: 'max_drawdown' },
   ];
 
   return (
-    <div className="rounded-lg border border-border bg-muted/5 p-4 space-y-4" key={title}>
+    <div className="rounded-xl border-2 border-border/60 bg-gradient-to-br from-card to-card/50 p-5 shadow-md hover:shadow-lg transition-shadow" key={title}>
       <div>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-3">
           <div>
-            <p className="text-sm font-semibold text-foreground">{title}</p>
-            <p className="text-xs text-muted-foreground">
-              Sample Size: {data.sample_size ?? '--'}
+            <p className="text-base font-bold text-foreground bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">{title}</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Sample Size: <span className="font-semibold">{data.sample_size ?? '--'}</span>
               {data.bootstrap_iterations !== undefined && ` · Bootstrap ${data.bootstrap_iterations}`}
               {data.mcpt_iterations !== undefined && ` · MCPT ${data.mcpt_iterations}`}
             </p>
           </div>
           {data.computed === false && (
-            <span className="text-[0.65rem] font-semibold uppercase text-destructive">insufficient data</span>
+            <span className="text-[0.65rem] font-semibold uppercase text-destructive bg-destructive/10 px-2 py-1 rounded">insufficient data</span>
           )}
         </div>
       </div>
@@ -91,31 +100,31 @@ const renderStressSection = (title: string, data?: StressTestResult) => {
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-xs uppercase text-muted-foreground">
-              <th className="py-1 text-left font-medium">Metric</th>
-              <th className="py-1 text-left font-medium">Estimate</th>
-              <th className="py-1 text-left font-medium">90% CI</th>
-              <th className="py-1 text-left font-medium">95% CI</th>
-              <th className="py-1 text-left font-medium">p-value</th>
+            <tr className="text-xs uppercase text-muted-foreground border-b border-border/40">
+              <th className="py-2 text-left font-semibold">Metric</th>
+              <th className="py-2 text-left font-semibold">Estimate</th>
+              <th className="py-2 text-left font-semibold">90% CI</th>
+              <th className="py-2 text-left font-semibold">95% CI</th>
+              <th className="py-2 text-left font-semibold">p-value</th>
             </tr>
           </thead>
           <tbody>
-            {metrics.map(({ key, label, isPercent, pKey }) => {
+            {metrics.map(({ key, label, isPercent, alreadyScaled, pKey }) => {
               const interval = (data as any)[key] as StressTestInterval | undefined;
               if (!interval) return null;
               return (
-                <tr key={`${title}-${key}`} className="border-t border-border/60">
-                  <td className="py-2 text-muted-foreground">{label}</td>
-                  <td className="py-2 font-mono">
-                    {formatIntervalEstimate(interval, Boolean(isPercent))}
+                <tr key={`${title}-${key}`} className="border-t border-border/30 hover:bg-secondary/20 transition-colors">
+                  <td className="py-2.5 text-muted-foreground font-medium">{label}</td>
+                  <td className="py-2.5 font-mono font-semibold text-foreground">
+                    {formatIntervalEstimate(interval, Boolean(isPercent), isPercent ? 2 : 3, Boolean(alreadyScaled))}
                   </td>
-                  <td className="py-2 text-xs font-mono text-muted-foreground">
-                    {formatIntervalRange(interval.ci90_low, interval.ci90_high, Boolean(isPercent))}
+                  <td className="py-2.5 text-xs font-mono text-muted-foreground">
+                    {formatIntervalRange(interval.ci90_low, interval.ci90_high, Boolean(isPercent), isPercent ? 2 : 3, Boolean(alreadyScaled))}
                   </td>
-                  <td className="py-2 text-xs font-mono text-muted-foreground">
-                    {formatIntervalRange(interval.ci95_low, interval.ci95_high, Boolean(isPercent))}
+                  <td className="py-2.5 text-xs font-mono text-muted-foreground">
+                    {formatIntervalRange(interval.ci95_low, interval.ci95_high, Boolean(isPercent), isPercent ? 2 : 3, Boolean(alreadyScaled))}
                   </td>
-                  <td className="py-2 font-mono">{formatPValue(data.pvalues?.[pKey])}</td>
+                  <td className="py-2.5 font-mono text-foreground">{formatPValue(data.pvalues?.[pKey])}</td>
                 </tr>
               );
             })}
@@ -124,11 +133,11 @@ const renderStressSection = (title: string, data?: StressTestResult) => {
       </div>
 
       {data.drawdown && (
-        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground mt-4 pt-4 border-t border-border/30">
           {(['q50', 'q90', 'q95', 'q99'] as const).map((quantile) => (
             <span
               key={`${title}-${quantile}`}
-              className="rounded-full border border-border/80 px-2 py-0.5 font-mono"
+              className="rounded-full border-2 border-primary/30 bg-primary/5 px-3 py-1 font-mono font-semibold"
             >
               {quantile.toUpperCase()}: {data.drawdown?.[quantile].toFixed(2)}%
             </span>
@@ -157,6 +166,7 @@ export const PerformanceMetrics = ({ results, tradeFilter }: PerformanceMetricsP
       longOnly: formatMetric(longOnly?.total_return_pct ?? longOnly?.return_pct, true),
       shortOnly: formatMetric(shortOnly?.total_return_pct ?? shortOnly?.return_pct, true),
       buyHold: formatMetric(buyHold?.total_return_pct ?? buyHold?.return_pct, true),
+      isDrawdown: false,
     },
     {
       name: "Profit Factor",
@@ -164,6 +174,7 @@ export const PerformanceMetrics = ({ results, tradeFilter }: PerformanceMetricsP
       longOnly: formatMetric(longOnly?.profit_factor),
       shortOnly: formatMetric(shortOnly?.profit_factor),
       buyHold: formatMetric(buyHold?.profit_factor),
+      isDrawdown: false,
     },
     {
       name: "Sharpe Ratio",
@@ -171,20 +182,23 @@ export const PerformanceMetrics = ({ results, tradeFilter }: PerformanceMetricsP
       longOnly: formatMetric(longOnly?.sharpe_ratio),
       shortOnly: formatMetric(shortOnly?.sharpe_ratio),
       buyHold: formatMetric(buyHold?.sharpe_ratio),
+      isDrawdown: false,
     },
     {
       name: "Max Drawdown",
-      combined: formatMetric(combined.max_drawdown ?? combined.max_drawdown_pct, true),
-      longOnly: formatMetric(longOnly?.max_drawdown ?? longOnly?.max_drawdown_pct, true),
-      shortOnly: formatMetric(shortOnly?.max_drawdown ?? shortOnly?.max_drawdown_pct, true),
-      buyHold: formatMetric(buyHold?.max_drawdown ?? buyHold?.max_drawdown_pct, true),
+      combined: formatMetric(combined.max_drawdown ?? combined.max_drawdown_pct, true, true),
+      longOnly: formatMetric(longOnly?.max_drawdown ?? longOnly?.max_drawdown_pct, true, true),
+      shortOnly: formatMetric(shortOnly?.max_drawdown ?? shortOnly?.max_drawdown_pct, true, true),
+      buyHold: formatMetric(buyHold?.max_drawdown ?? buyHold?.max_drawdown_pct, true, true),
+      isDrawdown: true,
     },
     {
       name: "Win Rate",
-      combined: formatMetric((combined.win_rate || 0) * 100, true),
-      longOnly: formatMetric((longOnly?.win_rate || 0) * 100, true),
-      shortOnly: formatMetric((shortOnly?.win_rate || 0) * 100, true),
+      combined: formatMetric(combined.win_rate ? combined.win_rate * 100 : 0, true),
+      longOnly: formatMetric(longOnly?.win_rate ? longOnly.win_rate * 100 : 0, true),
+      shortOnly: formatMetric(shortOnly?.win_rate ? shortOnly.win_rate * 100 : 0, true),
       buyHold: 'N/A',
+      isDrawdown: false,
     },
     {
       name: "Total Trades",
@@ -192,6 +206,7 @@ export const PerformanceMetrics = ({ results, tradeFilter }: PerformanceMetricsP
       longOnly: longOnly?.total_trades?.toString() || '--',
       shortOnly: shortOnly?.total_trades?.toString() || '--',
       buyHold: 'N/A',
+      isDrawdown: false,
     },
   ];
 
@@ -227,6 +242,7 @@ export const PerformanceMetrics = ({ results, tradeFilter }: PerformanceMetricsP
                     <TableCell className={`font-mono font-semibold ${
                       tradeFilter === "all" ? "bg-primary/10" : ""
                     } ${
+                      metric.isDrawdown ? 'text-destructive' :
                       metric.combined.includes('+') ? 'profit-text' :
                       metric.combined.includes('-') ? 'loss-text' :
                       'text-foreground'
@@ -236,6 +252,7 @@ export const PerformanceMetrics = ({ results, tradeFilter }: PerformanceMetricsP
                     <TableCell className={`font-mono ${
                       tradeFilter === "long" ? "bg-primary/10" : ""
                     } ${
+                      metric.isDrawdown ? 'text-destructive' :
                       metric.longOnly.includes('+') ? 'profit-text' :
                       metric.longOnly.includes('-') ? 'loss-text' :
                       'text-foreground'
@@ -245,13 +262,16 @@ export const PerformanceMetrics = ({ results, tradeFilter }: PerformanceMetricsP
                     <TableCell className={`font-mono ${
                       tradeFilter === "short" ? "bg-primary/10" : ""
                     } ${
+                      metric.isDrawdown ? 'text-destructive' :
                       metric.shortOnly.includes('+') ? 'profit-text' :
                       metric.shortOnly.includes('-') ? 'loss-text' :
                       'text-foreground'
                     }`}>
                       {metric.shortOnly}
                     </TableCell>
-                    <TableCell className="font-mono text-muted-foreground">{metric.buyHold}</TableCell>
+                    <TableCell className={`font-mono ${
+                      metric.isDrawdown ? 'text-destructive' : 'text-muted-foreground'
+                    }`}>{metric.buyHold}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -275,6 +295,9 @@ export const PerformanceMetrics = ({ results, tradeFilter }: PerformanceMetricsP
           </CardContent>
         </Card>
       )}
+
+      {/* Performance Charts */}
+      <ChartSection results={results} tradeFilter={tradeFilter} />
     </div>
   );
 };

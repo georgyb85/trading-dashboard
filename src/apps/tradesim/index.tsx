@@ -6,7 +6,6 @@ import { ConfigSidebar } from "@/apps/tradesim/components/ConfigSidebar";
 import { PerformanceCards } from "@/apps/tradesim/components/PerformanceCards";
 import { TradeTable } from "@/apps/tradesim/components/TradeTable";
 import { PerformanceMetrics } from "@/apps/tradesim/components/PerformanceMetrics";
-import { ChartSection } from "@/apps/tradesim/components/ChartSection";
 import { LoadRunModal } from "@/apps/walkforward/components/LoadRunModal";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
@@ -388,7 +387,6 @@ const TradesimDashboard = () => {
                 <TabsList className="bg-secondary">
                   <TabsTrigger value="trades">Trade List</TabsTrigger>
                   <TabsTrigger value="performance">Performance Report</TabsTrigger>
-                  <TabsTrigger value="charts">Charts</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="trades" className="space-y-4">
@@ -397,10 +395,6 @@ const TradesimDashboard = () => {
 
                 <TabsContent value="performance" className="space-y-4">
                   <PerformanceMetrics results={simulationResults} tradeFilter={tradeFilter} />
-                </TabsContent>
-
-                <TabsContent value="charts" className="space-y-4">
-                  <ChartSection results={simulationResults} tradeFilter={tradeFilter} />
                 </TabsContent>
               </Tabs>
             </>
