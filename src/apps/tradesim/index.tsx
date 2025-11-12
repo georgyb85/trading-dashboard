@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useDatasetContext } from "@/contexts/DatasetContext";
 import { useRunsContext } from "@/contexts/RunsContext";
+import { useSimulationContext } from "@/contexts/SimulationContext";
 import { simulateTrades } from "@/lib/stage1/client";
 import type { TradeConfig, StressTestConfig, SimulateTradesResponse, Trade } from "@/lib/stage1/types";
 import { toast } from "@/hooks/use-toast";
@@ -20,6 +21,7 @@ import { toast } from "@/hooks/use-toast";
 const TradesimDashboard = () => {
   const { selectedDataset } = useDatasetContext();
   const { lastTradesimRunId, setLastTradesimRun, getCachedRun } = useRunsContext();
+  const { getCachedSimulation, cacheSimulation } = useSimulationContext();
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Run selection
@@ -38,6 +40,40 @@ const TradesimDashboard = () => {
       }
     }
   }, [lastTradesimRunId, selectedRunId, getCachedRun]);
+
+  // Restore cached simulation when dataset and run are available
+  useEffect(() => {
+    if (selectedDataset && selectedRunId && !simulationResults) {
+      const cached = getCachedSimulation(selectedDataset, selectedRunId);
+      if (cached) {
+        console.log(`[TradesimDashboard] Restoring cached simulation for ${selectedDataset}:${selectedRunId.substring(0, 8)}`);
+        setSimulationResults(cached.results);
+        setTradeConfig(cached.tradeConfig);
+        setStressTestConfig(cached.stressTestConfig);
+        setActiveTab(cached.activeTab);
+        setTradeFilter(cached.tradeFilter);
+        toast({
+          title: "Simulation restored",
+          description: "Loaded cached simulation results",
+        });
+      }
+    }
+  }, [selectedDataset, selectedRunId, simulationResults, getCachedSimulation]);
+
+  // Update cache when activeTab or tradeFilter changes (preserve user's view state)
+  useEffect(() => {
+    if (selectedDataset && selectedRunId && simulationResults) {
+      cacheSimulation({
+        results: simulationResults,
+        datasetId: selectedDataset,
+        runId: selectedRunId,
+        tradeConfig: tradeConfig,
+        stressTestConfig: stressTestConfig,
+        activeTab: activeTab,
+        tradeFilter: tradeFilter,
+      });
+    }
+  }, [activeTab, tradeFilter]);
 
   // Trade configuration (controlled by ConfigSidebar)
   const [tradeConfig, setTradeConfig] = useState<TradeConfig>({
@@ -156,6 +192,18 @@ const TradesimDashboard = () => {
         console.log('[TradesimDashboard] ===== END SIMULATION RESPONSE =====');
 
         setSimulationResults(response.data);
+
+        // Cache the simulation results
+        cacheSimulation({
+          results: response.data,
+          datasetId: selectedDataset,
+          runId: selectedRunId,
+          tradeConfig: tradeConfig,
+          stressTestConfig: stressTestConfig,
+          activeTab: activeTab,
+          tradeFilter: tradeFilter,
+        });
+
         toast({
           title: "Simulation complete",
           description: `Generated ${response.data.trades?.length || 0} trades`,

@@ -7,6 +7,7 @@ import { TradingLayout } from "./components/TradingLayout";
 import { SystemHealthDashboard } from "./components/SystemHealthDashboard";
 import { DatasetProvider } from "./contexts/DatasetContext";
 import { RunsProvider } from "./contexts/RunsContext";
+import { SimulationProvider } from "./contexts/SimulationContext";
 import { TradingOverview } from "./components/TradingOverview";
 import { PositionsTable } from "./components/PositionsTable";
 import { BalancesTable } from "./components/BalancesTable";
@@ -41,8 +42,9 @@ const App = () => (
       <BrowserRouter basename="/trade">
         <DatasetProvider>
           <RunsProvider>
-            <TradingLayout>
-              <Routes>
+            <SimulationProvider>
+              <TradingLayout>
+                <Routes>
             <Route path="/" element={<SystemHealthDashboard />} />
             <Route path="/trading" element={<TradingOverview />} />
             <Route path="/positions" element={<PositionsTable />} />
@@ -59,8 +61,9 @@ const App = () => (
             <Route path="/walkforward" element={<WalkforwardDashboard />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
-          </Routes>
-        </TradingLayout>
+              </Routes>
+            </TradingLayout>
+            </SimulationProvider>
           </RunsProvider>
         </DatasetProvider>
       </BrowserRouter>
