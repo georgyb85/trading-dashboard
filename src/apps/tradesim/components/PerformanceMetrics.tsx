@@ -159,6 +159,21 @@ export const PerformanceMetrics = ({ results, tradeFilter }: PerformanceMetricsP
     return null;
   }
 
+  // Calculate win rate and total trades from actual trades data
+  const allTrades = results.trades || [];
+  const longTrades = allTrades.filter(t => t.side === 'long');
+  const shortTrades = allTrades.filter(t => t.side === 'short');
+
+  const combinedWinRate = allTrades.length > 0
+    ? (allTrades.filter(t => t.pnl > 0).length / allTrades.length) * 100
+    : 0;
+  const longWinRate = longTrades.length > 0
+    ? (longTrades.filter(t => t.pnl > 0).length / longTrades.length) * 100
+    : 0;
+  const shortWinRate = shortTrades.length > 0
+    ? (shortTrades.filter(t => t.pnl > 0).length / shortTrades.length) * 100
+    : 0;
+
   const metrics = [
     {
       name: "Total Return",
@@ -194,17 +209,17 @@ export const PerformanceMetrics = ({ results, tradeFilter }: PerformanceMetricsP
     },
     {
       name: "Win Rate",
-      combined: formatMetric(combined.win_rate ? combined.win_rate * 100 : 0, true),
-      longOnly: formatMetric(longOnly?.win_rate ? longOnly.win_rate * 100 : 0, true),
-      shortOnly: formatMetric(shortOnly?.win_rate ? shortOnly.win_rate * 100 : 0, true),
+      combined: formatMetric(combinedWinRate, true),
+      longOnly: formatMetric(longWinRate, true),
+      shortOnly: formatMetric(shortWinRate, true),
       buyHold: 'N/A',
       isDrawdown: false,
     },
     {
       name: "Total Trades",
-      combined: combined.total_trades?.toString() || '--',
-      longOnly: longOnly?.total_trades?.toString() || '--',
-      shortOnly: shortOnly?.total_trades?.toString() || '--',
+      combined: allTrades.length.toString(),
+      longOnly: longTrades.length.toString(),
+      shortOnly: shortTrades.length.toString(),
       buyHold: 'N/A',
       isDrawdown: false,
     },
@@ -212,6 +227,9 @@ export const PerformanceMetrics = ({ results, tradeFilter }: PerformanceMetricsP
 
   return (
     <div className="space-y-6">
+      {/* Performance Charts */}
+      <ChartSection results={results} tradeFilter={tradeFilter} />
+
       {/* Performance Table */}
       <Card className="bg-card border-border">
         <CardHeader>
@@ -295,9 +313,6 @@ export const PerformanceMetrics = ({ results, tradeFilter }: PerformanceMetricsP
           </CardContent>
         </Card>
       )}
-
-      {/* Performance Charts */}
-      <ChartSection results={results} tradeFilter={tradeFilter} />
     </div>
   );
 };
