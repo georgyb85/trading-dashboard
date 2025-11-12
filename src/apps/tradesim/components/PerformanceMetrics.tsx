@@ -55,46 +55,86 @@ const formatPValue = (value?: number) => {
   return value.toFixed(4);
 };
 
-const renderStressSection = (title: string, stressTest?: StressTestResult) => {
-  if (!stressTest) return null;
+const renderStressSection = (title: string, data?: StressTestResult) => {
+  if (!data) return null;
+
+  const metrics: Array<{
+    key: keyof StressTestResult;
+    label: string;
+    isPercent?: boolean;
+    pKey: keyof NonNullable<StressTestResult['pvalues']>;
+  }> = [
+    { key: 'sharpe', label: 'Sharpe Ratio', pKey: 'sharpe' },
+    { key: 'profit_factor', label: 'Profit Factor', pKey: 'profit_factor' },
+    { key: 'total_return_pct', label: 'Total Return %', isPercent: true, pKey: 'total_return' },
+    { key: 'max_drawdown', label: 'Max Drawdown %', isPercent: true, pKey: 'max_drawdown' },
+  ];
 
   return (
-    <div key={title} className="space-y-3">
-      <h4 className="text-sm font-semibold text-foreground">{title}</h4>
-      <div className="space-y-2 text-sm">
-        {stressTest.sharpe && (
+    <div className="rounded-lg border border-border bg-muted/5 p-4 space-y-4" key={title}>
+      <div>
+        <div className="flex items-center justify-between">
           <div>
-            <div className="text-muted-foreground">Sharpe Ratio</div>
-            <div className="font-mono">Est: {formatIntervalEstimate(stressTest.sharpe, false)}</div>
-            {stressTest.sharpe.ci90_low !== undefined && stressTest.sharpe.ci90_high !== undefined && (
-              <div className="font-mono text-xs text-muted-foreground">
-                90% CI: {formatIntervalRange(stressTest.sharpe.ci90_low, stressTest.sharpe.ci90_high, false)}
-              </div>
-            )}
-            {stressTest.sharpe.ci95_low !== undefined && stressTest.sharpe.ci95_high !== undefined && (
-              <div className="font-mono text-xs text-muted-foreground">
-                95% CI: {formatIntervalRange(stressTest.sharpe.ci95_low, stressTest.sharpe.ci95_high, false)}
-              </div>
-            )}
+            <p className="text-sm font-semibold text-foreground">{title}</p>
+            <p className="text-xs text-muted-foreground">
+              Sample Size: {data.sample_size ?? '--'}
+              {data.bootstrap_iterations !== undefined && ` · Bootstrap ${data.bootstrap_iterations}`}
+              {data.mcpt_iterations !== undefined && ` · MCPT ${data.mcpt_iterations}`}
+            </p>
           </div>
-        )}
-        {stressTest.max_drawdown && (
-          <div>
-            <div className="text-muted-foreground">Max Drawdown</div>
-            <div className="font-mono">{formatIntervalEstimate(stressTest.max_drawdown, true)}</div>
-            {stressTest.max_drawdown.ci90_low !== undefined && stressTest.max_drawdown.ci90_high !== undefined && (
-              <div className="font-mono text-xs text-muted-foreground">
-                90% CI: {formatIntervalRange(stressTest.max_drawdown.ci90_low, stressTest.max_drawdown.ci90_high, true)}
-              </div>
-            )}
-            {stressTest.max_drawdown.ci95_low !== undefined && stressTest.max_drawdown.ci95_high !== undefined && (
-              <div className="font-mono text-xs text-muted-foreground">
-                95% CI: {formatIntervalRange(stressTest.max_drawdown.ci95_low, stressTest.max_drawdown.ci95_high, true)}
-              </div>
-            )}
-          </div>
-        )}
+          {data.computed === false && (
+            <span className="text-[0.65rem] font-semibold uppercase text-destructive">insufficient data</span>
+          )}
+        </div>
       </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-xs uppercase text-muted-foreground">
+              <th className="py-1 text-left font-medium">Metric</th>
+              <th className="py-1 text-left font-medium">Estimate</th>
+              <th className="py-1 text-left font-medium">90% CI</th>
+              <th className="py-1 text-left font-medium">95% CI</th>
+              <th className="py-1 text-left font-medium">p-value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {metrics.map(({ key, label, isPercent, pKey }) => {
+              const interval = (data as any)[key] as StressTestInterval | undefined;
+              if (!interval) return null;
+              return (
+                <tr key={`${title}-${key}`} className="border-t border-border/60">
+                  <td className="py-2 text-muted-foreground">{label}</td>
+                  <td className="py-2 font-mono">
+                    {formatIntervalEstimate(interval, Boolean(isPercent))}
+                  </td>
+                  <td className="py-2 text-xs font-mono text-muted-foreground">
+                    {formatIntervalRange(interval.ci90_low, interval.ci90_high, Boolean(isPercent))}
+                  </td>
+                  <td className="py-2 text-xs font-mono text-muted-foreground">
+                    {formatIntervalRange(interval.ci95_low, interval.ci95_high, Boolean(isPercent))}
+                  </td>
+                  <td className="py-2 font-mono">{formatPValue(data.pvalues?.[pKey])}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {data.drawdown && (
+        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+          {(['q50', 'q90', 'q95', 'q99'] as const).map((quantile) => (
+            <span
+              key={`${title}-${quantile}`}
+              className="rounded-full border border-border/80 px-2 py-0.5 font-mono"
+            >
+              {quantile.toUpperCase()}: {data.drawdown?.[quantile].toFixed(2)}%
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

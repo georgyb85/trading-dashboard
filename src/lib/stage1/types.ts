@@ -140,6 +140,7 @@ export interface TradeConfig {
 }
 
 export interface StressTestConfig {
+  enable?: boolean;
   bootstrap_iterations: number;
   mcpt_iterations: number;
   seed: number;

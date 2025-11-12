@@ -17,6 +17,7 @@ import { useSimulationContext } from "@/contexts/SimulationContext";
 import { simulateTrades } from "@/lib/stage1/client";
 import type { TradeConfig, StressTestConfig, SimulateTradesResponse, Trade } from "@/lib/stage1/types";
 import { toast } from "@/hooks/use-toast";
+import { serializeTradeClipboard, parseTradeClipboard } from "@/lib/tradeClipboard";
 
 const TradesimDashboard = () => {
   const { selectedDataset } = useDatasetContext();
@@ -60,6 +61,7 @@ const TradesimDashboard = () => {
     mcpt_iterations: 1000,
     seed: 42,
   });
+  const [stressTestsEnabled, setStressTestsEnabled] = useState(true);
 
   // Simulation results
   const [isRunning, setIsRunning] = useState(false);
@@ -171,7 +173,7 @@ const TradesimDashboard = () => {
         dataset_id: selectedDataset,
         run_id: selectedRunId,
         trade_config: tradeConfig,
-        stress_test: stressTestConfig,
+        stress_test: { ...stressTestConfig, enable: stressTestsEnabled },
       });
 
       if (response.success && response.data) {
@@ -232,6 +234,52 @@ const TradesimDashboard = () => {
     setActiveTab("trades");
   };
 
+  const handleCopyClipboard = async () => {
+    try {
+      const payload = serializeTradeClipboard(tradeConfig, { ...stressTestConfig, enable: stressTestsEnabled });
+      await navigator.clipboard.writeText(payload);
+      toast({ title: "Parameters copied", description: "Trade + stress settings copied to clipboard." });
+    } catch (error) {
+      toast({
+        title: "Copy failed",
+        description: error instanceof Error ? error.message : "Clipboard access denied",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handlePasteClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text.trim()) {
+        toast({ title: "Clipboard empty", variant: "destructive" });
+        return;
+      }
+      const parsed = parseTradeClipboard(text);
+      if (!parsed.trade && !parsed.stress) {
+        toast({ title: "No parameters found", description: "Clipboard text did not include trade settings.", variant: "destructive" });
+        return;
+      }
+      if (parsed.trade) {
+        setTradeConfig((prev) => ({ ...prev, ...parsed.trade }));
+      }
+      if (parsed.stress) {
+        const { enable, ...rest } = parsed.stress;
+        setStressTestConfig((prev) => ({ ...prev, ...rest }));
+        if (enable !== undefined) {
+          setStressTestsEnabled(enable);
+        }
+      }
+      toast({ title: "Parameters pasted", description: "Simulation settings updated from clipboard." });
+    } catch (error) {
+      toast({
+        title: "Paste failed",
+        description: error instanceof Error ? error.message : "Clipboard access denied",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="flex min-h-screen bg-background w-full">
       <ConfigSidebar
@@ -241,6 +289,10 @@ const TradesimDashboard = () => {
         onTradeConfigChange={setTradeConfig}
         stressTestConfig={stressTestConfig}
         onStressTestConfigChange={setStressTestConfig}
+        stressTestsEnabled={stressTestsEnabled}
+        onStressTestsEnabledChange={setStressTestsEnabled}
+        onCopyConfig={handleCopyClipboard}
+        onPasteConfig={handlePasteClipboard}
         onRunSimulation={handleRunSimulation}
         isRunning={isRunning}
         canRun={!isRunning && !!selectedRunId && !!selectedDataset}

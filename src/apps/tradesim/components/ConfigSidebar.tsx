@@ -13,6 +13,10 @@ interface ConfigSidebarProps {
   onTradeConfigChange: (config: TradeConfig) => void;
   stressTestConfig: StressTestConfig;
   onStressTestConfigChange: (config: StressTestConfig) => void;
+  stressTestsEnabled: boolean;
+  onStressTestsEnabledChange: (value: boolean) => void;
+  onCopyConfig: () => void;
+  onPasteConfig: () => void;
   onRunSimulation: () => void;
   isRunning: boolean;
   canRun: boolean;
@@ -25,6 +29,10 @@ export const ConfigSidebar = ({
   onTradeConfigChange,
   stressTestConfig,
   onStressTestConfigChange,
+  stressTestsEnabled,
+  onStressTestsEnabledChange,
+  onCopyConfig,
+  onPasteConfig,
   onRunSimulation,
   isRunning,
   canRun,
@@ -332,6 +340,15 @@ export const ConfigSidebar = ({
         <div className="space-y-4">
           <h3 className="text-sm font-medium text-sidebar-foreground">Stress Testing</h3>
 
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="enable-stress"
+              checked={stressTestsEnabled}
+              onCheckedChange={(checked) => onStressTestsEnabledChange(Boolean(checked))}
+            />
+            <Label htmlFor="enable-stress" className="text-sm cursor-pointer">Enable Stress Tests</Label>
+          </div>
+
           <div className="space-y-2">
             <Label className="text-sm">Bootstrap Iterations</Label>
             <Input
@@ -341,6 +358,7 @@ export const ConfigSidebar = ({
               min={100}
               max={10000}
               step={100}
+              disabled={!stressTestsEnabled}
             />
           </div>
 
@@ -353,6 +371,7 @@ export const ConfigSidebar = ({
               min={100}
               max={10000}
               step={100}
+              disabled={!stressTestsEnabled}
             />
           </div>
 
@@ -364,12 +383,31 @@ export const ConfigSidebar = ({
               onChange={(e) => updateStressTestConfig({ seed: parseInt(e.target.value) || 42 })}
               min={0}
               step={1}
+              disabled={!stressTestsEnabled}
             />
           </div>
         </div>
 
-        {/* Run Simulation Button */}
-        <div className="pt-4 border-t border-sidebar-border">
+        {/* Clipboard + Run */}
+        <div className="pt-4 border-t border-sidebar-border space-y-3">
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              size="sm"
+              onClick={onCopyConfig}
+            >
+              Copy Params
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1"
+              size="sm"
+              onClick={onPasteConfig}
+            >
+              Paste Params
+            </Button>
+          </div>
           <Button
             className="w-full gap-2"
             onClick={onRunSimulation}
