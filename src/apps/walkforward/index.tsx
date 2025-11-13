@@ -458,10 +458,16 @@ const WalkforwardDashboard = () => {
         description: `GPU retrain triggered for fold ${fold.fold_number}`,
       });
 
+      console.log('[handleTrainFold] About to call xgboostClient.train with payload:');
+      console.log('[handleTrainFold] Dataset payload:', JSON.stringify(datasetPayload, null, 2));
+      console.log('[handleTrainFold] Config payload:', JSON.stringify(configPayload, null, 2));
+
       const response = await xgboostClient.train({
         dataset: datasetPayload,
         config: configPayload,
       });
+
+      console.log('[handleTrainFold] Training completed successfully, response:', response);
 
       setTestModelResult(response);
       toast({
@@ -469,6 +475,11 @@ const WalkforwardDashboard = () => {
         description: `Model trained on ${response.train_samples} samples.`,
       });
     } catch (err) {
+      console.error('[handleTrainFold] Training error caught:', err);
+      console.error('[handleTrainFold] Error type:', err?.constructor?.name);
+      console.error('[handleTrainFold] Error message:', err instanceof Error ? err.message : String(err));
+      console.error('[handleTrainFold] Error stack:', err instanceof Error ? err.stack : 'N/A');
+
       const message = err instanceof Error ? err.message : "Failed to train model.";
       setTestModelError(message);
       toast({

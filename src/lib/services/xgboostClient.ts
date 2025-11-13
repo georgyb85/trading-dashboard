@@ -55,6 +55,18 @@ export class XGBoostClient {
       config: payload.config,
     };
 
+    console.log('[XGBoostClient.train] Sending training request:', {
+      requestId,
+      datasetId: payload.dataset.dataset_id,
+      features: payload.dataset.feature_columns,
+      target: payload.dataset.target_column,
+      train: payload.dataset.train,
+      validation: payload.dataset.validation,
+      test: payload.dataset.test,
+      config: payload.config,
+    });
+    console.log('[XGBoostClient.train] Full message:', JSON.stringify(message, null, 2));
+
     const promise = new Promise<XGBoostTrainResult>((resolve, reject) => {
       this.pending.set(requestId, { type: 'train', resolve, reject });
       this.setTimeoutForRequest(requestId);
@@ -143,6 +155,8 @@ export class XGBoostClient {
   }
 
   private handleMessage(raw: string) {
+    console.log('[XGBoostClient] Received raw message:', raw);
+
     let message: XGBoostServerMessage;
     try {
       message = JSON.parse(raw);
@@ -151,8 +165,12 @@ export class XGBoostClient {
       return;
     }
 
+    console.log('[XGBoostClient] Parsed message type:', message.type);
+    console.log('[XGBoostClient] Full parsed message:', message);
+
     switch (message.type) {
       case 'session_init': {
+        console.log('[XGBoostClient] Session initialized:', message.session_id);
         this.sessionId = message.session_id;
         if (this.connectionResolve) {
           this.connectionResolve();
@@ -168,19 +186,29 @@ export class XGBoostClient {
         break;
       }
       case 'train_response': {
+        console.log('[XGBoostClient] Train response received:', {
+          request_id: message.request_id,
+          success: message.success,
+          result: message.result,
+        });
         const pending = this.pending.get(message.request_id);
         if (pending && pending.type === 'train') {
           if (message.success) {
+            console.log('[XGBoostClient] Training succeeded, resolving promise');
             pending.resolve(message.result);
           } else {
+            console.error('[XGBoostClient] Training failed in response');
             pending.reject(new Error('Training failed'));
           }
           this.pending.delete(message.request_id);
           this.clearTimeoutForRequest(message.request_id);
+        } else {
+          console.warn('[XGBoostClient] No pending request found for train_response:', message.request_id);
         }
         break;
       }
       case 'predict_response': {
+        console.log('[XGBoostClient] Predict response received:', message);
         const pending = this.pending.get(message.request_id);
         if (pending && pending.type === 'predict') {
           if (message.success) {
@@ -194,19 +222,27 @@ export class XGBoostClient {
         break;
       }
       case 'error': {
+        console.error('[XGBoostClient] Error message received:', {
+          request_id: message.request_id,
+          error: message.error,
+          message: message.message,
+          full: message,
+        });
         const requestId = message.request_id;
         if (requestId && this.pending.has(requestId)) {
           const pending = this.pending.get(requestId)!;
-          pending.reject(new Error(message.message || message.error || 'Server error'));
+          const errorMsg = message.message || message.error || 'Server error';
+          console.error('[XGBoostClient] Rejecting pending request with error:', errorMsg);
+          pending.reject(new Error(errorMsg));
           this.pending.delete(requestId);
           this.clearTimeoutForRequest(requestId);
         } else {
-          console.error('[XGBoostClient] Server error:', message.error, message.message);
+          console.error('[XGBoostClient] Server error with no pending request:', message.error, message.message);
         }
         break;
       }
       default:
-        // Ignore other message types for now
+        console.log('[XGBoostClient] Ignoring message type:', message.type);
         break;
     }
   }
