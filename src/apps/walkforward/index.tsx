@@ -257,6 +257,26 @@ const WalkforwardDashboard = () => {
     } else {
       setActiveRunIndex(0);
     }
+
+    // Reset examined fold if the closed run affected it
+    if (examinedFold) {
+      if (examinedFold.runIndex === runIndex) {
+        // The examined run was closed, reset examined fold
+        setExaminedFold(null);
+        setTestModelResult(null);
+        setTestModelError(null);
+        toast({
+          title: "Examined fold cleared",
+          description: "The run containing the examined fold was closed.",
+        });
+      } else if (examinedFold.runIndex > runIndex) {
+        // A run before the examined run was closed, adjust the index
+        setExaminedFold({
+          ...examinedFold,
+          runIndex: examinedFold.runIndex - 1,
+        });
+      }
+    }
   };
 
   // Handle examining a fold
