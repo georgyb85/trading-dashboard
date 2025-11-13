@@ -293,11 +293,11 @@ Objective: ${currentRun.config.objective} | Threshold: ${currentRun.config.thres
                           [{fold.testStart}, {(parseInt(fold.testEnd) - 1).toString()}]
                         </TableCell>
                         <TableCell className="text-center">
-                          <Button 
-                            variant="default" 
+                          <Button
+                            variant="default"
                             size="sm"
                             className="h-7 px-3"
-                            onClick={() => onExamineFold(currentRun.run, fold)}
+                            onClick={() => onExamineFold(currentRun.run - 1, fold)}
                           >
                             Examine
                           </Button>
