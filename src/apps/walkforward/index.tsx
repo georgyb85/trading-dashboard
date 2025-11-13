@@ -16,9 +16,11 @@ import type { Stage1RunDetail } from "@/lib/stage1/types";
 import { useDatasetContext } from "@/contexts/DatasetContext";
 import { xgboostClient } from "@/lib/services/xgboostClient";
 import type { XGBoostTrainResult } from "@/lib/types/xgboost";
+import { useStage1Datasets } from "@/apps/walkforward/lib/hooks";
 
 const WalkforwardDashboard = () => {
   const { selectedDataset } = useDatasetContext();
+  const { data: stage1Datasets } = useStage1Datasets();
   // Run selection
   const [loadRunModalOpen, setLoadRunModalOpen] = useState(false);
   const [loadedRuns, setLoadedRuns] = useState<Stage1RunDetail[]>([]);
@@ -72,6 +74,52 @@ const WalkforwardDashboard = () => {
   const [testModelResult, setTestModelResult] = useState<XGBoostTrainResult | null>(null);
   const [testModelError, setTestModelError] = useState<string | null>(null);
   const [isTestModelRunning, setIsTestModelRunning] = useState(false);
+
+  const selectedDatasetMeta = useMemo(
+    () => stage1Datasets?.find((dataset) => dataset.dataset_id === selectedDataset) ?? null,
+    [stage1Datasets, selectedDataset]
+  );
+
+  const datasetTimeMeta = useMemo(() => {
+    if (!selectedDatasetMeta) return null;
+
+    const normalizeTimestamp = (value?: number | string | null) => {
+      if (value == null) return null;
+      if (typeof value === "number") {
+        return value < 3e12 ? value * 1000 : value;
+      }
+      const parsed = Date.parse(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const granularityToMs = (granularity?: string) => {
+      if (!granularity) return null;
+      const match = granularity.trim().match(/(\d+)\s*([smhdw])/i);
+      if (!match) return null;
+      const amount = parseInt(match[1], 10);
+      const unit = match[2].toLowerCase();
+      const unitMs: Record<string, number> = {
+        s: 1000,
+        m: 60 * 1000,
+        h: 60 * 60 * 1000,
+        d: 24 * 60 * 60 * 1000,
+        w: 7 * 24 * 60 * 60 * 1000,
+      };
+      const scale = unitMs[unit];
+      if (!scale) return null;
+      return amount * scale;
+    };
+
+    const baseTimestamp =
+      normalizeTimestamp(selectedDatasetMeta.indicator_first_ts) ??
+      normalizeTimestamp(selectedDatasetMeta.ohlcv_first_ts);
+    const barIntervalMs = granularityToMs(selectedDatasetMeta.granularity || "1h");
+
+    if (!baseTimestamp || !barIntervalMs) {
+      return null;
+    }
+    return { baseTimestamp, barIntervalMs };
+  }, [selectedDatasetMeta]);
 
   // Handle loading a saved run from Stage1
   const handleLoadRun = (run: Stage1RunDetail) => {
@@ -364,6 +412,15 @@ const WalkforwardDashboard = () => {
       return;
     }
 
+    if (!datasetTimeMeta) {
+      toast({
+        title: "Dataset timestamps unavailable",
+        description: "Please ensure the dataset metadata includes granularity and first timestamp.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const parseRangeValue = (label: string, value: string) => {
       const parsed = Number(value);
       if (!Number.isFinite(parsed)) {
@@ -410,22 +467,26 @@ const WalkforwardDashboard = () => {
 
       const targetColumn = foldTarget || currentRun.target_column || "forward_return_1h";
 
+      const indexToTimestamp = (idx: number) =>
+        datasetTimeMeta.baseTimestamp + idx * datasetTimeMeta.barIntervalMs;
+
+      const rangeIndicesToTimestamps = (startIdx: number, endIdx: number) => {
+        const safeStart = Math.max(0, Math.floor(startIdx));
+        const safeEndExclusive = Math.max(safeStart + 1, Math.floor(endIdx));
+        const endInclusive = safeEndExclusive - 1;
+        return {
+          start_timestamp: indexToTimestamp(safeStart),
+          end_timestamp: indexToTimestamp(endInclusive),
+        };
+      };
+
       const datasetPayload = {
         dataset_id: datasetId,
         feature_columns: featureColumns,
         target_column: targetColumn,
-        train: {
-          start_timestamp: trainStartValue,
-          end_timestamp: Math.max(validationStart, trainStartValue + 1),
-        },
-        validation: {
-          start_timestamp: Math.max(validationStart, trainStartValue + 1),
-          end_timestamp: trainEndValue,
-        },
-        test: {
-          start_timestamp: testStartValue,
-          end_timestamp: testEndValue,
-        },
+        train: rangeIndicesToTimestamps(trainStartValue, validationStart),
+        validation: rangeIndicesToTimestamps(validationStart, trainEndValue),
+        test: rangeIndicesToTimestamps(testStartValue, testEndValue),
       };
 
       const configPayload = {
