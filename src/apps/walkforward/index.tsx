@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { SimulationHeader } from "@/apps/walkforward/components/SimulationHeader";
 import { LoadRunModal } from "@/apps/walkforward/components/LoadRunModal";
 import { ConfigurationPanel } from "@/apps/walkforward/components/ConfigurationPanel";
@@ -16,11 +16,10 @@ import type { Stage1RunDetail } from "@/lib/stage1/types";
 import { useDatasetContext } from "@/contexts/DatasetContext";
 import { xgboostClient } from "@/lib/services/xgboostClient";
 import type { XGBoostTrainResult } from "@/lib/types/xgboost";
-import { useStage1Datasets } from "@/apps/walkforward/lib/hooks";
+import { getDatasetIndicators } from "@/lib/stage1/client";
 
 const WalkforwardDashboard = () => {
   const { selectedDataset } = useDatasetContext();
-  const { data: stage1Datasets } = useStage1Datasets();
   // Run selection
   const [loadRunModalOpen, setLoadRunModalOpen] = useState(false);
   const [loadedRuns, setLoadedRuns] = useState<Stage1RunDetail[]>([]);
@@ -74,52 +73,60 @@ const WalkforwardDashboard = () => {
   const [testModelResult, setTestModelResult] = useState<XGBoostTrainResult | null>(null);
   const [testModelError, setTestModelError] = useState<string | null>(null);
   const [isTestModelRunning, setIsTestModelRunning] = useState(false);
+  const [datasetTimestamps, setDatasetTimestamps] = useState<Record<string, number[]>>({});
 
-  const selectedDatasetMeta = useMemo(
-    () => stage1Datasets?.find((dataset) => dataset.dataset_id === selectedDataset) ?? null,
-    [stage1Datasets, selectedDataset]
+  const parseTimestampValue = useCallback((value: unknown): number | null => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value < 3e12 ? value * 1000 : value;
+    }
+    if (typeof value === "string" && value.length) {
+      const normalized = value.includes("T") || value.endsWith("Z") ? value : `${value.replace(" ", "T")}Z`;
+      const parsed = Date.parse(normalized);
+      if (!Number.isNaN(parsed)) {
+        return parsed;
+      }
+    }
+    return null;
+  }, []);
+
+  const extractTimestampFromRow = useCallback(
+    (row: Record<string, unknown>): number => {
+      const candidates = [row.timestamp, row.timestamp_unix, row.ts, row.time];
+      for (const candidate of candidates) {
+        const parsed = parseTimestampValue(candidate);
+        if (parsed != null) {
+          return parsed;
+        }
+      }
+      throw new Error("Row is missing a usable timestamp column.");
+    },
+    [parseTimestampValue]
   );
 
-  const datasetTimeMeta = useMemo(() => {
-    if (!selectedDatasetMeta) return null;
-
-    const normalizeTimestamp = (value?: number | string | null) => {
-      if (value == null) return null;
-      if (typeof value === "number") {
-        return value < 3e12 ? value * 1000 : value;
+  const ensureDatasetTimestamps = useCallback(
+    async (datasetId: string, requiredIndex: number) => {
+      const existing = datasetTimestamps[datasetId];
+      if (existing && existing.length > requiredIndex) {
+        return existing;
       }
-      const parsed = Date.parse(value);
-      return Number.isFinite(parsed) ? parsed : null;
-    };
-
-    const granularityToMs = (granularity?: string) => {
-      if (!granularity) return null;
-      const match = granularity.trim().match(/(\d+)\s*([smhdw])/i);
-      if (!match) return null;
-      const amount = parseInt(match[1], 10);
-      const unit = match[2].toLowerCase();
-      const unitMs: Record<string, number> = {
-        s: 1000,
-        m: 60 * 1000,
-        h: 60 * 60 * 1000,
-        d: 24 * 60 * 60 * 1000,
-        w: 7 * 24 * 60 * 60 * 1000,
-      };
-      const scale = unitMs[unit];
-      if (!scale) return null;
-      return amount * scale;
-    };
-
-    const baseTimestamp =
-      normalizeTimestamp(selectedDatasetMeta.indicator_first_ts) ??
-      normalizeTimestamp(selectedDatasetMeta.ohlcv_first_ts);
-    const barIntervalMs = granularityToMs(selectedDatasetMeta.granularity || "1h");
-
-    if (!baseTimestamp || !barIntervalMs) {
-      return null;
-    }
-    return { baseTimestamp, barIntervalMs };
-  }, [selectedDatasetMeta]);
+      const limit = Math.max(requiredIndex + 1, 1);
+      const response = await getDatasetIndicators(datasetId, { limit, desc: false });
+      if (!response.success || !response.data) {
+        throw new Error(response.error || "Failed to load dataset timestamps from Stage1.");
+      }
+      const rows = response.data.rows ?? [];
+      if (rows.length <= requiredIndex) {
+        throw new Error("Dataset does not contain enough rows to cover the requested fold window.");
+      }
+      const timestamps = rows.map((row) => extractTimestampFromRow(row as Record<string, unknown>));
+      setDatasetTimestamps((prev) => ({
+        ...prev,
+        [datasetId]: timestamps,
+      }));
+      return timestamps;
+    },
+    [datasetTimestamps, extractTimestampFromRow]
+  );
 
   // Handle loading a saved run from Stage1
   const handleLoadRun = (run: Stage1RunDetail) => {
@@ -412,15 +419,6 @@ const WalkforwardDashboard = () => {
       return;
     }
 
-    if (!datasetTimeMeta) {
-      toast({
-        title: "Dataset timestamps unavailable",
-        description: "Please ensure the dataset metadata includes granularity and first timestamp.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     const parseRangeValue = (label: string, value: string) => {
       const parsed = Number(value);
       if (!Number.isFinite(parsed)) {
@@ -430,6 +428,9 @@ const WalkforwardDashboard = () => {
     };
 
     try {
+      setIsTestModelRunning(true);
+      setTestModelError(null);
+
       const trainStartValue = parseRangeValue("Train start", foldTrainStart);
       const trainEndValue = parseRangeValue("Train end", foldTrainEnd);
       const testStartValue = parseRangeValue("Test start", foldTestStart);
@@ -467,16 +468,23 @@ const WalkforwardDashboard = () => {
 
       const targetColumn = foldTarget || currentRun.target_column || "forward_return_1h";
 
-      const indexToTimestamp = (idx: number) =>
-        datasetTimeMeta.baseTimestamp + idx * datasetTimeMeta.barIntervalMs;
+      const maxIndexNeeded = Math.max(validationStart, trainEndValue, testEndValue);
+      const timestamps = await ensureDatasetTimestamps(datasetId, maxIndexNeeded);
 
-      const rangeIndicesToTimestamps = (startIdx: number, endIdx: number) => {
+      const rangeIndicesToTimestamps = (startIdx: number, endIdxExclusive: number) => {
         const safeStart = Math.max(0, Math.floor(startIdx));
-        const safeEndExclusive = Math.max(safeStart + 1, Math.floor(endIdx));
-        const endInclusive = safeEndExclusive - 1;
+        const safeEndExclusive = Math.max(safeStart + 1, Math.floor(endIdxExclusive));
+        if (safeEndExclusive > timestamps.length) {
+          throw new Error("Timestamp cache is missing rows for the requested range.");
+        }
+        const startTs = timestamps[safeStart];
+        const endTs = timestamps[safeEndExclusive - 1];
+        if (startTs == null || endTs == null) {
+          throw new Error("Timestamp data is incomplete for the requested range.");
+        }
         return {
-          start_timestamp: indexToTimestamp(safeStart),
-          end_timestamp: indexToTimestamp(endInclusive),
+          start_timestamp: startTs,
+          end_timestamp: endTs,
         };
       };
 
@@ -512,8 +520,6 @@ const WalkforwardDashboard = () => {
         allow_cpu_fallback: true,
       };
 
-      setIsTestModelRunning(true);
-      setTestModelError(null);
       toast({
         title: "Training started",
         description: `GPU retrain triggered for fold ${fold.fold_number}`,

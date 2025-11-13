@@ -71,6 +71,20 @@ export interface Stage1RunDetail {
   duration_ms?: number;
 }
 
+export interface Stage1IndicatorRow {
+  timestamp?: string;
+  timestamp_unix?: number;
+  ts?: string;
+  time?: string;
+  [key: string]: unknown;
+}
+
+export interface Stage1IndicatorResponse {
+  measurement: string;
+  count: number;
+  rows: Stage1IndicatorRow[];
+}
+
 // API Response wrapper
 export interface Stage1ApiResponse<T> {
   data?: T;

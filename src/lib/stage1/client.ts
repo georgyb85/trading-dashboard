@@ -12,6 +12,7 @@ import type {
   BuildIndicatorsResponse,
   SimulateTradesRequest,
   SimulateTradesResponse,
+  Stage1IndicatorResponse,
 } from './types';
 
 class Stage1Client {
@@ -126,6 +127,22 @@ class Stage1Client {
   }
 
   /**
+   * Fetch indicator rows for a dataset (ascending when desc=false)
+   */
+  async getDatasetIndicators(
+    datasetId: string,
+    { limit, desc, offset }: { limit?: number; desc?: boolean; offset?: number } = {}
+  ): Promise<Stage1ApiResponse<Stage1IndicatorResponse>> {
+    const params = new URLSearchParams();
+    if (typeof limit === 'number') params.append('limit', String(limit));
+    if (typeof desc === 'boolean') params.append('desc', desc ? 'true' : 'false');
+    if (typeof offset === 'number') params.append('offset', String(offset));
+    const qs = params.toString();
+    const path = qs ? `/api/datasets/${datasetId}/indicators?${qs}` : `/api/datasets/${datasetId}/indicators`;
+    return this.request<Stage1IndicatorResponse>(path);
+  }
+
+  /**
    * Validate indicator script
    */
   async validateIndicatorScript(script: string): Promise<Stage1ApiResponse<ValidateScriptResponse>> {
@@ -171,6 +188,11 @@ export const getRun = (runId: string) =>
 
 export const getRunPredictions = (runId: string, format?: string) =>
   stage1Client.getRunPredictions(runId, format);
+
+export const getDatasetIndicators = (
+  datasetId: string,
+  params?: { limit?: number; desc?: boolean; offset?: number }
+) => stage1Client.getDatasetIndicators(datasetId, params);
 
 export const validateIndicatorScript = (script: string) =>
   stage1Client.validateIndicatorScript(script);
