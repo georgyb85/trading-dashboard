@@ -281,6 +281,10 @@ const WalkforwardDashboard = () => {
 
   // Handle examining a fold
   const handleExamineFold = (runIndex: number, fold: any) => {
+    console.log('[handleExamineFold] Called with runIndex:', runIndex, 'fold:', fold);
+    console.log('[handleExamineFold] Current loadedRuns.length:', loadedRuns.length);
+    console.log('[handleExamineFold] loadedRuns[runIndex]:', loadedRuns[runIndex]);
+
     setExaminedFold({ runIndex, fold });
     setFoldTrainStart(fold.train_start_idx.toString());
     setFoldTrainEnd(fold.train_end_idx.toString());
@@ -315,6 +319,11 @@ const WalkforwardDashboard = () => {
   }, [examinedFold, loadedRuns]);
 
   const handleTrainFold = async () => {
+    console.log('[handleTrainFold] Starting training...');
+    console.log('[handleTrainFold] examinedFold:', examinedFold);
+    console.log('[handleTrainFold] loadedRuns:', loadedRuns);
+    console.log('[handleTrainFold] loadedRuns.length:', loadedRuns.length);
+
     if (!examinedFold) {
       toast({
         title: "No fold selected",
@@ -324,10 +333,19 @@ const WalkforwardDashboard = () => {
       return;
     }
 
+    console.log('[handleTrainFold] examinedFold.runIndex:', examinedFold.runIndex);
+    console.log('[handleTrainFold] Attempting to access loadedRuns[' + examinedFold.runIndex + ']');
+
     const currentRun = loadedRuns[examinedFold.runIndex];
     const fold = examinedFold.fold;
 
+    console.log('[handleTrainFold] currentRun:', currentRun);
+    console.log('[handleTrainFold] fold:', fold);
+
     if (!currentRun || !fold) {
+      console.error('[handleTrainFold] Missing currentRun or fold!');
+      console.error('[handleTrainFold] currentRun exists:', !!currentRun);
+      console.error('[handleTrainFold] fold exists:', !!fold);
       toast({
         title: "Unable to determine fold",
         description: "Reload the run and try again.",
