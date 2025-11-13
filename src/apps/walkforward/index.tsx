@@ -478,7 +478,8 @@ const WalkforwardDashboard = () => {
           throw new Error("Timestamp cache is missing rows for the requested range.");
         }
         const startTs = timestamps[safeStart];
-        const endTs = timestamps[safeEndExclusive - 1];
+        const lastBarTs = timestamps[safeEndExclusive - 1];
+        const endTs = lastBarTs + 1; // make the window exclusive to satisfy backend validation
         if (startTs == null || endTs == null) {
           throw new Error("Timestamp data is incomplete for the requested range.");
         }
