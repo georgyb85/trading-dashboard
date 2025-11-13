@@ -7,8 +7,8 @@ export const config = {
   // Optional Stage1 API token
   stage1ApiToken: import.meta.env.VITE_STAGE1_API_TOKEN || '',
 
-  // Kraken XGBoost WebSocket endpoint
-  krakenXgboostWsUrl: import.meta.env.VITE_KRAKEN_XGBOOST_WS_URL || 'ws://220.82.52.202:51187/xgboost',
+  // Kraken XGBoost WebSocket endpoint (proxied through nginx for SSL)
+  krakenXgboostWsUrl: import.meta.env.VITE_KRAKEN_XGBOOST_WS_URL || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/xgboost-ws`,
 
   // Environment
   isDev: import.meta.env.DEV,
