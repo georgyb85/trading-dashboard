@@ -89,18 +89,56 @@ const WalkforwardDashboard = () => {
     return null;
   }, []);
 
+  const buildTimestampFromDateParts = useCallback((dateValue: unknown, timeValue: unknown): number | null => {
+    const parseDate = (val: unknown): { year: number; month: number; day: number } | null => {
+      if (typeof val !== "number" && typeof val !== "string") return null;
+      const str = typeof val === "number" ? val.toString() : val;
+      const clean = str.replace(/\D/g, "");
+      if (clean.length !== 8) return null;
+      const year = parseInt(clean.slice(0, 4), 10);
+      const month = parseInt(clean.slice(4, 6), 10);
+      const day = parseInt(clean.slice(6, 8), 10);
+      if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+      return { year, month, day };
+    };
+
+    const parseTime = (val: unknown): { hour: number; minute: number } | null => {
+      if (typeof val !== "number" && typeof val !== "string") return null;
+      const str = typeof val === "number" ? val.toString() : val;
+      const clean = str.replace(/\D/g, "");
+      if (!clean.length) return null;
+      const num = parseInt(clean, 10);
+      if (!Number.isFinite(num)) return null;
+      const hour = Math.floor(num / 100);
+      const minute = num % 100;
+      if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+      return { hour, minute };
+    };
+
+    const dateParts = parseDate(dateValue);
+    const timeParts = parseTime(timeValue ?? 0);
+    if (!dateParts || !timeParts) return null;
+
+    const ts = Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, timeParts.hour, timeParts.minute);
+    return Number.isFinite(ts) ? ts : null;
+  }, []);
+
   const extractTimestampFromRow = useCallback(
     (row: Record<string, unknown>): number => {
       const candidates = [row.timestamp, row.timestamp_unix, row.ts, row.time];
       for (const candidate of candidates) {
         const parsed = parseTimestampValue(candidate);
-        if (parsed != null) {
+        if (parsed != null && parsed !== 0) {
           return parsed;
         }
       }
+      const fallback = buildTimestampFromDateParts(row.Date ?? row.date, row.Time ?? row.time);
+      if (fallback != null) {
+        return fallback;
+      }
       throw new Error("Row is missing a usable timestamp column.");
     },
-    [parseTimestampValue]
+    [parseTimestampValue, buildTimestampFromDateParts]
   );
 
   const ensureDatasetTimestamps = useCallback(
