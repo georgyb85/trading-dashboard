@@ -13,6 +13,8 @@ import type {
   SimulateTradesRequest,
   SimulateTradesResponse,
   Stage1IndicatorResponse,
+  Stage1DatasetManifest,
+  Stage1IndexMapResponse,
 } from './types';
 
 class Stage1Client {
@@ -143,6 +145,29 @@ class Stage1Client {
   }
 
   /**
+   * Fetch dataset manifest (interval, lookback, bounds)
+   */
+  async getDatasetManifest(datasetId: string): Promise<Stage1ApiResponse<Stage1DatasetManifest>> {
+    return this.request<Stage1DatasetManifest>(`/api/datasets/${datasetId}/manifest`);
+  }
+
+  /**
+   * Fetch index→timestamp mapping without pulling full indicator rows
+   */
+  async getDatasetIndexMap(
+    datasetId: string,
+    { startIdx, endIdx, type }: { startIdx: number; endIdx: number; type?: 'indicator' | 'ohlcv' }
+  ): Promise<Stage1ApiResponse<Stage1IndexMapResponse>> {
+    const params = new URLSearchParams();
+    params.append('start_idx', String(startIdx));
+    params.append('end_idx', String(endIdx));
+    if (type) {
+      params.append('type', type);
+    }
+    return this.request<Stage1IndexMapResponse>(`/api/datasets/${datasetId}/index_map?${params.toString()}`);
+  }
+
+  /**
    * Validate indicator script
    */
   async validateIndicatorScript(script: string): Promise<Stage1ApiResponse<ValidateScriptResponse>> {
@@ -193,6 +218,14 @@ export const getDatasetIndicators = (
   datasetId: string,
   params?: { limit?: number; desc?: boolean; offset?: number }
 ) => stage1Client.getDatasetIndicators(datasetId, params);
+
+export const getDatasetManifest = (datasetId: string) =>
+  stage1Client.getDatasetManifest(datasetId);
+
+export const getDatasetIndexMap = (
+  datasetId: string,
+  params: { startIdx: number; endIdx: number; type?: 'indicator' | 'ohlcv' }
+) => stage1Client.getDatasetIndexMap(datasetId, params);
 
 export const validateIndicatorScript = (script: string) =>
   stage1Client.validateIndicatorScript(script);

@@ -85,6 +85,37 @@ export interface Stage1IndicatorResponse {
   rows: Stage1IndicatorRow[];
 }
 
+export interface Stage1DatasetManifest {
+  version: number;
+  dataset_id: string;
+  dataset_slug: string;
+  granularity: string;
+  source: string;
+  ohlcv_measurement: string;
+  indicator_measurement: string;
+  bar_interval_ms: number;
+  lookback_rows: number;
+  first_ohlcv_timestamp_ms: number;
+  last_ohlcv_timestamp_ms: number;
+  first_indicator_timestamp_ms: number;
+  last_indicator_timestamp_ms: number;
+  ohlcv_rows: number;
+  indicator_rows: number;
+  exported_at?: string;
+}
+
+export interface Stage1IndexMapRow {
+  index: number;
+  timestamp_ms: number;
+}
+
+export interface Stage1IndexMapResponse {
+  measurement: string;
+  start_index: number;
+  end_index: number;
+  rows: Stage1IndexMapRow[];
+}
+
 // API Response wrapper
 export interface Stage1ApiResponse<T> {
   data?: T;

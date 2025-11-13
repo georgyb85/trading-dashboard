@@ -12,11 +12,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
-import type { Stage1RunDetail } from "@/lib/stage1/types";
+import type { Stage1RunDetail, Stage1DatasetManifest } from "@/lib/stage1/types";
 import { useDatasetContext } from "@/contexts/DatasetContext";
 import { xgboostClient } from "@/lib/services/xgboostClient";
 import type { XGBoostTrainResult } from "@/lib/types/xgboost";
-import { getDatasetIndicators } from "@/lib/stage1/client";
+import { getDatasetManifest, getDatasetIndexMap } from "@/lib/stage1/client";
 
 const WalkforwardDashboard = () => {
   const { selectedDataset } = useDatasetContext();
@@ -73,97 +73,56 @@ const WalkforwardDashboard = () => {
   const [testModelResult, setTestModelResult] = useState<XGBoostTrainResult | null>(null);
   const [testModelError, setTestModelError] = useState<string | null>(null);
   const [isTestModelRunning, setIsTestModelRunning] = useState(false);
-  const [datasetTimestamps, setDatasetTimestamps] = useState<Record<string, number[]>>({});
+  const [datasetManifests, setDatasetManifests] = useState<Record<string, Stage1DatasetManifest>>({});
+  const [indexCaches, setIndexCaches] = useState<Record<string, Record<number, number>>>({});
 
-  const parseTimestampValue = useCallback((value: unknown): number | null => {
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return value < 3e12 ? value * 1000 : value;
-    }
-    if (typeof value === "string" && value.length) {
-      const normalized = value.includes("T") || value.endsWith("Z") ? value : `${value.replace(" ", "T")}Z`;
-      const parsed = Date.parse(normalized);
-      if (!Number.isNaN(parsed)) {
-        return parsed;
+  const ensureManifest = useCallback(
+    async (datasetId: string) => {
+      if (datasetManifests[datasetId]) {
+        return datasetManifests[datasetId];
       }
-    }
-    return null;
-  }, []);
-
-  const buildTimestampFromDateParts = useCallback((dateValue: unknown, timeValue: unknown): number | null => {
-    const parseDate = (val: unknown): { year: number; month: number; day: number } | null => {
-      if (typeof val !== "number" && typeof val !== "string") return null;
-      const str = typeof val === "number" ? val.toString() : val;
-      const clean = str.replace(/\D/g, "");
-      if (clean.length !== 8) return null;
-      const year = parseInt(clean.slice(0, 4), 10);
-      const month = parseInt(clean.slice(4, 6), 10);
-      const day = parseInt(clean.slice(6, 8), 10);
-      if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
-      return { year, month, day };
-    };
-
-    const parseTime = (val: unknown): { hour: number; minute: number } | null => {
-      if (typeof val !== "number" && typeof val !== "string") return null;
-      const str = typeof val === "number" ? val.toString() : val;
-      const clean = str.replace(/\D/g, "");
-      if (!clean.length) return null;
-      const num = parseInt(clean, 10);
-      if (!Number.isFinite(num)) return null;
-      const hour = Math.floor(num / 100);
-      const minute = num % 100;
-      if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
-      return { hour, minute };
-    };
-
-    const dateParts = parseDate(dateValue);
-    const timeParts = parseTime(timeValue ?? 0);
-    if (!dateParts || !timeParts) return null;
-
-    const ts = Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, timeParts.hour, timeParts.minute);
-    return Number.isFinite(ts) ? ts : null;
-  }, []);
-
-  const extractTimestampFromRow = useCallback(
-    (row: Record<string, unknown>): number => {
-      const candidates = [row.timestamp, row.timestamp_unix, row.ts, row.time];
-      for (const candidate of candidates) {
-        const parsed = parseTimestampValue(candidate);
-        if (parsed != null && parsed !== 0) {
-          return parsed;
-        }
+      const response = await getDatasetManifest(datasetId);
+      if (!response.success || !response.data) {
+        throw new Error(response.error || "Failed to load dataset manifest.");
       }
-      const fallback = buildTimestampFromDateParts(row.Date ?? row.date, row.Time ?? row.time);
-      if (fallback != null) {
-        return fallback;
-      }
-      throw new Error("Row is missing a usable timestamp column.");
+      const manifest = response.data;
+      setDatasetManifests((prev) => ({
+        ...prev,
+        [datasetId]: manifest,
+      }));
+      return manifest;
     },
-    [parseTimestampValue, buildTimestampFromDateParts]
+    [datasetManifests]
   );
 
-  const ensureDatasetTimestamps = useCallback(
-    async (datasetId: string, requiredIndex: number) => {
-      const existing = datasetTimestamps[datasetId];
-      if (existing && existing.length > requiredIndex) {
-        return existing;
+  const ensureIndexRange = useCallback(
+    async (datasetId: string, startIdx: number, endIdx: number) => {
+      const current = indexCaches[datasetId] || {};
+      let missing = false;
+      for (let idx = startIdx; idx < endIdx; idx++) {
+        if (current[idx] == null) {
+          missing = true;
+          break;
+        }
       }
-      const limit = Math.max(requiredIndex + 1, 1);
-      const response = await getDatasetIndicators(datasetId, { limit, desc: false });
+      if (!missing) {
+        return current;
+      }
+      const response = await getDatasetIndexMap(datasetId, { startIdx, endIdx, type: "indicator" });
       if (!response.success || !response.data) {
-        throw new Error(response.error || "Failed to load dataset timestamps from Stage1.");
+        throw new Error(response.error || "Failed to load dataset index map.");
       }
-      const rows = response.data.rows ?? [];
-      if (rows.length <= requiredIndex) {
-        throw new Error("Dataset does not contain enough rows to cover the requested fold window.");
+      const updated = { ...current };
+      for (const row of response.data.rows ?? []) {
+        updated[row.index] = row.timestamp_ms;
       }
-      const timestamps = rows.map((row) => extractTimestampFromRow(row as Record<string, unknown>));
-      setDatasetTimestamps((prev) => ({
+      setIndexCaches((prev) => ({
         ...prev,
-        [datasetId]: timestamps,
+        [datasetId]: updated,
       }));
-      return timestamps;
+      return updated;
     },
-    [datasetTimestamps, extractTimestampFromRow]
+    [indexCaches]
   );
 
   // Handle loading a saved run from Stage1
@@ -506,24 +465,21 @@ const WalkforwardDashboard = () => {
 
       const targetColumn = foldTarget || currentRun.target_column || "forward_return_1h";
 
-      const maxIndexNeeded = Math.max(validationStart, trainEndValue, testEndValue);
-      const timestamps = await ensureDatasetTimestamps(datasetId, maxIndexNeeded);
+      const manifest = await ensureManifest(datasetId);
+      const barIntervalMs = manifest.bar_interval_ms > 0 ? manifest.bar_interval_ms : 1;
 
-      const rangeIndicesToTimestamps = (startIdx: number, endIdxExclusive: number) => {
+      const rangeIndicesToTimestamps = async (startIdx: number, endIdxExclusive: number) => {
         const safeStart = Math.max(0, Math.floor(startIdx));
         const safeEndExclusive = Math.max(safeStart + 1, Math.floor(endIdxExclusive));
-        if (safeEndExclusive > timestamps.length) {
-          throw new Error("Timestamp cache is missing rows for the requested range.");
-        }
-        const startTs = timestamps[safeStart];
-        const lastBarTs = timestamps[safeEndExclusive - 1];
-        const endTs = lastBarTs + 1; // make the window exclusive to satisfy backend validation
-        if (startTs == null || endTs == null) {
-          throw new Error("Timestamp data is incomplete for the requested range.");
+        const cache = await ensureIndexRange(datasetId, safeStart, safeEndExclusive);
+        const startTs = cache[safeStart];
+        const lastBarTs = cache[safeEndExclusive - 1];
+        if (startTs == null || lastBarTs == null) {
+          throw new Error("Index map is missing timestamps for the requested range.");
         }
         return {
           start_timestamp: startTs,
-          end_timestamp: endTs,
+          end_timestamp: lastBarTs + barIntervalMs,
         };
       };
 
@@ -531,9 +487,9 @@ const WalkforwardDashboard = () => {
         dataset_id: datasetId,
         feature_columns: featureColumns,
         target_column: targetColumn,
-        train: rangeIndicesToTimestamps(trainStartValue, validationStart),
-        validation: rangeIndicesToTimestamps(validationStart, trainEndValue),
-        test: rangeIndicesToTimestamps(testStartValue, testEndValue),
+        train: await rangeIndicesToTimestamps(trainStartValue, validationStart),
+        validation: await rangeIndicesToTimestamps(validationStart, trainEndValue),
+        test: await rangeIndicesToTimestamps(testStartValue, testEndValue),
       };
 
       const configPayload = {
