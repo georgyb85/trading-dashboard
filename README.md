@@ -30,6 +30,14 @@ The app expects browser access to:
 
 Update `.env` or inline configuration in the hooks to point to your infrastructure.
 
+### Key Environment Variables
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `VITE_STAGE1_API_BASE_URL` | `https://agenticresearch.info` | Stage1 Drogon REST base URL |
+| `VITE_STAGE1_API_TOKEN` | _(empty)_ | Optional auth token forwarded as `X-Stage1-Token` |
+| `VITE_KRAKEN_XGBOOST_WS_URL` | `ws://220.82.52.202:51187/xgboost` | Kraken GPU WebSocket endpoint used by the Test Model tab |
+
 ## Deployment
 
 `npm run build` outputs `/dist` containing `index.html` and hashed static assets.  

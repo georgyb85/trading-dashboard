@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Loader2 } from "lucide-react";
 
 interface FoldConfigPanelProps {
   run: number;
@@ -23,6 +24,8 @@ interface FoldConfigPanelProps {
   onTargetChange: (target: string) => void;
   onTradingThresholdChange: (value: string) => void;
   onTrain: () => void;
+  availableFeatures?: string[];
+  isTraining?: boolean;
 }
 
 const AVAILABLE_FEATURES = [
@@ -51,7 +54,11 @@ export const FoldConfigPanel = ({
   onTargetChange,
   onTradingThresholdChange,
   onTrain,
+  availableFeatures,
+  isTraining = false,
 }: FoldConfigPanelProps) => {
+  const resolvedFeatureOptions = (availableFeatures?.length ? [...availableFeatures] : [...AVAILABLE_FEATURES]);
+
   const toggleFeature = (feature: string) => {
     if (features.includes(feature)) {
       onFeaturesChange(features.filter((f) => f !== feature));
@@ -60,7 +67,7 @@ export const FoldConfigPanel = ({
     }
   };
 
-  const selectAllFeatures = () => onFeaturesChange([...AVAILABLE_FEATURES]);
+  const selectAllFeatures = () => onFeaturesChange([...resolvedFeatureOptions]);
   const clearAllFeatures = () => onFeaturesChange([]);
 
   return (
@@ -139,7 +146,7 @@ export const FoldConfigPanel = ({
               </div>
               <ScrollArea className="h-32 border rounded-md p-2">
                 <div className="space-y-1">
-                  {AVAILABLE_FEATURES.map((feature) => (
+                  {resolvedFeatureOptions.map((feature) => (
                     <div key={feature} className="flex items-center space-x-2">
                       <Checkbox 
                         id={feature}
@@ -204,8 +211,15 @@ export const FoldConfigPanel = ({
           </div>
         </Card>
 
-        <Button className="w-full" onClick={onTrain}>
-          Train & Test Model
+        <Button className="w-full" onClick={onTrain} disabled={isTraining}>
+          {isTraining ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Training...
+            </>
+          ) : (
+            'Train & Test Model'
+          )}
         </Button>
       </div>
     </ScrollArea>

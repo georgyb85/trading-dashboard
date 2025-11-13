@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { SimulationHeader } from "@/apps/walkforward/components/SimulationHeader";
 import { LoadRunModal } from "@/apps/walkforward/components/LoadRunModal";
 import { ConfigurationPanel } from "@/apps/walkforward/components/ConfigurationPanel";
@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import type { Stage1RunDetail } from "@/lib/stage1/types";
 import { useDatasetContext } from "@/contexts/DatasetContext";
+import { xgboostClient } from "@/lib/services/xgboostClient";
+import type { XGBoostTrainResult } from "@/lib/types/xgboost";
 
 const WalkforwardDashboard = () => {
   const { selectedDataset } = useDatasetContext();
@@ -67,6 +69,9 @@ const WalkforwardDashboard = () => {
   const [foldFeatures, setFoldFeatures] = useState<string[]>([]);
   const [foldTarget, setFoldTarget] = useState("");
   const [foldTradingThreshold, setFoldTradingThreshold] = useState("0.798373");
+  const [testModelResult, setTestModelResult] = useState<XGBoostTrainResult | null>(null);
+  const [testModelError, setTestModelError] = useState<string | null>(null);
+  const [isTestModelRunning, setIsTestModelRunning] = useState(false);
 
   // Handle loading a saved run from Stage1
   const handleLoadRun = (run: Stage1RunDetail) => {
@@ -261,21 +266,181 @@ const WalkforwardDashboard = () => {
     setFoldTrainEnd(fold.train_end_idx.toString());
     setFoldTestStart(fold.test_start_idx.toString());
     setFoldTestEnd(fold.test_end_idx.toString());
+    setTestModelResult(null);
+    setTestModelError(null);
 
     const currentRun = loadedRuns[runIndex];
     if (currentRun) {
-      setFoldFeatures(currentRun.feature_columns ?? []);
+      const features = Array.isArray(currentRun.feature_columns) ? currentRun.feature_columns : [];
+      setFoldFeatures(features);
       setFoldTarget(currentRun.target_column ?? "");
-      setFoldTradingThreshold((fold.thresholds?.prediction_scaled ?? 0).toString());
+      const thresholdValue =
+        (fold.thresholds?.long_optimal ??
+          fold.thresholds?.long_percentile_95 ??
+          fold.thresholds?.prediction_scaled ??
+          0).toString();
+      setFoldTradingThreshold(thresholdValue);
     }
     setViewMode("testModel");
   };
 
-  const handleTrainFold = () => {
-    toast({
-      title: "Training Started",
-      description: "Model training and testing in progress...",
-    });
+  const resolvedFeatureColumns = useMemo(() => {
+    if (!examinedFold) return [];
+    const currentRun = loadedRuns[examinedFold.runIndex];
+    if (!currentRun) return [];
+    if (Array.isArray(currentRun.feature_columns)) {
+      return currentRun.feature_columns;
+    }
+    return [];
+  }, [examinedFold, loadedRuns]);
+
+  const handleTrainFold = async () => {
+    if (!examinedFold) {
+      toast({
+        title: "No fold selected",
+        description: "Select a fold from the Simulation tab before training.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const currentRun = loadedRuns[examinedFold.runIndex];
+    const fold = examinedFold.fold;
+
+    if (!currentRun || !fold) {
+      toast({
+        title: "Unable to determine fold",
+        description: "Reload the run and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const datasetId = currentRun.dataset_id || currentRun.run_id;
+    if (!datasetId) {
+      toast({
+        title: "Dataset missing",
+        description: "Run metadata does not include dataset information.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const parseRangeValue = (label: string, value: string) => {
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed)) {
+        throw new Error(`${label} must be a number`);
+      }
+      return parsed;
+    };
+
+    try {
+      const trainStartValue = parseRangeValue("Train start", foldTrainStart);
+      const trainEndValue = parseRangeValue("Train end", foldTrainEnd);
+      const testStartValue = parseRangeValue("Test start", foldTestStart);
+      const testEndValue = parseRangeValue("Test end", foldTestEnd);
+
+      if (trainStartValue >= trainEndValue) {
+        throw new Error("Train start must be less than train end.");
+      }
+      if (testStartValue >= testEndValue) {
+        throw new Error("Test start must be less than test end.");
+      }
+
+      const hyper = (currentRun.hyperparameters || {}) as Record<string, any>;
+      const valSplit = typeof hyper.val_split_ratio === "number" ? hyper.val_split_ratio : 0.8;
+      const trainWindow = trainEndValue - trainStartValue;
+      const rawValidationBoundary = trainStartValue + Math.floor(trainWindow * valSplit);
+      const safeMidpoint = trainStartValue + Math.floor(trainWindow / 2);
+      let validationStart = rawValidationBoundary;
+      if (!Number.isFinite(validationStart) || validationStart <= trainStartValue || validationStart >= trainEndValue) {
+        validationStart = safeMidpoint;
+      }
+      validationStart = Math.max(trainStartValue + 1, validationStart);
+      validationStart = Math.min(trainEndValue - 1, validationStart);
+
+      const featureColumns =
+        foldFeatures.length > 0
+          ? foldFeatures
+          : Array.isArray(currentRun.feature_columns)
+          ? currentRun.feature_columns
+          : [];
+
+      if (!featureColumns.length) {
+        throw new Error("Feature list is empty – unable to train model.");
+      }
+
+      const targetColumn = foldTarget || currentRun.target_column || "forward_return_1h";
+
+      const datasetPayload = {
+        dataset_id: datasetId,
+        feature_columns: featureColumns,
+        target_column: targetColumn,
+        train: {
+          start_timestamp: trainStartValue,
+          end_timestamp: Math.max(validationStart, trainStartValue + 1),
+        },
+        validation: {
+          start_timestamp: Math.max(validationStart, trainStartValue + 1),
+          end_timestamp: trainEndValue,
+        },
+        test: {
+          start_timestamp: testStartValue,
+          end_timestamp: testEndValue,
+        },
+      };
+
+      const configPayload = {
+        learning_rate: hyper.learning_rate ?? learningRate,
+        max_depth: hyper.max_depth ?? maxDepth,
+        min_child_weight: hyper.min_child_weight ?? minChildWeight,
+        subsample: hyper.subsample ?? subsample,
+        colsample_bytree: hyper.colsample_bytree ?? colsampleBytree,
+        lambda: hyper.lambda ?? lambda,
+        num_boost_round: hyper.num_boost_round ?? numRounds,
+        early_stopping_rounds: hyper.early_stopping_rounds ?? earlyStopping,
+        min_boost_rounds: hyper.min_boost_rounds ?? minRounds,
+        force_minimum_training: hyper.force_minimum_training ?? forceMinimumTraining,
+        tree_method: hyper.tree_method ?? "hist",
+        objective: hyper.objective ?? objective,
+        quantile_alpha: hyper.quantile_alpha ?? quantileAlpha,
+        use_standardization: hyper.use_standardization ?? false,
+        use_tanh_transform: hyper.use_tanh_transform ?? true,
+        tanh_scaling_factor: hyper.tanh_scaling_factor ?? 0.001,
+        val_split_ratio: valSplit,
+        device: hyper.device ?? "cuda",
+        threshold_method: hyper.threshold_method ?? thresholdMethod,
+        allow_cpu_fallback: true,
+      };
+
+      setIsTestModelRunning(true);
+      setTestModelError(null);
+      toast({
+        title: "Training started",
+        description: `GPU retrain triggered for fold ${fold.fold_number}`,
+      });
+
+      const response = await xgboostClient.train({
+        dataset: datasetPayload,
+        config: configPayload,
+      });
+
+      setTestModelResult(response);
+      toast({
+        title: "Training complete",
+        description: `Model trained on ${response.train_samples} samples.`,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to train model.";
+      setTestModelError(message);
+      toast({
+        title: "Training failed",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsTestModelRunning(false);
+    }
   };
 
   // Generate chart data from ALL loaded runs
@@ -687,6 +852,8 @@ const WalkforwardDashboard = () => {
                       onTargetChange={setFoldTarget}
                       onTradingThresholdChange={setFoldTradingThreshold}
                       onTrain={handleTrainFold}
+                      availableFeatures={resolvedFeatureColumns}
+                      isTraining={isTestModelRunning}
                     />
                   ) : (
                     <div className="flex h-full items-center justify-center p-4 text-center text-muted-foreground text-sm">
@@ -708,7 +875,11 @@ const WalkforwardDashboard = () => {
             {/* Results Panel */}
             <div className="flex-1 p-4">
               {examinedFold ? (
-                <FoldResults />
+                <FoldResults
+                  result={testModelResult}
+                  isLoading={isTestModelRunning}
+                  error={testModelError ?? undefined}
+                />
               ) : (
                 <div className="flex h-full items-center justify-center text-muted-foreground">
                   No fold selected for examination
