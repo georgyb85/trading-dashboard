@@ -47,6 +47,7 @@ export interface XGBoostTrainResult {
   transform_params: XGBoostTransformParams;
   thresholds: XGBoostThresholdSummary;
   validation_metrics: XGBoostValidationMetrics;
+  test_metrics?: XGBoostValidationMetrics;
   predictions: XGBoostPredictionSet;
   actuals: XGBoostPredictionSet;
   timestamps: Record<'train' | 'validation' | 'test', number[]>;
@@ -80,4 +81,3 @@ export type XGBoostServerMessage =
   | XGBoostTrainResponse
   | XGBoostPredictResponse
   | { type: 'session_info_response'; request_id: string; session: Record<string, unknown> };
-

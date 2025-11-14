@@ -153,7 +153,9 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
             <h4 className="font-semibold text-sm">ROC & Metrics</h4>
             <div className="text-sm space-y-1">
               <div>ROC AUC: {numberFormatter(roc.auc, 3)}</div>
-              <div>R-squared (validation): {numberFormatter(result.validation_metrics?.r2 ?? 0, 3)}</div>
+              <div>
+                R-squared (test): {numberFormatter(result.test_metrics?.r2 ?? result.validation_metrics?.r2 ?? 0, 3)}
+              </div>
             </div>
             <Separator />
             <div className="space-y-1 text-xs text-muted-foreground">
