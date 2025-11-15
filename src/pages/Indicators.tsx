@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useDatasetContext } from '@/contexts/DatasetContext';
 import { useIndicatorContext } from '@/contexts/IndicatorContext';
 import { validateIndicatorScript, buildIndicators } from '@/lib/stage1/client';
@@ -16,9 +16,13 @@ import TimeSeriesChart from '@/components/TimeSeriesChart';
 import HistogramChart from '@/components/HistogramChart';
 import ColumnSelector from '@/components/ColumnSelector';
 
-const DEFAULT_SCRIPT = `RSI_S: RSI 14
-ADX_S: ADX 14
-ATR_RATIO_S: ATR RATIO 14 2`;
+const DEFAULT_SCRIPT = `ADX_L: ADX 120
+AROON_DIFF_S: AROON DIFF 14
+BOL_WIDTH_M: BOLLINGER WIDTH 60
+CMMA_S: CLOSE MINUS MOVING AVERAGE 10 250
+DTR_RSI_M: DETRENDED RSI 5 20 100
+PCO_10_20: ABS PRICE CHANGE OSCILLATOR 10 20
+PV_FIT_M: PRICE VOLUME FIT 60`;
 
 const Indicators = () => {
   const { selectedDataset } = useDatasetContext();
@@ -36,9 +40,12 @@ const Indicators = () => {
   const [isBuilding, setIsBuilding] = useState(false);
   const [buildResult, setBuildResult] = useState<BuildIndicatorsResponse | null>(null);
 
-  // Restore cached indicators when dataset changes
+  // Track the last restored dataset to prevent duplicate restores
+  const lastRestoredDataset = useRef<string | null>(null);
+
+  // Restore cached indicators when dataset changes (only once per dataset)
   useEffect(() => {
-    if (selectedDataset) {
+    if (selectedDataset && selectedDataset !== lastRestoredDataset.current) {
       const cached = getCachedIndicators(selectedDataset);
       if (cached) {
         console.log('[Indicators] Restoring cached indicators for dataset:', selectedDataset);
@@ -47,10 +54,14 @@ const Indicators = () => {
         setSelectedColumn(cached.selectedColumn);
         setIsValidated(cached.isValidated);
         setBuildResult(cached.buildResult);
+        lastRestoredDataset.current = selectedDataset;
         toast({
           title: 'Indicators restored',
           description: 'Loaded cached script and build results',
         });
+      } else {
+        // No cache, track this dataset as "restored" (with defaults)
+        lastRestoredDataset.current = selectedDataset;
       }
     }
   }, [selectedDataset, getCachedIndicators, toast]);
