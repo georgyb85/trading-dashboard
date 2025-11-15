@@ -52,6 +52,7 @@ export interface XGBoostTrainResult {
   actuals: XGBoostPredictionSet;
   timestamps: Record<'train' | 'validation' | 'test', number[]>;
   profit_factors?: XGBoostProfitFactors;
+  feature_importance?: Record<string, number>;
   config?: Record<string, unknown>;
 }
 

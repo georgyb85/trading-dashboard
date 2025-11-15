@@ -73,13 +73,57 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
   const testPredictions = result.predictions?.test ?? [];
   const testActuals = result.actuals?.test ?? [];
   const roc = computeRocCurve(testPredictions, testActuals);
+
+  console.log('[FoldResults] Test predictions:', testPredictions.length, 'samples');
+  console.log('[FoldResults] Test actuals:', testActuals.length, 'samples');
+  console.log('[FoldResults] Thresholds:', result.thresholds);
+  console.log('[FoldResults] Sample predictions:', testPredictions.slice(0, 5));
+  console.log('[FoldResults] Sample actuals:', testActuals.slice(0, 5));
+
+  // ROC curve data
   const rocChartData = roc.points.map((point) => ({
     ...point,
-    random: point.fpr,
   }));
+
+  // Separate diagonal line data for y=x reference
+  const rocDiagonalLine = [
+    { fpr: 0, tpr: 0 },
+    { fpr: 1, tpr: 1 },
+  ];
+
   const trading = computeTradingSignals(testPredictions, testActuals, result.thresholds ?? {});
+  console.log('[FoldResults] Trading signals computed:', trading);
   const histogramData = buildHistogram(testPredictions);
   const scatterData = buildScatterData(testPredictions, testActuals);
+
+  // Process feature importance data
+  const featureImportanceData = result.feature_importance
+    ? Object.entries(result.feature_importance)
+        .map(([feature, importance]) => ({ feature, importance }))
+        .sort((a, b) => b.importance - a.importance)
+        .slice(0, 15) // Top 15 features
+    : [];
+
+  // Calculate axis domains based on actual data range
+  const predictedValues = scatterData.map(d => d.predicted);
+  const actualValues = scatterData.map(d => d.actual);
+  const minPredicted = predictedValues.length > 0 ? Math.min(...predictedValues) : 0;
+  const maxPredicted = predictedValues.length > 0 ? Math.max(...predictedValues) : 1;
+  const minActual = actualValues.length > 0 ? Math.min(...actualValues) : 0;
+  const maxActual = actualValues.length > 0 ? Math.max(...actualValues) : 1;
+
+  console.log('[FoldResults] Predicted range:', minPredicted, 'to', maxPredicted);
+  console.log('[FoldResults] Actual range:', minActual, 'to', maxActual);
+
+  // Diagonal line should only extend through the predicted range (x-axis)
+  // Since we're showing prediction quality, the diagonal is only meaningful
+  // within the range of values the model actually predicts
+  const diagonalLine = [
+    { predicted: minPredicted, actual: minPredicted },
+    { predicted: maxPredicted, actual: maxPredicted },
+  ];
+
+  console.log('[FoldResults] Diagonal line:', diagonalLine);
 
   const profitFactors = [
     {
@@ -202,14 +246,25 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
             <h4 className="font-semibold mb-3 text-sm">ROC Curve</h4>
             {roc.points.length > 0 ? (
               <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={rocChartData} margin={{ left: 20, right: 10, top: 5, bottom: 5 }}>
+                <LineChart margin={{ left: 20, right: 10, top: 5, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="fpr" label={{ value: 'False Positive Rate', position: 'insideBottom', offset: -5 }} />
-                  <YAxis label={{ value: 'True Positive Rate', angle: -90, position: 'insideLeft', offset: 5 }} />
-                  <Tooltip />
+                  <XAxis
+                    dataKey="fpr"
+                    type="number"
+                    domain={[0, 1]}
+                    tickFormatter={(value) => value.toFixed(2)}
+                    label={{ value: 'False Positive Rate', position: 'insideBottom', offset: -5 }}
+                  />
+                  <YAxis
+                    type="number"
+                    domain={[0, 1]}
+                    tickFormatter={(value) => value.toFixed(2)}
+                    label={{ value: 'True Positive Rate', angle: -90, position: 'insideLeft', offset: 5 }}
+                  />
+                  <Tooltip formatter={(value: number) => value.toFixed(4)} />
                   <Legend />
-                  <Line type="stepAfter" dataKey="tpr" stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="ROC" />
-                  <Line type="linear" dataKey="random" stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" dot={false} name="Random" />
+                  <Line type="stepAfter" dataKey="tpr" data={rocChartData} stroke="hsl(var(--chart-1))" strokeWidth={2} dot={false} name="ROC" />
+                  <Line type="linear" dataKey="tpr" data={rocDiagonalLine} stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" strokeWidth={1} dot={false} name="Random" />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
@@ -221,12 +276,36 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
             <h4 className="font-semibold mb-3 text-sm">Predictions vs Actuals</h4>
             {scatterData.length > 0 ? (
               <ResponsiveContainer width="100%" height={220}>
-                <ScatterChart margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+                <ScatterChart margin={{ top: 10, right: 20, left: 20, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis type="number" dataKey="predicted" name="Predicted" />
-                  <YAxis type="number" dataKey="actual" name="Actual" />
-                  <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-                  <Scatter name="Test points" data={scatterData} fill="hsl(var(--chart-3))" />
+                  <XAxis
+                    type="number"
+                    dataKey="predicted"
+                    name="Predicted"
+                    domain={['auto', 'auto']}
+                    tickFormatter={(value) => value.toFixed(2)}
+                    label={{ value: 'Predicted', position: 'insideBottom', offset: -10 }}
+                  />
+                  <YAxis
+                    type="number"
+                    dataKey="actual"
+                    name="Actual"
+                    domain={['auto', 'auto']}
+                    tickFormatter={(value) => value.toFixed(2)}
+                    label={{ value: 'Actual', angle: -90, position: 'insideLeft' }}
+                  />
+                  <Tooltip
+                    cursor={{ strokeDasharray: '3 3' }}
+                    formatter={(value: number, name: string) => [value.toFixed(4), name]}
+                  />
+                  <Scatter data={scatterData} fill="hsl(var(--chart-3))" />
+                  <Scatter
+                    data={diagonalLine}
+                    fill="none"
+                    shape={() => null}
+                    line={{ stroke: "hsl(var(--muted-foreground))", strokeDasharray: "5 5", strokeWidth: 1 }}
+                    isAnimationActive={false}
+                  />
                 </ScatterChart>
               </ResponsiveContainer>
             ) : (
@@ -240,7 +319,7 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={histogramData} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="bin" tickFormatter={(value) => value.toFixed(2)} />
+                  <XAxis dataKey="bin" tickFormatter={(value) => Number(value).toFixed(2)} />
                   <YAxis />
                   <Tooltip formatter={(value: number) => [`${value} samples`, 'Count']} />
                   <Bar dataKey="count" fill="hsl(var(--chart-4))" />
@@ -248,6 +327,23 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
               </ResponsiveContainer>
             ) : (
               <p className="text-xs text-muted-foreground">Awaiting predictions…</p>
+            )}
+          </Card>
+
+          <Card className="p-4">
+            <h4 className="font-semibold mb-3 text-sm">Feature Importance (Top 15)</h4>
+            {featureImportanceData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={featureImportanceData} layout="vertical" margin={{ top: 5, right: 20, left: 100, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis type="number" />
+                  <YAxis type="category" dataKey="feature" tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(value: number) => [value.toFixed(4), 'Importance']} />
+                  <Bar dataKey="importance" fill="hsl(var(--chart-2))" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-xs text-muted-foreground">Feature importance data not available</p>
             )}
           </Card>
         </div>
