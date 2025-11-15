@@ -8,6 +8,7 @@ import { SystemHealthDashboard } from "./components/SystemHealthDashboard";
 import { DatasetProvider } from "./contexts/DatasetContext";
 import { RunsProvider } from "./contexts/RunsContext";
 import { SimulationProvider } from "./contexts/SimulationContext";
+import { WalkforwardProvider } from "./contexts/WalkforwardContext";
 import { TradingOverview } from "./components/TradingOverview";
 import { PositionsTable } from "./components/PositionsTable";
 import { BalancesTable } from "./components/BalancesTable";
@@ -43,7 +44,8 @@ const App = () => (
         <DatasetProvider>
           <RunsProvider>
             <SimulationProvider>
-              <TradingLayout>
+              <WalkforwardProvider>
+                <TradingLayout>
                 <Routes>
             <Route path="/" element={<SystemHealthDashboard />} />
             <Route path="/trading" element={<TradingOverview />} />
@@ -63,6 +65,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
               </Routes>
             </TradingLayout>
+              </WalkforwardProvider>
             </SimulationProvider>
           </RunsProvider>
         </DatasetProvider>

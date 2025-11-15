@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { SimulationHeader } from "@/apps/walkforward/components/SimulationHeader";
 import { LoadRunModal } from "@/apps/walkforward/components/LoadRunModal";
 import { ConfigurationPanel } from "@/apps/walkforward/components/ConfigurationPanel";
@@ -14,12 +14,15 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import type { Stage1RunDetail, Stage1DatasetManifest } from "@/lib/stage1/types";
 import { useDatasetContext } from "@/contexts/DatasetContext";
+import { useWalkforwardContext } from "@/contexts/WalkforwardContext";
 import { xgboostClient } from "@/lib/services/xgboostClient";
 import type { XGBoostTrainResult } from "@/lib/types/xgboost";
 import { getDatasetManifest, getDatasetIndexMap } from "@/lib/stage1/client";
 
 const WalkforwardDashboard = () => {
   const { selectedDataset } = useDatasetContext();
+  const { getCachedSimulation, cacheSimulation, getCachedTestModel, cacheTestModel } = useWalkforwardContext();
+
   // Run selection
   const [loadRunModalOpen, setLoadRunModalOpen] = useState(false);
   const [loadedRuns, setLoadedRuns] = useState<Stage1RunDetail[]>([]);
@@ -75,6 +78,37 @@ const WalkforwardDashboard = () => {
   const [isTestModelRunning, setIsTestModelRunning] = useState(false);
   const [datasetManifests, setDatasetManifests] = useState<Record<string, Stage1DatasetManifest>>({});
   const [indexCaches, setIndexCaches] = useState<Record<string, Record<number, number>>>({});
+
+  // Restore cached simulation when dataset changes
+  useEffect(() => {
+    if (selectedDataset && loadedRuns.length === 0) {
+      const cached = getCachedSimulation(selectedDataset);
+      if (cached) {
+        console.log('[WalkforwardDashboard] Restoring cached simulation for dataset:', selectedDataset);
+        setLoadedRuns(cached.loadedRuns);
+        setActiveRunIndex(cached.activeRunIndex);
+        setViewMode(cached.viewMode);
+        setExaminedFold(cached.examinedFold);
+        toast({
+          title: "Simulation restored",
+          description: `Loaded ${cached.loadedRuns.length} cached run(s)`,
+        });
+      }
+    }
+  }, [selectedDataset, loadedRuns.length, getCachedSimulation]);
+
+  // Cache simulation state whenever it changes
+  useEffect(() => {
+    if (selectedDataset && loadedRuns.length > 0) {
+      cacheSimulation({
+        datasetId: selectedDataset,
+        loadedRuns,
+        activeRunIndex,
+        viewMode,
+        examinedFold,
+      });
+    }
+  }, [selectedDataset, loadedRuns, activeRunIndex, viewMode, examinedFold, cacheSimulation]);
 
   const ensureManifest = useCallback(
     async (datasetId: string) => {
@@ -342,8 +376,26 @@ const WalkforwardDashboard = () => {
     setFoldTrainEnd(fold.train_end_idx.toString());
     setFoldTestStart(fold.test_start_idx.toString());
     setFoldTestEnd(fold.test_end_idx.toString());
-    setTestModelResult(null);
-    setTestModelError(null);
+
+    // Check for cached test model result
+    if (selectedDataset) {
+      const cachedResult = getCachedTestModel(selectedDataset, runIndex, fold.fold);
+      if (cachedResult) {
+        console.log('[handleExamineFold] Restored cached test model for fold:', fold.fold);
+        setTestModelResult(cachedResult);
+        setTestModelError(null);
+        toast({
+          title: "Test model restored",
+          description: `Loaded cached results for fold ${fold.fold}`,
+        });
+      } else {
+        setTestModelResult(null);
+        setTestModelError(null);
+      }
+    } else {
+      setTestModelResult(null);
+      setTestModelError(null);
+    }
 
     const currentRun = loadedRuns[runIndex];
     if (currentRun) {
@@ -532,6 +584,13 @@ const WalkforwardDashboard = () => {
       console.log('[handleTrainFold] Training completed successfully, response:', response);
 
       setTestModelResult(response);
+
+      // Cache the test model result
+      if (selectedDataset) {
+        cacheTestModel(selectedDataset, examinedFold.runIndex, fold.fold, response);
+        console.log('[handleTrainFold] Cached test model result for fold:', fold.fold);
+      }
+
       toast({
         title: "Training complete",
         description: `Model trained on ${response.train_samples} samples.`,
