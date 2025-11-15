@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useDatasetContext } from '@/contexts/DatasetContext';
+import { useIndicatorContext } from '@/contexts/IndicatorContext';
 import { validateIndicatorScript, buildIndicators } from '@/lib/stage1/client';
 import type { BuildIndicatorsResponse, IndicatorDefinition } from '@/lib/stage1/types';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,7 @@ ATR_RATIO_S: ATR RATIO 14 2`;
 
 const Indicators = () => {
   const { selectedDataset } = useDatasetContext();
+  const { getCachedIndicators, cacheIndicators } = useIndicatorContext();
   const { toast } = useToast();
   const [script, setScript] = useState(DEFAULT_SCRIPT);
   const [maxRows, setMaxRows] = useState(1000);
@@ -33,6 +35,39 @@ const Indicators = () => {
   // Build state
   const [isBuilding, setIsBuilding] = useState(false);
   const [buildResult, setBuildResult] = useState<BuildIndicatorsResponse | null>(null);
+
+  // Restore cached indicators when dataset changes
+  useEffect(() => {
+    if (selectedDataset) {
+      const cached = getCachedIndicators(selectedDataset);
+      if (cached) {
+        console.log('[Indicators] Restoring cached indicators for dataset:', selectedDataset);
+        setScript(cached.script);
+        setMaxRows(cached.maxRows);
+        setSelectedColumn(cached.selectedColumn);
+        setIsValidated(cached.isValidated);
+        setBuildResult(cached.buildResult);
+        toast({
+          title: 'Indicators restored',
+          description: 'Loaded cached script and build results',
+        });
+      }
+    }
+  }, [selectedDataset, getCachedIndicators, toast]);
+
+  // Cache indicators state whenever it changes
+  useEffect(() => {
+    if (selectedDataset) {
+      cacheIndicators({
+        datasetId: selectedDataset,
+        script,
+        maxRows,
+        selectedColumn,
+        isValidated,
+        buildResult,
+      });
+    }
+  }, [selectedDataset, script, maxRows, selectedColumn, isValidated, buildResult, cacheIndicators]);
 
   const handleValidate = async () => {
     if (!script.trim()) {
