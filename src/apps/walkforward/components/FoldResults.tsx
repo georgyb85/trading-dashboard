@@ -77,6 +77,8 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
   console.log('[FoldResults] Test predictions:', testPredictions.length, 'samples');
   console.log('[FoldResults] Test actuals:', testActuals.length, 'samples');
   console.log('[FoldResults] Thresholds:', result.thresholds);
+  console.log('[FoldResults] Timings:', result.timings);
+  console.log('[FoldResults] Feature importance:', result.feature_importance?.length ?? 0, 'features');
   console.log('[FoldResults] Sample predictions:', testPredictions.slice(0, 5));
   console.log('[FoldResults] Sample actuals:', testActuals.slice(0, 5));
 
@@ -98,8 +100,8 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
 
   // Process feature importance data
   const featureImportanceData = result.feature_importance
-    ? Object.entries(result.feature_importance)
-        .map(([feature, importance]) => ({ feature, importance }))
+    ? result.feature_importance
+        .map(item => ({ feature: item.feature, importance: item.score }))
         .sort((a, b) => b.importance - a.importance)
         .slice(0, 15) // Top 15 features
     : [];
@@ -201,6 +203,16 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
                 R-squared (test): {numberFormatter(result.test_metrics?.r2 ?? result.validation_metrics?.r2 ?? 0, 3)}
               </div>
             </div>
+            {result.timings && (
+              <>
+                <Separator />
+                <div className="space-y-1 text-xs text-muted-foreground">
+                  <div className="font-semibold text-foreground">Timings</div>
+                  <div>Training: {result.timings.training_ms.toLocaleString()} ms</div>
+                  <div>Inference: {result.timings.inference_ms.toLocaleString()} ms</div>
+                </div>
+              </>
+            )}
             <Separator />
             <div className="space-y-1 text-xs text-muted-foreground">
               <div className="font-semibold text-foreground">Thresholds</div>

@@ -81,6 +81,7 @@ export class XGBoostClient {
     const requestId = this.generateRequestId();
     const message = {
       type: 'predict_live',
+      session_id: this.sessionId,
       request_id: requestId,
       features,
     };
@@ -185,6 +186,16 @@ export class XGBoostClient {
         }
         break;
       }
+      case 'train_progress': {
+        console.log('[XGBoostClient] Train progress:', {
+          request_id: message.request_id,
+          current: message.progress.current_iteration,
+          total: message.progress.total_iterations,
+          elapsed: message.progress.elapsed_ms,
+        });
+        // Could emit progress events here if needed
+        break;
+      }
       case 'train_response': {
         console.log('[XGBoostClient] Train response received:', {
           request_id: message.request_id,
@@ -195,6 +206,10 @@ export class XGBoostClient {
         if (pending && pending.type === 'train') {
           if (message.success) {
             console.log('[XGBoostClient] Training succeeded, resolving promise');
+            // Store session_id if provided
+            if (message.result.session_id) {
+              this.sessionId = message.result.session_id;
+            }
             pending.resolve(message.result);
           } else {
             console.error('[XGBoostClient] Training failed in response');
