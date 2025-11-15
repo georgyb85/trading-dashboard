@@ -10,6 +10,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useState, useMemo } from "react";
 import {
   LineChart,
   Line,
@@ -23,6 +27,7 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  ReferenceLine,
 } from "recharts";
 import type { XGBoostTrainResult } from "@/lib/types/xgboost";
 import {
@@ -42,6 +47,10 @@ const numberFormatter = (value: number, digits = 4) =>
   Number.isFinite(value) ? value.toFixed(digits) : "—";
 
 export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
+  // Dynamic threshold state
+  const [longThreshold, setLongThreshold] = useState<number | null>(null);
+  const [shortThreshold, setShortThreshold] = useState<number | null>(null);
+
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
@@ -74,6 +83,10 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
   const testActuals = result.actuals?.test ?? [];
   const roc = computeRocCurve(testPredictions, testActuals);
 
+  // Active thresholds (use dynamic if set, otherwise fall back to result thresholds)
+  const activeLongThreshold = longThreshold ?? result.thresholds?.long_optimal ?? result.thresholds?.long_percentile_95 ?? 0;
+  const activeShortThreshold = shortThreshold ?? result.thresholds?.short_optimal ?? result.thresholds?.short_percentile_05 ?? 0;
+
   console.log('[FoldResults] Test predictions:', testPredictions.length, 'samples');
   console.log('[FoldResults] Test actuals:', testActuals.length, 'samples');
   console.log('[FoldResults] Thresholds:', result.thresholds);
@@ -93,8 +106,15 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
     { fpr: 1, tpr: 1 },
   ];
 
-  const trading = computeTradingSignals(testPredictions, testActuals, result.thresholds ?? {});
-  console.log('[FoldResults] Trading signals computed:', trading);
+  const trading = computeTradingSignals(testPredictions, testActuals, {
+    long_optimal: activeLongThreshold,
+    short_optimal: activeShortThreshold,
+  });
+  console.log('[FoldResults] Trading signals computed:', {
+    long: `${trading.long.signals} signals, ${(trading.long.hitRate * 100).toFixed(1)}% hit rate, ${trading.long.cumulativeReturn.toFixed(4)} return`,
+    short: `${trading.short.signals} signals, ${(trading.short.hitRate * 100).toFixed(1)}% hit rate, ${trading.short.cumulativeReturn.toFixed(4)} return`,
+    total: `${trading.total.signals} signals, ${(trading.total.hitRate * 100).toFixed(1)}% hit rate, ${trading.total.cumulativeReturn.toFixed(4)} return`,
+  });
   const histogramData = buildHistogram(testPredictions);
   const scatterData = buildScatterData(testPredictions, testActuals);
 
@@ -149,6 +169,74 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Left Column */}
         <div className="space-y-4">
+          <Card className="p-4">
+            <h4 className="font-semibold mb-3 text-sm">Threshold Controls</h4>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label className="text-xs">Long Threshold</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={activeLongThreshold.toFixed(2)}
+                      onChange={(e) => setLongThreshold(parseFloat(e.target.value))}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => setLongThreshold(result.thresholds?.long_optimal ?? 0)}
+                    >
+                      Optimal
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => setLongThreshold(result.thresholds?.long_percentile_95 ?? 0)}
+                    >
+                      P95
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Short Threshold</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={activeShortThreshold.toFixed(2)}
+                      onChange={(e) => setShortThreshold(parseFloat(e.target.value))}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => setShortThreshold(result.thresholds?.short_optimal ?? 0)}
+                    >
+                      Optimal
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-6 px-2 text-xs"
+                      onClick={() => setShortThreshold(result.thresholds?.short_percentile_05 ?? 0)}
+                    >
+                      P5
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Card>
+
           <Card className="p-4">
             <h4 className="font-semibold mb-3 text-sm">Trading Signals (Test Set)</h4>
             <Table>
@@ -215,11 +303,17 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
             )}
             <Separator />
             <div className="space-y-1 text-xs text-muted-foreground">
-              <div className="font-semibold text-foreground">Thresholds</div>
+              <div className="font-semibold text-foreground">Thresholds (from training)</div>
               <div>Long – 95th percentile: {numberFormatter(result.thresholds?.long_percentile_95 ?? 0)}</div>
               <div>Long – Optimal: {numberFormatter(result.thresholds?.long_optimal ?? 0)}</div>
               <div>Short – 5th percentile: {numberFormatter(result.thresholds?.short_percentile_05 ?? 0)}</div>
               <div>Short – Optimal: {numberFormatter(result.thresholds?.short_optimal ?? 0)}</div>
+            </div>
+            <Separator />
+            <div className="space-y-1 text-xs text-muted-foreground">
+              <div className="font-semibold text-foreground">Active Thresholds</div>
+              <div>Long: {numberFormatter(activeLongThreshold)}</div>
+              <div>Short: {numberFormatter(activeShortThreshold)}</div>
             </div>
           </Card>
 
@@ -310,6 +404,18 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
                     cursor={{ strokeDasharray: '3 3' }}
                     formatter={(value: number, name: string) => [value.toFixed(4), name]}
                   />
+                  <ReferenceLine
+                    x={activeLongThreshold}
+                    stroke="hsl(var(--chart-1))"
+                    strokeWidth={2}
+                    label={{ value: 'Long', position: 'top', fontSize: 10 }}
+                  />
+                  <ReferenceLine
+                    x={activeShortThreshold}
+                    stroke="hsl(var(--chart-5))"
+                    strokeWidth={2}
+                    label={{ value: 'Short', position: 'top', fontSize: 10 }}
+                  />
                   <Scatter data={scatterData} fill="hsl(var(--chart-3))" />
                   <Scatter
                     data={diagonalLine}
@@ -334,6 +440,18 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
                   <XAxis dataKey="bin" tickFormatter={(value) => Number(value).toFixed(2)} />
                   <YAxis />
                   <Tooltip formatter={(value: number) => [`${value} samples`, 'Count']} />
+                  <ReferenceLine
+                    x={activeLongThreshold}
+                    stroke="hsl(var(--chart-1))"
+                    strokeWidth={2}
+                    label={{ value: 'Long', position: 'top', fontSize: 10 }}
+                  />
+                  <ReferenceLine
+                    x={activeShortThreshold}
+                    stroke="hsl(var(--chart-5))"
+                    strokeWidth={2}
+                    label={{ value: 'Short', position: 'top', fontSize: 10 }}
+                  />
                   <Bar dataKey="count" fill="hsl(var(--chart-4))" />
                 </BarChart>
               </ResponsiveContainer>

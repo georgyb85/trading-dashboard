@@ -21,6 +21,10 @@ export const computeTradingSignals = (
   const longThreshold = thresholds.long_optimal ?? thresholds.long_percentile_95 ?? Infinity;
   const shortThreshold = thresholds.short_optimal ?? thresholds.short_percentile_05 ?? -Infinity;
 
+  console.log('[computeTradingSignals] Long threshold:', longThreshold);
+  console.log('[computeTradingSignals] Short threshold:', shortThreshold);
+  console.log('[computeTradingSignals] Predictions range:', predictions.length > 0 ? `${Math.min(...predictions)} to ${Math.max(...predictions)}` : 'empty');
+
   const long: TradingStats = { signals: 0, wins: 0, hitRate: 0, cumulativeReturn: 0 };
   const short: TradingStats = { signals: 0, wins: 0, hitRate: 0, cumulativeReturn: 0 };
 
