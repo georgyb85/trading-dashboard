@@ -13,12 +13,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, CheckCircle, AlertCircle, Check } from 'lucide-react';
+import { Loader2, CheckCircle, AlertCircle, Check, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import IndicatorDataTable from '@/components/IndicatorDataTable';
 import TimeSeriesChart from '@/components/TimeSeriesChart';
 import HistogramChart from '@/components/HistogramChart';
 import ColumnSelector from '@/components/ColumnSelector';
+import * as XLSX from 'xlsx';
 
 const DEFAULT_SCRIPT = `ADX_L: ADX 120
 AROON_DIFF_S: AROON DIFF 14
@@ -270,6 +271,62 @@ const Indicators = () => {
     }
   };
 
+  const handleExportToExcel = () => {
+    if (!transformedData || transformedData.length === 0) {
+      toast({
+        variant: 'destructive',
+        title: 'Export Error',
+        description: 'No data to export',
+      });
+      return;
+    }
+
+    // Prepare data for Excel export
+    const exportData = transformedData.map((row) => {
+      const exportRow: any = {
+        Timestamp: new Date(row.timestamp).toLocaleString(),
+      };
+
+      // Add all indicator columns
+      buildResult?.indicator_names?.forEach((name) => {
+        const value = row[name];
+        // Keep NaN as string "NaN" in Excel
+        exportRow[name] = (value !== null && value !== undefined && !isNaN(value)) ? value : 'NaN';
+      });
+
+      return exportRow;
+    });
+
+    // Create workbook and worksheet
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+    // Set column widths
+    const columnCount = columns.length;
+    worksheet["!cols"] = [
+      { wch: 20 }, // Timestamp column
+      ...Array(columnCount - 1).fill({ wch: 15 }), // Indicator columns
+    ];
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Indicators");
+
+    // Generate filename with timestamp and dataset/symbol info
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const datasetInfo = buildMode === 'dataset'
+      ? selectedDataset?.substring(0, 8) || 'data'
+      : `${symbol}_${interval}`;
+    const filename = `indicators_${datasetInfo}_${timestamp}.xlsx`;
+
+    // Write file
+    XLSX.writeFile(workbook, filename);
+
+    toast({
+      title: 'Export successful',
+      description: `Exported ${transformedData.length} rows to ${filename}`,
+    });
+  };
+
   // Transform API response into format expected by existing components
   const transformedData = buildResult?.timestamps && buildResult?.indicator_values
     ? buildResult.timestamps.map((timestamp, idx) => {
@@ -493,7 +550,18 @@ const Indicators = () => {
 
           {/* Data Table */}
           <div>
-            <h2 className="text-lg font-semibold text-foreground mb-3">Data Preview</h2>
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-lg font-semibold text-foreground">Data Preview</h2>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportToExcel}
+                className="gap-2"
+              >
+                <Download className="h-4 w-4" />
+                Export to Excel
+              </Button>
+            </div>
             <IndicatorDataTable
               data={transformedData}
               columns={columns}
