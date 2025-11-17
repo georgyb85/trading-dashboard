@@ -1,4 +1,7 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Download } from "lucide-react";
+import * as XLSX from "xlsx";
 import type { Trade } from "@/lib/stage1/types";
 
 interface TradeTableProps {
@@ -6,6 +9,54 @@ interface TradeTableProps {
 }
 
 export const TradeTable = ({ trades }: TradeTableProps) => {
+  const handleExportToExcel = () => {
+    // Prepare data for Excel export
+    const exportData = trades.map((trade) => ({
+      Fold: trade.fold,
+      Side: trade.side.charAt(0).toUpperCase() + trade.side.slice(1),
+      "Entry Time": new Date(trade.entry_time).toLocaleString(),
+      "Exit Time": new Date(trade.exit_time).toLocaleString(),
+      "Entry Price": trade.entry_price,
+      "Exit Price": trade.exit_price,
+      "Entry Signal": trade.entry_signal,
+      "Exit Signal": trade.exit_signal,
+      "Exit Reason": trade.exit_reason.replace(/_/g, " "),
+      "P&L": trade.pnl,
+      "Return %": trade.return_pct,
+      "Cumulative Return %": trade.cumulative_return_pct,
+    }));
+
+    // Create workbook and worksheet
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+
+    // Set column widths for better readability
+    worksheet["!cols"] = [
+      { wch: 8 },  // Fold
+      { wch: 8 },  // Side
+      { wch: 20 }, // Entry Time
+      { wch: 20 }, // Exit Time
+      { wch: 12 }, // Entry Price
+      { wch: 12 }, // Exit Price
+      { wch: 12 }, // Entry Signal
+      { wch: 12 }, // Exit Signal
+      { wch: 15 }, // Exit Reason
+      { wch: 12 }, // P&L
+      { wch: 12 }, // Return %
+      { wch: 18 }, // Cumulative Return %
+    ];
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Trades");
+
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const filename = `trades_${timestamp}.xlsx`;
+
+    // Write file
+    XLSX.writeFile(workbook, filename);
+  };
+
   if (trades.length === 0) {
     return (
       <div className="rounded-lg border border-border p-8 text-center">
@@ -15,8 +66,23 @@ export const TradeTable = ({ trades }: TradeTableProps) => {
   }
 
   return (
-    <div className="rounded-lg border border-border overflow-hidden">
-      <div className="overflow-x-auto">
+    <div className="space-y-3">
+      {/* Export Button */}
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExportToExcel}
+          className="gap-2"
+        >
+          <Download className="h-4 w-4" />
+          Export to Excel
+        </Button>
+      </div>
+
+      {/* Trade Table */}
+      <div className="rounded-lg border border-border overflow-hidden">
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow className="bg-secondary hover:bg-secondary">
@@ -70,6 +136,7 @@ export const TradeTable = ({ trades }: TradeTableProps) => {
             ))}
           </TableBody>
         </Table>
+      </div>
       </div>
     </div>
   );
