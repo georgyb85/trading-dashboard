@@ -13,7 +13,13 @@ const IndicatorDataTable = ({ data, columns, selectedColumn, onColumnChange }: I
 
   const formatValue = (value: any) => {
     if (typeof value === 'number') {
+      if (isNaN(value)) {
+        return 'NaN';
+      }
       return value.toFixed(6);
+    }
+    if (value === null || value === undefined) {
+      return 'NaN';
     }
     return value;
   };

@@ -35,11 +35,15 @@ const TimeSeriesChart = ({ data, selectedColumn }: TimeSeriesChartProps) => {
 
     // Step 1: Get or create full data for this indicator
     if (!cacheEntry) {
-      const fullData = data.map((row, index) => ({
-        timestamp: new Date(row.timestamp).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }),
-        value: row[selectedColumn],
-        index,
-      }));
+      const fullData = data.map((row, index) => {
+        const value = row[selectedColumn];
+        return {
+          timestamp: new Date(row.timestamp).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' }),
+          // Convert NaN to null so Recharts can skip it
+          value: (value !== null && value !== undefined && !isNaN(value)) ? value : null,
+          index,
+        };
+      });
 
       cacheEntry = {
         fullData,
@@ -117,12 +121,13 @@ const TimeSeriesChart = ({ data, selectedColumn }: TimeSeriesChartProps) => {
             labelStyle={{ color: 'hsl(var(--foreground))' }}
           />
           <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" />
-          <Line 
-            type="monotone" 
-            dataKey="value" 
-            stroke="hsl(var(--chart-1))" 
+          <Line
+            type="monotone"
+            dataKey="value"
+            stroke="hsl(var(--chart-1))"
             strokeWidth={1.5}
             dot={false}
+            connectNulls={false}
           />
         </LineChart>
       </ResponsiveContainer>
