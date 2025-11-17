@@ -146,6 +146,7 @@ export interface BuildIndicatorsRequest {
   dataset_id?: string;
   rows?: number;
   script: string;
+  ohlcv_rows?: BinanceOhlcvRow[];
 }
 
 export interface BuildIndicatorsResponse {
@@ -155,6 +156,30 @@ export interface BuildIndicatorsResponse {
   timestamps?: number[];
   indicator_names?: string[];
   indicator_values?: Record<string, (number | null)[]>;
+}
+
+export interface BinanceOhlcvRow {
+  timestamp_ms: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface BinanceDownloadRequest {
+  from_date: string;
+  to_date: string;
+  symbol?: string;
+  interval?: string;
+  parallel_jobs?: number;
+}
+
+export interface BinanceDownloadResponse {
+  success: boolean;
+  message: string;
+  row_count?: number;
+  rows?: BinanceOhlcvRow[];
 }
 
 // Trade Simulation API types

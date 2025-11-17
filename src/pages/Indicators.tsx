@@ -1,8 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useDatasetContext } from '@/contexts/DatasetContext';
 import { useIndicatorContext } from '@/contexts/IndicatorContext';
-import { validateIndicatorScript, buildIndicators } from '@/lib/stage1/client';
-import type { BuildIndicatorsResponse, IndicatorDefinition } from '@/lib/stage1/types';
+import { validateIndicatorScript, buildIndicators, downloadBinanceOhlcv } from '@/lib/stage1/client';
+import type {
+  BuildIndicatorsResponse,
+  IndicatorDefinition,
+  BinanceOhlcvRow,
+} from '@/lib/stage1/types';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -31,6 +35,12 @@ const Indicators = () => {
   const [script, setScript] = useState(DEFAULT_SCRIPT);
   const [maxRows, setMaxRows] = useState(1000);
   const [selectedColumn, setSelectedColumn] = useState<string>('');
+  const [buildMode, setBuildMode] = useState<'dataset' | 'binance'>('dataset');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [symbol, setSymbol] = useState('BTCUSDT');
+  const [interval, setInterval] = useState('15m');
+  const [parallelJobs, setParallelJobs] = useState(4);
 
   // Validation state
   const [isValidating, setIsValidating] = useState(false);
@@ -45,7 +55,7 @@ const Indicators = () => {
 
   // Restore cached indicators when dataset changes (only once per dataset)
   useEffect(() => {
-    if (selectedDataset && selectedDataset !== lastRestoredDataset.current) {
+    if (buildMode === 'dataset' && selectedDataset && selectedDataset !== lastRestoredDataset.current) {
       const cached = getCachedIndicators(selectedDataset);
       if (cached) {
         console.log('[Indicators] Restoring cached indicators for dataset:', selectedDataset);
@@ -64,11 +74,11 @@ const Indicators = () => {
         lastRestoredDataset.current = selectedDataset;
       }
     }
-  }, [selectedDataset, getCachedIndicators, toast]);
+  }, [selectedDataset, getCachedIndicators, toast, buildMode]);
 
   // Cache indicators state whenever it changes
   useEffect(() => {
-    if (selectedDataset) {
+    if (buildMode === 'dataset' && selectedDataset) {
       cacheIndicators({
         datasetId: selectedDataset,
         script,
@@ -78,7 +88,7 @@ const Indicators = () => {
         buildResult,
       });
     }
-  }, [selectedDataset, script, maxRows, selectedColumn, isValidated, buildResult, cacheIndicators]);
+  }, [selectedDataset, script, maxRows, selectedColumn, isValidated, buildResult, cacheIndicators, buildMode]);
 
   const handleValidate = async () => {
     if (!script.trim()) {
@@ -133,15 +143,6 @@ const Indicators = () => {
   };
 
   const handleBuild = async () => {
-    if (!selectedDataset) {
-      toast({
-        variant: 'destructive',
-        title: 'Build Error',
-        description: 'Please select a dataset from the top panel',
-      });
-      return;
-    }
-
     if (!script.trim()) {
       toast({
         variant: 'destructive',
@@ -155,35 +156,103 @@ const Indicators = () => {
     setBuildResult(null);
 
     try {
-      const response = await buildIndicators({
-        dataset_id: selectedDataset,
-        rows: maxRows,
-        script: script,
-      });
+      if (buildMode === 'dataset') {
+        if (!selectedDataset) {
+          toast({
+            variant: 'destructive',
+            title: 'Build Error',
+            description: 'Please select a dataset from the top panel',
+          });
+          return;
+        }
+        const response = await buildIndicators({
+          dataset_id: selectedDataset,
+          rows: maxRows,
+          script: script,
+        });
 
-      if (response.success && response.data) {
-        setBuildResult(response.data);
+        if (response.success && response.data) {
+          setBuildResult(response.data);
 
-        // Auto-select first indicator column
-        if (response.data.indicator_names && response.data.indicator_names.length > 0) {
-          setSelectedColumn(response.data.indicator_names[0]);
+          if (response.data.indicator_names && response.data.indicator_names.length > 0) {
+            setSelectedColumn(response.data.indicator_names[0]);
+          }
+
+          toast({
+            title: '✓ Build Successful',
+            description: `Built ${response.data.indicator_names?.length || 0} indicator(s) across ${response.data.row_count || 0} rows`,
+          });
+        } else {
+          const errorMsg = response.error || 'Build failed';
+          setBuildResult({
+            success: false,
+            message: errorMsg,
+          });
+          toast({
+            variant: 'destructive',
+            title: 'Build Failed',
+            description: errorMsg,
+          });
+        }
+      } else {
+        if (!fromDate || !toDate) {
+          toast({
+            variant: 'destructive',
+            title: 'Build Error',
+            description: 'Please provide from/to dates',
+          });
+          return;
         }
 
-        toast({
-          title: '✓ Build Successful',
-          description: `Built ${response.data.indicator_names?.length || 0} indicator(s) across ${response.data.row_count || 0} rows`,
+        const downloadResp = await downloadBinanceOhlcv({
+          from_date: fromDate,
+          to_date: toDate,
+          symbol,
+          interval,
+          parallel_jobs: parallelJobs,
         });
-      } else {
-        const errorMsg = response.error || 'Build failed';
-        setBuildResult({
-          success: false,
-          message: errorMsg,
+
+        if (!downloadResp.success || !downloadResp.data || !downloadResp.data.rows) {
+          const errorMsg = downloadResp.error || downloadResp.data?.message || 'Download failed';
+          toast({
+            variant: 'destructive',
+            title: 'Download Error',
+            description: errorMsg,
+          });
+          setBuildResult({
+            success: false,
+            message: errorMsg,
+          });
+          return;
+        }
+
+        const rows: BinanceOhlcvRow[] = downloadResp.data.rows;
+        const buildResp = await buildIndicators({
+          script: script,
+          ohlcv_rows: rows,
         });
-        toast({
-          variant: 'destructive',
-          title: 'Build Failed',
-          description: errorMsg,
-        });
+
+        if (buildResp.success && buildResp.data) {
+          setBuildResult(buildResp.data);
+          if (buildResp.data.indicator_names && buildResp.data.indicator_names.length > 0) {
+            setSelectedColumn(buildResp.data.indicator_names[0]);
+          }
+          toast({
+            title: '✓ Build Successful (Binance)',
+            description: `Built ${buildResp.data.indicator_names?.length || 0} indicator(s) across ${buildResp.data.row_count || 0} rows`,
+          });
+        } else {
+          const errorMsg = buildResp.error || buildResp.data?.message || 'Build failed';
+          setBuildResult({
+            success: false,
+            message: errorMsg,
+          });
+          toast({
+            variant: 'destructive',
+            title: 'Build Failed',
+            description: errorMsg,
+          });
+        }
       }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -253,6 +322,59 @@ const Indicators = () => {
           <CardTitle>Indicator Script</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Data source selection */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="buildMode">Data Source</Label>
+              <select
+                id="buildMode"
+                value={buildMode}
+                onChange={(e) => setBuildMode(e.target.value as 'dataset' | 'binance')}
+                className="border rounded-md px-3 py-2"
+              >
+                <option value="dataset">Existing Dataset</option>
+                <option value="binance">Download from Binance</option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Choose an existing dataset or download OHLCV from Binance for a custom period.
+              </p>
+            </div>
+
+            {buildMode === 'binance' && (
+              <div className="space-y-2">
+                <Label>Binance Parameters</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">From</Label>
+                    <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">To</Label>
+                    <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Symbol</Label>
+                    <Input value={symbol} onChange={(e) => setSymbol(e.target.value)} placeholder="BTCUSDT" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Interval</Label>
+                    <Input value={interval} onChange={(e) => setInterval(e.target.value)} placeholder="1h" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Parallel Jobs</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={32}
+                      value={parallelJobs}
+                      onChange={(e) => setParallelJobs(Math.max(1, Math.min(32, parseInt(e.target.value) || 1)))}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Script Textarea */}
           <div className="space-y-2">
             <Label htmlFor="script">Script (one indicator per line)</Label>
@@ -280,21 +402,23 @@ const Indicators = () => {
           </div>
 
           {/* Max Rows Input */}
-          <div className="space-y-2">
-            <Label htmlFor="maxRows">Max Rows (1-200,000)</Label>
-            <Input
-              id="maxRows"
-              type="number"
-              value={maxRows}
-              onChange={(e) => setMaxRows(Math.max(1, Math.min(200000, parseInt(e.target.value) || 1000)))}
-              min={1}
-              max={200000}
-              className="w-40"
-            />
-          </div>
+          {buildMode === 'dataset' && (
+            <div className="space-y-2">
+              <Label htmlFor="maxRows">Max Rows (1-200,000)</Label>
+              <Input
+                id="maxRows"
+                type="number"
+                value={maxRows}
+                onChange={(e) => setMaxRows(Math.max(1, Math.min(200000, parseInt(e.target.value) || 1000)))}
+                min={1}
+                max={200000}
+                className="w-40"
+              />
+            </div>
+          )}
 
           {/* Dataset Warning */}
-          {!selectedDataset && (
+          {buildMode === 'dataset' && !selectedDataset && (
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
@@ -328,7 +452,11 @@ const Indicators = () => {
 
             <Button
               onClick={handleBuild}
-              disabled={isBuilding || !selectedDataset || !script.trim()}
+              disabled={
+                isBuilding ||
+                !script.trim() ||
+                (buildMode === 'dataset' && !selectedDataset)
+              }
             >
               {isBuilding ? (
                 <>

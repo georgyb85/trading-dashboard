@@ -15,6 +15,8 @@ import type {
   Stage1IndicatorResponse,
   Stage1DatasetManifest,
   Stage1IndexMapResponse,
+  BinanceDownloadRequest,
+  BinanceDownloadResponse,
 } from './types';
 
 class Stage1Client {
@@ -188,6 +190,18 @@ class Stage1Client {
   }
 
   /**
+   * Download OHLCV from Binance (server-side) for a given range
+   */
+  async downloadBinanceOhlcv(
+    request: BinanceDownloadRequest
+  ): Promise<Stage1ApiResponse<BinanceDownloadResponse>> {
+    return this.request<BinanceDownloadResponse>('/api/binance/download', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
+  /**
    * Simulate trades for a run with given configuration
    */
   async simulateTrades(request: SimulateTradesRequest): Promise<Stage1ApiResponse<SimulateTradesResponse>> {
@@ -232,6 +246,9 @@ export const validateIndicatorScript = (script: string) =>
 
 export const buildIndicators = (request: BuildIndicatorsRequest) =>
   stage1Client.buildIndicators(request);
+
+export const downloadBinanceOhlcv = (request: BinanceDownloadRequest) =>
+  stage1Client.downloadBinanceOhlcv(request);
 
 export const simulateTrades = (request: SimulateTradesRequest) =>
   stage1Client.simulateTrades(request);
