@@ -125,7 +125,7 @@ interface GPUInstance {
 
 // Hardcoded GPU instances - add more as needed
 const GPU_INSTANCES: Array<{id: string, ip: string, name: string}> = [
-  { id: 'gpu1', ip: '220.82.52.202', name: 'GPU Server 1' },
+  { id: 'gpu1', ip: '220.82.46.3', name: 'GPU Server 1' },
   // Add more GPU instances here:
   // { id: 'gpu2', ip: '192.168.1.100', name: 'GPU Server 2' },
 ];
