@@ -220,11 +220,6 @@ export function SystemHealthDashboard() {
 
   // WebSocket connections for GPU services
   useEffect(() => {
-    // GPU WebSocket services are currently unavailable
-    console.warn('[SystemHealth] GPU WebSocket services disabled - GPU server not responding');
-    return () => {};
-
-    /* Disabled until GPU server is online
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const BASE_RECONNECT_DELAY_MS = 2000;
     const MAX_RECONNECT_DELAY_MS = 60000;
@@ -375,16 +370,10 @@ export function SystemHealthDashboard() {
       wsMap.clear();
       retryMap.clear();
     };
-    */
   }, []);
 
   // WebSocket connections for DB services
   useEffect(() => {
-    // DB WebSocket service is currently unavailable
-    console.warn('[SystemHealth] DB WebSocket service disabled - /usage endpoint not available');
-    return () => {};
-
-    /* Disabled until /usage endpoint is implemented
     const dbWsRefs = new Map<string, WebSocket>();
 
     function connectDB(config: DBInstanceConfig) {
@@ -476,16 +465,10 @@ export function SystemHealthDashboard() {
       dbWsRefs.forEach(ws => ws.close());
       dbWsRefs.clear();
     };
-    */
   }, []);
 
   // System Health WebSocket connections (new extended API)
   useEffect(() => {
-    // GPU system status/usage WebSocket services are currently unavailable
-    console.warn('[SystemHealth] System status/usage WebSockets disabled - GPU server not responding');
-    return () => {};
-
-    /* Disabled until GPU server system services are available
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
     // Connect to /status endpoint for prices, threads, ring buffers
@@ -613,7 +596,6 @@ export function SystemHealthDashboard() {
         systemUsageWsRef.current.close();
       }
     };
-    */
   }, []);
 
   const getStatusIcon = (connected: boolean) => {
