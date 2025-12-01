@@ -976,9 +976,6 @@ const WalkforwardDashboard = () => {
             {/* Main Content */}
             <div className="flex-1 p-4">
               <div className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <ActiveModelCard />
-                </div>
                 {chartData.length > 0 && <PerformanceChart data={chartData} />}
                 {summaryData.length > 0 && <PerformanceSummary runs={summaryData} />}
                 {runsForDetails.length > 0 && (
