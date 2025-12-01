@@ -1,14 +1,12 @@
 import { useCallback, useMemo, useState, useEffect } from "react";
 import { SimulationHeader } from "@/apps/walkforward/components/SimulationHeader";
 import { LoadRunModal } from "@/apps/walkforward/components/LoadRunModal";
-import { GoLiveModal } from "@/apps/walkforward/components/GoLiveModal";
 import { ConfigurationPanel } from "@/apps/walkforward/components/ConfigurationPanel";
 import { PerformanceChart } from "@/apps/walkforward/components/PerformanceChart";
 import { PerformanceSummary } from "@/apps/walkforward/components/PerformanceSummary";
 import { RunDetails } from "@/apps/walkforward/components/RunDetails";
 import { FoldConfigPanel } from "@/apps/walkforward/components/FoldConfigPanel";
 import { FoldResults } from "@/apps/walkforward/components/FoldResults";
-import { ActiveModelCard } from "@/apps/walkforward/components/ActiveModelCard";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -20,7 +18,6 @@ import { useWalkforwardContext } from "@/contexts/WalkforwardContext";
 import { xgboostClient } from "@/lib/services/xgboostClient";
 import type { XGBoostTrainResult } from "@/lib/types/xgboost";
 import { getDatasetManifest, getDatasetIndexMap } from "@/lib/stage1/client";
-import { useGoLive } from "@/hooks/useKrakenLive";
 
 const WalkforwardDashboard = () => {
   const { selectedDataset } = useDatasetContext();
@@ -28,7 +25,6 @@ const WalkforwardDashboard = () => {
 
   // Run selection
   const [loadRunModalOpen, setLoadRunModalOpen] = useState(false);
-  const [goLiveModalOpen, setGoLiveModalOpen] = useState(false);
   const [loadedRuns, setLoadedRuns] = useState<Stage1RunDetail[]>([]);
   const [activeRunIndex, setActiveRunIndex] = useState(0);
 
@@ -83,7 +79,6 @@ const WalkforwardDashboard = () => {
   const [datasetManifests, setDatasetManifests] = useState<Record<string, Stage1DatasetManifest>>({});
   const [indexCaches, setIndexCaches] = useState<Record<string, Record<number, number>>>({});
 
-  const goLiveMutation = useGoLive();
 
   // Restore cached simulation when dataset changes
   useEffect(() => {
@@ -373,21 +368,7 @@ const WalkforwardDashboard = () => {
 
   const activeRun = loadedRuns[activeRunIndex] || null;
 
-  const handleGoLive = (indicatorScript: string) => {
-    if (!activeRun) {
-      toast({
-        title: "No run selected",
-        description: "Load a run before going live.",
-        variant: "destructive",
-      });
-      return;
-    }
-    goLiveMutation.mutate({
-      run_id: activeRun.run_id,
-      indicator_script: indicatorScript,
-    });
-    setGoLiveModalOpen(false);
-  };
+  const handleGoLive = (_indicatorScript: string) => {};
 
   // Handle examining a fold
   const handleExamineFold = (runIndex: number, fold: any) => {
@@ -886,12 +867,12 @@ const WalkforwardDashboard = () => {
         onStartSimulation={handleStartSimulation}
         onReset={handleReset}
         onLoadRun={() => setLoadRunModalOpen(true)}
-        onGoLive={() => setGoLiveModalOpen(true)}
+        onGoLive={() => {}}
         isRunning={isRunning}
         model={model}
         onModelChange={setModel}
         selectedDataset={selectedDataset}
-        canGoLive={!!activeRun}
+        canGoLive={false}
       />
 
       {isRunning && (
@@ -911,13 +892,6 @@ const WalkforwardDashboard = () => {
         onOpenChange={setLoadRunModalOpen}
         datasetId={selectedDataset}
         onLoadRun={handleLoadRun}
-      />
-      <GoLiveModal
-        open={goLiveModalOpen}
-        onClose={() => setGoLiveModalOpen(false)}
-        onSubmit={handleGoLive}
-        run={activeRun}
-        isSubmitting={goLiveMutation.isPending}
       />
 
       {/* Top-level Tabs */}

@@ -102,6 +102,12 @@ const navigationItems = [
     icon: Route,
     description: "Cross-validation orchestration"
   },
+  {
+    title: "Live Model",
+    url: "/live-model",
+    icon: Brain,
+    description: "Activate and monitor live model"
+  },
 ];
 
 export function TradingSidebar() {

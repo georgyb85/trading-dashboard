@@ -26,6 +26,7 @@ import Indicators from "./pages/Indicators";
 import TradesimDashboard from "@/apps/tradesim";
 import LfsDashboard from "@/apps/lfs";
 import WalkforwardDashboard from "@/apps/walkforward";
+import LiveModelPage from "./pages/LiveModel";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -67,6 +68,7 @@ const App = () => (
             <Route path="/tradesim" element={<TradesimDashboard />} />
             <Route path="/lfs" element={<LfsDashboard />} />
             <Route path="/walkforward" element={<WalkforwardDashboard />} />
+            <Route path="/live-model" element={<LiveModelPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
               </Routes>
