@@ -10,6 +10,8 @@ import { RunsProvider } from "./contexts/RunsContext";
 import { SimulationProvider } from "./contexts/SimulationContext";
 import { WalkforwardProvider } from "./contexts/WalkforwardContext";
 import { IndicatorProvider } from "./contexts/IndicatorContext";
+import { MarketDataProvider } from "./contexts/MarketDataContext";
+import { StatusStreamProvider } from "./contexts/StatusStreamContext";
 import { TradingOverview } from "./components/TradingOverview";
 import { PositionsTable } from "./components/PositionsTable";
 import { BalancesTable } from "./components/BalancesTable";
@@ -47,7 +49,9 @@ const App = () => (
             <SimulationProvider>
               <WalkforwardProvider>
                 <IndicatorProvider>
-                  <TradingLayout>
+                  <MarketDataProvider>
+                    <StatusStreamProvider>
+                      <TradingLayout>
                 <Routes>
             <Route path="/" element={<SystemHealthDashboard />} />
             <Route path="/trading" element={<TradingOverview />} />
@@ -67,6 +71,8 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
               </Routes>
             </TradingLayout>
+                    </StatusStreamProvider>
+                  </MarketDataProvider>
                 </IndicatorProvider>
               </WalkforwardProvider>
             </SimulationProvider>

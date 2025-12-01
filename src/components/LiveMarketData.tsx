@@ -1,16 +1,31 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Activity, WifiOff, Loader2, TrendingUp, Zap, BarChart3 } from "lucide-react";
-import { useStatusStream } from "@/hooks/useStatusStream";
-import { useMemo } from "react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Activity, WifiOff, Loader2, TrendingUp, Zap, BarChart3, LineChart } from "lucide-react";
+import { useStatusStreamContext } from "@/contexts/StatusStreamContext";
+import { useMarketDataContext, INDICATOR_NAMES } from "@/contexts/MarketDataContext";
+import { LiveTimeSeriesChart, LiveHistogramChart } from "@/components/LiveIndicatorCharts";
+import { useMemo, useState } from "react";
 
 export function LiveMarketData() {
-  const { connected, error, stats, trades, ohlcv, lastPrices } = useStatusStream();
+  const { connected: statusConnected, error: statusError, stats, trades, ohlcv, lastPrices } = useStatusStreamContext();
+  const {
+    connected: marketDataConnected,
+    indicators,
+    atr,
+    position,
+    performance,
+    latestIndicator,
+    error: marketDataError,
+  } = useMarketDataContext();
 
-  // Get top symbols by activity
+  const [selectedIndicatorIndex, setSelectedIndicatorIndex] = useState(0);
+
+  // Get top symbols by activity - filter out invalid prices
   const topSymbols = useMemo(() => {
     return Object.entries(lastPrices)
+      .filter(([, price]) => typeof price === 'number' && !isNaN(price) && isFinite(price))
       .sort(([, priceA], [, priceB]) => priceB - priceA)
       .slice(0, 10);
   }, [lastPrices]);
@@ -33,18 +48,25 @@ export function LiveMarketData() {
     return date.toLocaleTimeString();
   };
 
-  // Loading and error states
-  if (!connected) {
+  const formatDateTime = (timestamp: number) => {
+    const date = new Date(timestamp);
+    return date.toLocaleString();
+  };
+
+  // Only show loading on initial load when we have no data at all
+  const hasAnyData = indicators.length > 0 || Object.keys(lastPrices).length > 0 || trades.length > 0;
+
+  if (!statusConnected && !hasAnyData) {
     return (
       <div className="space-y-6">
         <Card>
           <CardContent className="p-12 text-center">
-            {error ? (
+            {statusError ? (
               <div className="space-y-4">
                 <WifiOff className="h-12 w-12 mx-auto text-muted-foreground" />
                 <div>
                   <h3 className="text-lg font-semibold">Connection Error</h3>
-                  <p className="text-sm text-muted-foreground">{error}</p>
+                  <p className="text-sm text-muted-foreground">{statusError}</p>
                 </div>
               </div>
             ) : (
@@ -85,23 +107,244 @@ export function LiveMarketData() {
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-primary">
-              {trades.length}
+              {indicators.length}
             </div>
-            <p className="text-xs text-muted-foreground">Recent Trades</p>
+            <p className="text-xs text-muted-foreground">Indicator Snapshots</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              <Badge variant={connected ? "default" : "destructive"}>
-                {connected ? "Connected" : "Disconnected"}
+              <Badge variant={statusConnected ? "default" : "destructive"}>
+                Status: {statusConnected ? "OK" : "OFF"}
+              </Badge>
+              <Badge variant={marketDataConnected ? "default" : "secondary"}>
+                Indicators: {marketDataConnected ? "OK" : "OFF"}
               </Badge>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">Status Stream</p>
+            <p className="text-xs text-muted-foreground mt-2">WebSocket Status</p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Live Indicators Section */}
+      {indicators.length > 0 && (
+        <>
+          {/* Indicator Selector & Latest Values */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <LineChart className="h-5 w-5" />
+                Live Indicators (BTC/USD)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Selector */}
+                <div className="flex items-center gap-3">
+                  <label className="text-sm font-medium text-foreground whitespace-nowrap">
+                    Select Indicator:
+                  </label>
+                  <Select
+                    value={String(selectedIndicatorIndex)}
+                    onValueChange={(val) => setSelectedIndicatorIndex(parseInt(val))}
+                  >
+                    <SelectTrigger className="w-[280px] bg-card border-border">
+                      <SelectValue placeholder="Select indicator" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {INDICATOR_NAMES.map((name, idx) => (
+                        <SelectItem key={name} value={String(idx)}>
+                          {name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Latest Indicator Values Grid */}
+                {latestIndicator && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                    {INDICATOR_NAMES.map((name, idx) => (
+                      <div
+                        key={name}
+                        className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                          idx === selectedIndicatorIndex
+                            ? 'bg-primary/10 border-2 border-primary'
+                            : 'bg-muted/30 border border-transparent hover:bg-muted/50'
+                        }`}
+                        onClick={() => setSelectedIndicatorIndex(idx)}
+                      >
+                        <p className="text-xs text-muted-foreground truncate">{name}</p>
+                        <p className="text-sm font-mono font-semibold">
+                          {latestIndicator.values[idx]?.toFixed(4) ?? 'N/A'}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Last update time */}
+                {latestIndicator && (
+                  <p className="text-xs text-muted-foreground">
+                    Last update: {formatDateTime(latestIndicator.timestamp)}
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Charts */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <LiveTimeSeriesChart
+              data={indicators}
+              selectedIndicatorIndex={selectedIndicatorIndex}
+              indicatorName={INDICATOR_NAMES[selectedIndicatorIndex]}
+            />
+            <LiveHistogramChart
+              data={indicators}
+              selectedIndicatorIndex={selectedIndicatorIndex}
+              indicatorName={INDICATOR_NAMES[selectedIndicatorIndex]}
+            />
+          </div>
+        </>
+      )}
+
+      {/* Market Data Connection Status (if not connected and no data) */}
+      {!marketDataConnected && indicators.length === 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <LineChart className="h-5 w-5" />
+              Live Indicators
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-6 text-center">
+            <div className="space-y-3">
+              {marketDataError ? (
+                <>
+                  <WifiOff className="h-10 w-10 mx-auto text-muted-foreground" />
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      Indicator Stream Unavailable
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      The live indicator service (port 6006) is not running.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Will automatically reconnect when available.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <Loader2 className="h-10 w-10 mx-auto animate-spin text-primary" />
+                  <p className="text-sm text-muted-foreground">
+                    Connecting to indicator stream...
+                  </p>
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ATR & Position Info */}
+      {(atr || position) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {atr && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">ATR & Risk Levels</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground">ATR</p>
+                    <p className="font-mono font-semibold">{atr.value?.toFixed(2) ?? 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Stop Loss</p>
+                    <p className="font-mono text-loss">{atr.stopLossLevel?.toFixed(2) ?? 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Take Profit</p>
+                    <p className="font-mono text-success">{atr.takeProfitLevel?.toFixed(2) ?? 'N/A'}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {position && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Current Position</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {position.hasPosition ? (
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Side</p>
+                      <Badge variant={position.side === 'long' ? 'default' : 'secondary'}>
+                        {position.side?.toUpperCase()}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Entry</p>
+                      <p className="font-mono">{formatCurrency(position.entryPrice || 0)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Unrealized P&L</p>
+                      <p className={`font-mono ${(position.unrealizedPnl || 0) >= 0 ? 'text-success' : 'text-loss'}`}>
+                        {formatCurrency(position.unrealizedPnl || 0)}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No active position</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Performance Stats */}
+      {performance && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Trading Performance</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground">Win Rate</p>
+                <p className="text-lg font-semibold">
+                  {performance.winRate != null ? ((performance.winRate * 100).toFixed(1) + '%') : 'N/A'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Total P&L</p>
+                <p className={`text-lg font-semibold ${(performance.totalPnl ?? 0) >= 0 ? 'text-success' : 'text-loss'}`}>
+                  {performance.totalPnl != null ? formatCurrency(performance.totalPnl) : 'N/A'}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Total Trades</p>
+                <p className="text-lg font-semibold">{performance.totalTrades ?? 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Sharpe Ratio</p>
+                <p className="text-lg font-semibold">
+                  {performance.sharpeRatio != null ? performance.sharpeRatio.toFixed(2) : 'N/A'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Live Prices */}
       <Card>
@@ -199,13 +442,13 @@ export function LiveMarketData() {
         </Card>
       )}
 
-      {/* OHLCV Candles */}
+      {/* OHLCV Candles - One per symbol */}
       {ohlcv.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
-              Recent Candles (1m)
+              Latest Candles (1m)
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -213,8 +456,8 @@ export function LiveMarketData() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Time</TableHead>
                     <TableHead>Symbol</TableHead>
+                    <TableHead>Time</TableHead>
                     <TableHead>Open</TableHead>
                     <TableHead>High</TableHead>
                     <TableHead>Low</TableHead>
@@ -225,12 +468,12 @@ export function LiveMarketData() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {ohlcv.slice(-10).reverse().map((candle, idx) => (
-                    <TableRow key={`${candle.symbol}-${candle.timestamp}-${idx}`}>
+                  {ohlcv.map((candle) => (
+                    <TableRow key={candle.symbol}>
+                      <TableCell className="font-medium">{candle.symbol}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {formatTime(candle.timestamp)}
                       </TableCell>
-                      <TableCell className="font-medium">{candle.symbol}</TableCell>
                       <TableCell className="font-mono">
                         {formatCurrency(candle.open)}
                       </TableCell>
