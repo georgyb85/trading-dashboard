@@ -7,6 +7,7 @@ import { PerformanceSummary } from "@/apps/walkforward/components/PerformanceSum
 import { RunDetails } from "@/apps/walkforward/components/RunDetails";
 import { FoldConfigPanel } from "@/apps/walkforward/components/FoldConfigPanel";
 import { FoldResults } from "@/apps/walkforward/components/FoldResults";
+import { ActiveModelCard } from "@/apps/walkforward/components/ActiveModelCard";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChevronLeft, ChevronRight } from "lucide-react";
