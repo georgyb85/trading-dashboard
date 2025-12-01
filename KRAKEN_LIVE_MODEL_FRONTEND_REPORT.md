@@ -3,11 +3,11 @@
 ## What changed
 - Added Kraken REST client (`src/lib/kraken/client.ts`) with Go Live + active model endpoints and React Query hooks (`useGoLive`, `useActiveModel`).
 - Extended config with `VITE_KRAKEN_REST_BASE_URL` for REST calls (defaults to `window.location.origin`).
-- Walkforward UI updates:
-  - New “Go Live” button in the Simulation header (enabled when a run is loaded) that opens a modal to paste the indicator script and trigger Go Live against the GPU node.
-  - `GoLiveModal` shows the selected run id/dataset/target/features and blocks submission until a script is provided.
+- Live Model is now a dedicated page (sidebar link “Live Model”), decoupled from Walkforward Pilot.
   - `ActiveModelCard` surfaces the active live model (id, feature hash, thresholds, trained time) via `/api/live/active_model`.
-- Go Live flow uses the currently active loaded run (`run_id`) and posts `{run_id, indicator_script}` to `/api/live/go`; toasts on success/failure and auto-refreshes the active model query.
+  - Run selector lists runs previously loaded in Walkforward (cached in `RunsContext`); Go Live button enables once a cached run is selected.
+  - `GoLiveModal` remains for pasting the indicator script matching the run features.
+- Go Live flow uses the selected cached run (`run_id`) and posts `{run_id, indicator_script}` to `/api/live/go`; toasts on success/failure and auto-refreshes the active model query.
 
 ## How it works now
 1) Load a saved run (unchanged). This enables the “Go Live” button.
@@ -18,6 +18,7 @@
 - Backend must expose `/api/live/active_model` (placeholder query in UI) and should return `model_id`, `feature_hash`, `long_threshold`, `short_threshold`, `trained_at_ms`.
 - Backend still requires an explicit `indicator_script`; when the GPU node can fetch it from the run, extend the modal to make the script optional.
 - Live training via `live=true` on the XGBoost websocket is not hooked in the UI; once available, add a toggle and surface live metrics/ROC.
+- If no runs are cached (i.e., user hasn’t loaded any in Walkforward), the Live Model page will show an empty selector and guidance to load a run first.
 - Add error handling for the case where the backend rejects a script because features are missing (surface the backend error message in the toast/modal).
 
 ## Env to set
