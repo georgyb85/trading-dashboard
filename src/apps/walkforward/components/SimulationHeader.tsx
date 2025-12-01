@@ -12,20 +12,24 @@ interface SimulationHeaderProps {
   onStartSimulation: () => void;
   onReset: () => void;
   onLoadRun: () => void;
+  onGoLive: () => void;
   isRunning: boolean;
   model: string;
   onModelChange: (value: string) => void;
   selectedDataset: string | null;
+  canGoLive: boolean;
 }
 
 export const SimulationHeader = ({
   onStartSimulation,
   onReset,
   onLoadRun,
+  onGoLive,
   isRunning,
   model,
   onModelChange,
   selectedDataset,
+  canGoLive,
 }: SimulationHeaderProps) => {
 
   return (
@@ -81,6 +85,9 @@ export const SimulationHeader = ({
           <Button onClick={onReset} variant="outline" disabled={isRunning}>
             <RotateCcw className="mr-2 h-4 w-4" />
             Reset
+          </Button>
+          <Button onClick={onGoLive} variant="secondary" disabled={!canGoLive || isRunning}>
+            Go Live
           </Button>
         </div>
       </div>

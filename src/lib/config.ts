@@ -10,6 +10,9 @@ export const config = {
   // Kraken XGBoost WebSocket endpoint (proxied through nginx for SSL)
   krakenXgboostWsUrl: import.meta.env.VITE_KRAKEN_XGBOOST_WS_URL || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/xgboost-ws`,
 
+  // Kraken REST base URL (for Go Live / active model endpoints)
+  krakenRestBaseUrl: import.meta.env.VITE_KRAKEN_REST_BASE_URL || `${window.location.origin}`,
+
   // Environment
   isDev: import.meta.env.DEV,
   isProd: import.meta.env.PROD,
