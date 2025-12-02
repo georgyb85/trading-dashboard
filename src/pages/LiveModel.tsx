@@ -49,6 +49,9 @@ const LiveModelPage = () => {
   const { predictions: livePredictions, targets: liveTargets } = useLiveStreams();
   const { indicators, indicatorNames } = useMarketDataContext();
 
+  // Get target horizon from active model metadata
+  const targetHorizonBars = activeModel?.target_horizon_bars ?? 0;
+
   // Build a map of target values from indicators (TGT_* columns) by timestamp
   // Note: Backend sends 0 for unknown targets, so we exclude 0 values for recent timestamps
   // where the target horizon hasn't elapsed yet
@@ -57,15 +60,15 @@ const LiveModelPage = () => {
     const tgtIndex = indicatorNames.findIndex(name => name.startsWith('TGT'));
     if (tgtIndex === -1) return targetMap;
 
-    // Assume 4-hour target horizon - targets from the last 4 hours aren't known yet
-    const horizonMs = 4 * 60 * 60 * 1000;
+    // Use target horizon from model metadata (bars * 1 hour per bar)
+    const horizonMs = targetHorizonBars * 60 * 60 * 1000;
     const cutoffTime = Date.now() - horizonMs;
 
     for (const snapshot of indicators) {
       const tgtValue = snapshot.values[tgtIndex];
       if (tgtValue != null && !isNaN(tgtValue)) {
         // For recent timestamps, treat 0 as "unknown" since backend sends 0 for pending targets
-        if (snapshot.timestamp > cutoffTime && tgtValue === 0) {
+        if (horizonMs > 0 && snapshot.timestamp > cutoffTime && tgtValue === 0) {
           targetMap[snapshot.timestamp] = null;
         } else {
           targetMap[snapshot.timestamp] = tgtValue;
@@ -73,7 +76,7 @@ const LiveModelPage = () => {
       }
     }
     return targetMap;
-  }, [indicators, indicatorNames]);
+  }, [indicators, indicatorNames, targetHorizonBars]);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [longThresholdInput, setLongThresholdInput] = useState<string>('');
   const [shortThresholdInput, setShortThresholdInput] = useState<string>('');
