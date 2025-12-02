@@ -43,6 +43,7 @@ export interface LiveModelMetricsResponse {
   run_id?: string;
   dataset_id?: string;
   train_result: XGBoostTrainResult;
+  target_horizon_bars?: number;
 }
 
 export interface KrakenApiResponse<T> {

@@ -114,6 +114,7 @@ const LiveModelPage = () => {
   const trainResult: XGBoostTrainResult | null = (metricsQuery.data?.train_result as XGBoostTrainResult | undefined)
     || (activeModel?.train_result as XGBoostTrainResult | undefined)
     || null;
+  const horizonBars = metricsQuery.data?.target_horizon_bars ?? activeModel?.target_horizon_bars ?? 0;
   const metricsError = metricsQuery.error instanceof Error ? metricsQuery.error.message : null;
 
   return (
@@ -462,14 +463,21 @@ const LiveModelPage = () => {
                 </div>
               )}
               {!predictionsQuery.isLoading && predictionsQuery.data && predictionsQuery.data.length > 0 ? (
-                <div className="space-y-1">
-                  {predictionsQuery.data.slice(0, 10).map((p) => (
-                    <div key={p.ts_ms} className="flex justify-between font-mono text-xs">
-                      <span>{new Date(p.ts_ms).toLocaleString()}</span>
-                      <span>{p.prediction.toFixed(4)}</span>
+                <>
+                  {horizonBars > 0 && (
+                    <div className="text-xs text-muted-foreground mb-2">
+                      Showing predictions older than {horizonBars} hour horizon (targets not known before that).
                     </div>
-                  ))}
-                </div>
+                  )}
+                  <div className="space-y-1">
+                    {predictionsQuery.data.slice(0, 10).map((p) => (
+                      <div key={p.ts_ms} className="flex justify-between font-mono text-xs">
+                        <span>{new Date(p.ts_ms).toLocaleString()}</span>
+                        <span>{p.prediction.toFixed(4)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
               ) : (
                 <div className="text-muted-foreground text-xs">No predictions yet.</div>
               )}
