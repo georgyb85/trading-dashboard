@@ -29,6 +29,7 @@ export interface LiveModelSummary {
   best_score?: number;
   feature_hash?: string;
   indicator_hash?: string;
+  target_horizon_bars?: number;
 }
 
 export interface LiveModelDetail extends LiveModelSummary {
@@ -44,6 +45,23 @@ export interface LiveModelMetricsResponse {
   dataset_id?: string;
   train_result: XGBoostTrainResult;
   target_horizon_bars?: number;
+}
+
+export interface LivePrediction {
+  ts_ms: number;
+  model_id: string;
+  prediction: number;
+  long_threshold?: number;
+  short_threshold?: number;
+  actual?: number | null;
+  trigger?: 'long_opt' | 'short_opt' | 'long_p95' | 'short_p5' | null;
+}
+
+export interface LiveTargetUpdate {
+  target: string;
+  ts_ms: number;
+  value: number | null;
+  model_id?: string;
 }
 
 export interface KrakenApiResponse<T> {

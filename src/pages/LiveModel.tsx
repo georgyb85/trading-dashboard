@@ -31,6 +31,7 @@ import { Activity, BarChart3, Settings, Info, RefreshCw, Loader2 } from 'lucide-
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { krakenClient } from '@/lib/kraken/client';
 import { Input } from '@/components/ui/input';
+import { useLiveStreams } from '@/contexts/LiveStreamsContext';
 
 const LiveModelPage = () => {
   const { cachedRuns } = useRunsContext();
@@ -44,6 +45,7 @@ const LiveModelPage = () => {
   const deactivateModel = useDeactivateModel();
   const deleteModel = useDeleteModel();
   const updateThresholds = useUpdateThresholds();
+  const { predictions: livePredictions, targets: liveTargets } = useLiveStreams();
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [longThresholdInput, setLongThresholdInput] = useState<string>('');
   const [shortThresholdInput, setShortThresholdInput] = useState<string>('');
@@ -452,35 +454,43 @@ const LiveModelPage = () => {
               <CardTitle>Recent Predictions</CardTitle>
             </CardHeader>
             <CardContent className="text-sm">
-              {predictionsQuery.isLoading && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading predictions…
+              {horizonBars > 0 && (
+                <div className="text-xs text-muted-foreground mb-2">
+                  Showing predictions older than {horizonBars} hour horizon (targets not known before that).
                 </div>
               )}
-              {predictionsQuery.error && (
-                <div className="text-destructive">
-                  {predictionsQuery.error instanceof Error ? predictionsQuery.error.message : 'Failed to load predictions'}
-                </div>
-              )}
-              {!predictionsQuery.isLoading && predictionsQuery.data && predictionsQuery.data.length > 0 ? (
-                <>
-                  {horizonBars > 0 && (
-                    <div className="text-xs text-muted-foreground mb-2">
-                      Showing predictions older than {horizonBars} hour horizon (targets not known before that).
-                    </div>
-                  )}
-                  <div className="space-y-1">
-                    {predictionsQuery.data.slice(0, 10).map((p) => (
-                      <div key={p.ts_ms} className="flex justify-between font-mono text-xs">
-                        <span>{new Date(p.ts_ms).toLocaleString()}</span>
-                        <span>{p.prediction.toFixed(4)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div className="text-muted-foreground text-xs">No predictions yet.</div>
-              )}
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Timestamp</TableHead>
+                    <TableHead>Prediction</TableHead>
+                    <TableHead>Actual</TableHead>
+                    <TableHead>Trigger</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {livePredictions
+                    .filter((p) => !metricsModelId || p.model_id === metricsModelId)
+                    .slice(0, 15)
+                    .map((p) => {
+                      const actual = liveTargets[`${p.model_id}:${p.ts_ms}`];
+                      let trigger: string | null = null;
+                      if (p.long_threshold !== undefined && p.prediction > p.long_threshold) {
+                        trigger = 'long';
+                      } else if (p.short_threshold !== undefined && p.prediction < p.short_threshold) {
+                        trigger = 'short';
+                      }
+                      return (
+                        <TableRow key={`${p.model_id}-${p.ts_ms}`}>
+                          <TableCell className="font-mono text-xs">{new Date(p.ts_ms).toLocaleString()}</TableCell>
+                          <TableCell className="font-mono text-xs">{p.prediction.toFixed(4)}</TableCell>
+                          <TableCell className="font-mono text-xs">{actual === undefined ? '—' : (actual ?? NaN)}</TableCell>
+                          <TableCell className="font-mono text-xs">{trigger ?? '—'}</TableCell>
+                        </TableRow>
+                      );
+                    })}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         </TabsContent>
