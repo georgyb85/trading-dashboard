@@ -37,7 +37,7 @@ const LiveModelPage = () => {
       toast({ title: 'No run selected', description: 'Load a run from Walkforward first', variant: 'destructive' });
       return;
     }
-    goLiveMutation.mutate({ run_id: selectedRun.run_id, indicator_script: script });
+    goLiveMutation.mutate({ run_id: selectedRun.run_id, indicator_script: script, run: selectedRun });
     setModalOpen(false);
   };
 

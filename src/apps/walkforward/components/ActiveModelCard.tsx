@@ -18,6 +18,7 @@ export const ActiveModelCard = () => {
             <div className="flex justify-between"><span className="text-muted-foreground">Model ID</span><span className="font-mono text-xs">{data.model_id}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Feature Hash</span><span className="font-mono text-xs">{data.feature_hash}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Thresholds</span><span>{data.short_threshold.toFixed(4)} / {data.long_threshold.toFixed(4)}</span></div>
+            {data.best_score !== undefined && <div className="flex justify-between"><span className="text-muted-foreground">Best Score</span><span>{data.best_score}</span></div>}
             <div className="flex justify-between"><span className="text-muted-foreground">Trained</span><span>{new Date(data.trained_at_ms).toLocaleString()}</span></div>
           </>
         )}
@@ -28,4 +29,3 @@ export const ActiveModelCard = () => {
     </Card>
   );
 };
-

@@ -43,4 +43,3 @@ class KrakenClient {
 }
 
 export const krakenClient = new KrakenClient();
-

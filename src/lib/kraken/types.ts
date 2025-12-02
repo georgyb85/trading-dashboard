@@ -1,6 +1,9 @@
+import type { Stage1RunDetail } from '@/lib/stage1/types';
+
 export interface GoLiveRequest {
   run_id: string;
   indicator_script: string;
+  run?: Stage1RunDetail;
 }
 
 export interface GoLiveResponse {
@@ -14,6 +17,7 @@ export interface ActiveModelResponse {
   long_threshold: number;
   short_threshold: number;
   trained_at_ms: number;
+  best_score?: number;
 }
 
 export interface KrakenApiResponse<T> {
