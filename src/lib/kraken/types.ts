@@ -9,23 +9,40 @@ export interface GoLiveRequest {
 
 export interface GoLiveResponse {
   success: boolean;
+  model_id: string;
   run_id: string;
+  dataset_id?: string;
+  version?: number;
+  train_result?: XGBoostTrainResult;
 }
 
-// Basic active model info (always available)
-export interface ActiveModelBasic {
+export interface LiveModelSummary {
   model_id: string;
-  feature_hash: string;
-  long_threshold: number;
-  short_threshold: number;
+  run_id: string;
+  dataset_id: string;
+  status: 'active' | 'inactive';
+  version: number;
   trained_at_ms: number;
+  next_retrain_ms?: number;
+  long_threshold?: number;
+  short_threshold?: number;
   best_score?: number;
+  feature_hash?: string;
+  indicator_hash?: string;
+}
+
+export interface LiveModelDetail extends LiveModelSummary {
+  train_result?: XGBoostTrainResult;
 }
 
 // Full active model response with training results for rich visualizations
-export interface ActiveModelResponse extends ActiveModelBasic {
-  // Full XGBoost training result for visualizations (predictions, actuals, ROC, etc.)
-  train_result?: XGBoostTrainResult;
+export interface ActiveModelResponse extends LiveModelDetail {}
+
+export interface LiveModelMetricsResponse {
+  model_id: string;
+  run_id?: string;
+  dataset_id?: string;
+  train_result: XGBoostTrainResult;
 }
 
 export interface KrakenApiResponse<T> {

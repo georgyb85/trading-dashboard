@@ -4,12 +4,20 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { GoLiveModal } from '@/apps/walkforward/components/GoLiveModal';
 import { useRunsContext } from '@/contexts/RunsContext';
-import { useWalkforwardContext } from '@/contexts/WalkforwardContext';
 import { toast } from '@/hooks/use-toast';
-import { useGoLive, useActiveModel } from '@/hooks/useKrakenLive';
-import { xgboostClient } from '@/lib/services/xgboostClient';
+import {
+  useGoLive,
+  useActiveModel,
+  useLiveModels,
+  useActivateModel,
+  useRetrainModel,
+  useDeactivateModel,
+  useDeleteModel,
+  useUpdateThresholds,
+} from '@/hooks/useKrakenLive';
 import type { XGBoostTrainResult } from '@/lib/types/xgboost';
 import {
   Select,
@@ -20,16 +28,25 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Activity, BarChart3, Settings, Info, RefreshCw, Loader2 } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { krakenClient } from '@/lib/kraken/client';
+import { Input } from '@/components/ui/input';
 
 const LiveModelPage = () => {
   const { cachedRuns } = useRunsContext();
-  const { liveModelResult, setLiveModelResult } = useWalkforwardContext();
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string>('');
-  const [isLoadingPerformance, setIsLoadingPerformance] = useState(false);
-  const [performanceError, setPerformanceError] = useState<string | null>(null);
   const goLiveMutation = useGoLive();
   const { data: activeModel, isLoading: activeModelLoading, isError: activeModelError } = useActiveModel();
+  const { data: liveModels = [], isLoading: liveModelsLoading } = useLiveModels();
+  const activateModel = useActivateModel();
+  const retrainModel = useRetrainModel();
+  const deactivateModel = useDeactivateModel();
+  const deleteModel = useDeleteModel();
+  const updateThresholds = useUpdateThresholds();
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  const [longThresholdInput, setLongThresholdInput] = useState<string>('');
+  const [shortThresholdInput, setShortThresholdInput] = useState<string>('');
 
   const runList = useMemo(() => Array.from(cachedRuns.values()), [cachedRuns]);
   const selectedRun = runList.find((r) => r.run_id === selectedRunId) || null;
@@ -43,6 +60,47 @@ const LiveModelPage = () => {
     }
   }, [runList, selectedRunId]);
 
+  useEffect(() => {
+    if (activeModel?.model_id) {
+      setSelectedModelId(activeModel.model_id);
+    }
+  }, [activeModel?.model_id]);
+
+  useEffect(() => {
+    if (activeModel?.long_threshold !== undefined) {
+      setLongThresholdInput(activeModel.long_threshold.toString());
+    }
+    if (activeModel?.short_threshold !== undefined) {
+      setShortThresholdInput(activeModel.short_threshold.toString());
+    }
+  }, [activeModel?.long_threshold, activeModel?.short_threshold]);
+
+  const metricsModelId = selectedModelId || activeModel?.model_id || null;
+  const metricsQuery = useQuery({
+    queryKey: ['kraken', 'metrics', metricsModelId],
+    enabled: !!metricsModelId,
+    queryFn: async () => {
+      const resp = await krakenClient.getMetrics(metricsModelId!);
+      if (!resp.success || !resp.data) {
+        throw new Error(resp.error || 'Failed to load metrics');
+      }
+      return resp.data;
+    },
+    staleTime: 30_000,
+  });
+  const predictionsQuery = useQuery<{ ts_ms: number; prediction: number; long_threshold: number; short_threshold: number; feature_hash?: string }[]>({
+    queryKey: ['kraken', 'predictions', metricsModelId],
+    enabled: !!metricsModelId,
+    queryFn: async () => {
+      const resp = await krakenClient.getPredictions(metricsModelId!, 50);
+      if (!resp.success || !resp.data) {
+        throw new Error(resp.error || 'Failed to load predictions');
+      }
+      return resp.data.predictions;
+    },
+    staleTime: 30_000,
+  });
+
   const handleGoLive = (script: string) => {
     if (!selectedRun) {
       toast({ title: 'No run selected', description: 'Load a run from Walkforward first', variant: 'destructive' });
@@ -52,86 +110,11 @@ const LiveModelPage = () => {
     setModalOpen(false);
   };
 
-  // Load live performance data by calling xgboost training endpoint
-  const loadLivePerformance = async () => {
-    if (!selectedRun) {
-      toast({ title: 'No run selected', description: 'Select a run first', variant: 'destructive' });
-      return;
-    }
-
-    setIsLoadingPerformance(true);
-    setPerformanceError(null);
-
-    try {
-      // Get the run's training config
-      const run = selectedRun;
-
-      // Calculate timestamps
-      // Training data: use the run's original training period
-      // Test data: from midnight today to now (live performance)
-      const now = Date.now();
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const midnightMs = today.getTime();
-
-      // Get feature columns as array
-      const featureColumns = Array.isArray(run.feature_columns)
-        ? run.feature_columns
-        : typeof run.feature_columns === 'string'
-          ? run.feature_columns.split(',').map(s => s.trim())
-          : [];
-
-      // Use the run's original train/val timestamps if available, otherwise estimate
-      const runConfig = (run as any).config || {};
-      const trainStart = runConfig.train_start_timestamp || (midnightMs - 30 * 24 * 60 * 60 * 1000); // 30 days before midnight
-      const trainEnd = runConfig.train_end_timestamp || (midnightMs - 24 * 60 * 60 * 1000); // 1 day before midnight
-      const valStart = runConfig.val_start_timestamp || (midnightMs - 24 * 60 * 60 * 1000);
-      const valEnd = runConfig.val_end_timestamp || midnightMs;
-
-      const payload = {
-        dataset: {
-          dataset_id: run.dataset_id,
-          feature_columns: featureColumns,
-          target_column: String(run.target_column),
-          train: { start_timestamp: trainStart, end_timestamp: trainEnd },
-          validation: { start_timestamp: valStart, end_timestamp: valEnd },
-          test: { start_timestamp: midnightMs, end_timestamp: now },
-        },
-        config: runConfig.xgboost_config || {
-          max_depth: 4,
-          learning_rate: 0.01,
-          n_estimators: 2000,
-          early_stopping_rounds: 200,
-        },
-      };
-
-      console.log('[LiveModel] Loading live performance with payload:', payload);
-
-      const result = await xgboostClient.train(payload);
-
-      console.log('[LiveModel] Got live performance result:', result);
-      setLiveModelResult(result);
-
-      toast({
-        title: 'Performance loaded',
-        description: `Evaluated on ${result.test_samples || 0} live samples`
-      });
-    } catch (err) {
-      console.error('[LiveModel] Failed to load live performance:', err);
-      const message = err instanceof Error ? err.message : 'Failed to load performance';
-      setPerformanceError(message);
-      toast({
-        title: 'Failed to load performance',
-        description: message,
-        variant: 'destructive'
-      });
-    } finally {
-      setIsLoadingPerformance(false);
-    }
-  };
-
   const hasActiveModel = activeModel && activeModel.model_id;
-  const trainResult = liveModelResult || activeModel?.train_result || null;
+  const trainResult: XGBoostTrainResult | null = (metricsQuery.data?.train_result as XGBoostTrainResult | undefined)
+    || (activeModel?.train_result as XGBoostTrainResult | undefined)
+    || null;
+  const metricsError = metricsQuery.error instanceof Error ? metricsQuery.error.message : null;
 
   return (
     <div className="p-6 space-y-4">
@@ -201,10 +184,102 @@ const LiveModelPage = () => {
                 <p>1. Load a run in <strong>Walkforward Pilot</strong> first - it will appear in the selector above.</p>
                 <p>2. Select the run and click <strong>Go Live</strong>.</p>
                 <p>3. Provide the indicator script that matches the run's features.</p>
-                <p>4. Click <strong>Load Live Performance</strong> to see how the model performs on today's data.</p>
+                <p>4. Refresh metrics to see how the model performs on today's data.</p>
               </CardContent>
             </Card>
           </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Live Models</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {liveModelsLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading models…
+                </div>
+              ) : liveModels.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No live models yet. Use Go Live to train the first one.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Model</TableHead>
+                      <TableHead>Dataset</TableHead>
+                      <TableHead>Trained</TableHead>
+                      <TableHead>Next Retrain</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {liveModels.map((model) => (
+                      <TableRow key={model.model_id}>
+                        <TableCell>
+                          <Badge variant={model.status === 'active' ? 'default' : 'secondary'}>
+                            {model.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{model.model_id.slice(0, 10)}…</TableCell>
+                        <TableCell className="font-mono text-xs">{model.dataset_id}</TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {model.trained_at_ms ? new Date(model.trained_at_ms).toLocaleString() : '—'}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {model.next_retrain_ms ? new Date(model.next_retrain_ms).toLocaleString() : '—'}
+                        </TableCell>
+                        <TableCell className="text-right space-x-2">
+                          <Button size="sm" variant="ghost" onClick={() => setSelectedModelId(model.model_id)}>
+                            View
+                          </Button>
+                          {model.status === 'active' ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => deactivateModel.mutate(model.model_id)}
+                              disabled={deactivateModel.isPending}
+                            >
+                              Deactivate
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => activateModel.mutate(model.model_id)}
+                              disabled={activateModel.isPending}
+                            >
+                              Activate
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => retrainModel.mutate(model.model_id)}
+                            disabled={retrainModel.isPending}
+                          >
+                            Retrain
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive"
+                            onClick={() => {
+                              if (window.confirm(`Delete model ${model.model_id}?`)) {
+                                deleteModel.mutate(model.model_id);
+                              }
+                            }}
+                            disabled={deleteModel.isPending}
+                          >
+                            Delete
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Show basic metrics if we have an active model */}
           {hasActiveModel && (
@@ -257,37 +332,98 @@ const LiveModelPage = () => {
 
         {/* Model Performance Tab - Uses FoldResults for rich visualizations */}
         <TabsContent value="performance" className="space-y-4">
-          {/* Load Performance Button */}
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-semibold">Live Performance</h3>
               <p className="text-sm text-muted-foreground">
-                Evaluate model predictions against actual outcomes from midnight to now
+                Evaluate model predictions against actual outcomes using the latest trained model
               </p>
             </div>
+            <div className="flex items-center gap-3">
+              <Select
+                value={metricsModelId ?? undefined}
+                onValueChange={(value) => setSelectedModelId(value)}
+                disabled={liveModels.length === 0}
+              >
+                <SelectTrigger className="w-[220px]">
+                  <SelectValue placeholder="Select model" />
+                </SelectTrigger>
+                <SelectContent>
+                  {liveModels.map((m) => (
+                    <SelectItem key={m.model_id} value={m.model_id}>
+                      {m.model_id.slice(0, 8)}… ({m.status})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             <Button
-              onClick={loadLivePerformance}
-              disabled={!selectedRun || isLoadingPerformance}
+              onClick={() => metricsQuery.refetch()}
+              disabled={!metricsModelId || metricsQuery.isFetching}
               variant="outline"
             >
-              {isLoadingPerformance ? (
+              {metricsQuery.isFetching ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Loading...
+                  Refreshing…
                 </>
               ) : (
                 <>
                   <RefreshCw className="h-4 w-4 mr-2" />
-                  Load Live Performance
+                  Refresh Metrics
                 </>
               )}
             </Button>
+            </div>
           </div>
 
-          {performanceError && (
+          {metricsError && (
             <Card className="border-destructive">
               <CardContent className="p-4 text-destructive">
-                {performanceError}
+                {metricsError}
+              </CardContent>
+            </Card>
+          )}
+
+          {metricsModelId && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Adjust Live Thresholds</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-3 md:grid-cols-3 items-end">
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground">Long Threshold</div>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={longThresholdInput}
+                    onChange={(e) => setLongThresholdInput(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground">Short Threshold</div>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={shortThresholdInput}
+                    onChange={(e) => setShortThresholdInput(e.target.value)}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => {
+                      const longVal = parseFloat(longThresholdInput);
+                      const shortVal = parseFloat(shortThresholdInput);
+                      if (Number.isNaN(longVal) || Number.isNaN(shortVal)) {
+                        toast({ title: 'Invalid thresholds', description: 'Enter numeric values', variant: 'destructive' });
+                        return;
+                      }
+                      updateThresholds.mutate({ modelId: metricsModelId, longThreshold: longVal, shortThreshold: shortVal });
+                    }}
+                    disabled={updateThresholds.isPending}
+                  >
+                    {updateThresholds.isPending ? 'Applying…' : 'Apply to Live Model'}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -295,8 +431,8 @@ const LiveModelPage = () => {
           {trainResult ? (
             <FoldResults
               result={trainResult}
-              isLoading={isLoadingPerformance}
-              error={performanceError}
+              isLoading={metricsQuery.isFetching}
+              error={metricsError}
             />
           ) : (
             <Card>
@@ -304,11 +440,41 @@ const LiveModelPage = () => {
                 <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>No performance data loaded yet.</p>
                 <p className="text-sm mt-2">
-                  Click "Load Live Performance" to evaluate the model on today's live data.
+                  Select a model and refresh metrics to evaluate the latest live performance.
                 </p>
               </CardContent>
             </Card>
           )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Predictions</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm">
+              {predictionsQuery.isLoading && (
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading predictions…
+                </div>
+              )}
+              {predictionsQuery.error && (
+                <div className="text-destructive">
+                  {predictionsQuery.error instanceof Error ? predictionsQuery.error.message : 'Failed to load predictions'}
+                </div>
+              )}
+              {!predictionsQuery.isLoading && predictionsQuery.data && predictionsQuery.data.length > 0 ? (
+                <div className="space-y-1">
+                  {predictionsQuery.data.slice(0, 10).map((p) => (
+                    <div key={p.ts_ms} className="flex justify-between font-mono text-xs">
+                      <span>{new Date(p.ts_ms).toLocaleString()}</span>
+                      <span>{p.prediction.toFixed(4)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-muted-foreground text-xs">No predictions yet.</div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Configuration Tab */}
@@ -362,8 +528,12 @@ const LiveModelPage = () => {
                   <span className="text-xs">GET /api/live/active_model</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">XGBoost Train</span>
-                  <span className="text-xs">WS /api/xgboost-ws</span>
+                  <span className="text-muted-foreground">Models</span>
+                  <span className="text-xs">GET /api/live/models</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Metrics</span>
+                  <span className="text-xs">GET /api/live/models/:id/metrics</span>
                 </div>
               </CardContent>
             </Card>

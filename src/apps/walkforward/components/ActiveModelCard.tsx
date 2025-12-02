@@ -15,10 +15,14 @@ export const ActiveModelCard = () => {
         {isError && <div className="text-destructive">{error instanceof Error ? error.message : 'Failed to load active model'}</div>}
         {!isLoading && !isError && data && data.model_id && (
           <>
+            <div className="flex justify-between"><span className="text-muted-foreground">Status</span><span className="font-mono text-xs">{data.status ?? 'active'}</span></div>
+            {data.run_id && <div className="flex justify-between"><span className="text-muted-foreground">Run ID</span><span className="font-mono text-xs">{data.run_id}</span></div>}
+            {data.dataset_id && <div className="flex justify-between"><span className="text-muted-foreground">Dataset</span><span className="font-mono text-xs">{data.dataset_id}</span></div>}
             <div className="flex justify-between"><span className="text-muted-foreground">Model ID</span><span className="font-mono text-xs">{data.model_id}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Feature Hash</span><span className="font-mono text-xs">{data.feature_hash ?? 'N/A'}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Thresholds</span><span>{data.short_threshold?.toFixed(4) ?? 'N/A'} / {data.long_threshold?.toFixed(4) ?? 'N/A'}</span></div>
             {data.best_score !== undefined && <div className="flex justify-between"><span className="text-muted-foreground">Best Score</span><span>{data.best_score}</span></div>}
+            {data.version !== undefined && <div className="flex justify-between"><span className="text-muted-foreground">Version</span><span className="font-mono text-xs">{data.version}</span></div>}
             <div className="flex justify-between"><span className="text-muted-foreground">Trained</span><span>{data.trained_at_ms ? new Date(data.trained_at_ms).toLocaleString() : 'N/A'}</span></div>
           </>
         )}
