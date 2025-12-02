@@ -50,15 +50,26 @@ const LiveModelPage = () => {
   const { indicators, indicatorNames } = useMarketDataContext();
 
   // Build a map of target values from indicators (TGT_* columns) by timestamp
+  // Note: Backend sends 0 for unknown targets, so we exclude 0 values for recent timestamps
+  // where the target horizon hasn't elapsed yet
   const indicatorTargetsByTimestamp = useMemo(() => {
-    const targetMap: Record<number, number> = {};
+    const targetMap: Record<number, number | null> = {};
     const tgtIndex = indicatorNames.findIndex(name => name.startsWith('TGT'));
     if (tgtIndex === -1) return targetMap;
+
+    // Assume 4-hour target horizon - targets from the last 4 hours aren't known yet
+    const horizonMs = 4 * 60 * 60 * 1000;
+    const cutoffTime = Date.now() - horizonMs;
 
     for (const snapshot of indicators) {
       const tgtValue = snapshot.values[tgtIndex];
       if (tgtValue != null && !isNaN(tgtValue)) {
-        targetMap[snapshot.timestamp] = tgtValue;
+        // For recent timestamps, treat 0 as "unknown" since backend sends 0 for pending targets
+        if (snapshot.timestamp > cutoffTime && tgtValue === 0) {
+          targetMap[snapshot.timestamp] = null;
+        } else {
+          targetMap[snapshot.timestamp] = tgtValue;
+        }
       }
     }
     return targetMap;
@@ -486,13 +497,11 @@ const LiveModelPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {livePredictions
-                    .filter((p) => !metricsModelId || p.model_id === metricsModelId)
-                    .slice(0, 15)
-                    .map((p) => {
-                      // Try indicator targets first (most reliable), then prediction actual, then WebSocket targets
-                      const actual = indicatorTargetsByTimestamp[p.ts_ms]
-                        ?? p.actual
+                  {livePredictions.map((p) => {
+                      // Try prediction's actual first (from /ws/predictions with proper null handling),
+                      // then indicator targets, then WebSocket targets
+                      const actual = p.actual
+                        ?? indicatorTargetsByTimestamp[p.ts_ms]
                         ?? liveTargets[`${p.model_id}:${p.ts_ms}`]
                         ?? liveTargets[`active:${p.ts_ms}`];
                       let trigger: string | null = null;

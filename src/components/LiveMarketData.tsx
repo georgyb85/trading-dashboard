@@ -7,6 +7,7 @@ import { Activity, WifiOff, Loader2, TrendingUp, Zap, BarChart3, LineChart, Brai
 import { useStatusStreamContext } from "@/contexts/StatusStreamContext";
 import { useMarketDataContext } from "@/contexts/MarketDataContext";
 import { useLiveStreams } from "@/contexts/LiveStreamsContext";
+import { useActiveModel } from "@/hooks/useKrakenLive";
 import { LiveTimeSeriesChart, LiveHistogramChart } from "@/components/LiveIndicatorCharts";
 import { useMemo, useState } from "react";
 
@@ -23,57 +24,76 @@ export function LiveMarketData() {
     error: marketDataError,
   } = useMarketDataContext();
   const { predictions, targets } = useLiveStreams();
+  const { data: activeModel } = useActiveModel();
 
   const [selectedIndicatorIndex, setSelectedIndicatorIndex] = useState(0);
 
-  // Group predictions by model_id and extract thresholds
-  const { predictionsByModel, thresholdsByModel } = useMemo(() => {
+  // Get all 4 thresholds from active model's train_result
+  const allThresholds = useMemo(() => {
+    const thresholds = activeModel?.train_result?.thresholds;
+    return {
+      longOptimal: thresholds?.long_optimal ?? null,
+      longPercentile95: thresholds?.long_percentile_95 ?? null,
+      shortOptimal: thresholds?.short_optimal ?? null,
+      shortPercentile05: thresholds?.short_percentile_05 ?? null,
+    };
+  }, [activeModel]);
+
+  // Group predictions by model_id
+  const predictionsByModel = useMemo(() => {
     const grouped: Record<string, typeof predictions> = {};
-    const thresholds: Record<string, { long: number | null; short: number | null }> = {};
 
     for (const pred of predictions) {
       const modelId = pred.model_id || 'unknown';
       if (!grouped[modelId]) {
         grouped[modelId] = [];
-        thresholds[modelId] = { long: null, short: null };
       }
       grouped[modelId].push(pred);
-      // Extract thresholds from first prediction (they're constant)
-      if (thresholds[modelId].long === null && pred.long_threshold != null) {
-        thresholds[modelId].long = pred.long_threshold;
-      }
-      if (thresholds[modelId].short === null && pred.short_threshold != null) {
-        thresholds[modelId].short = pred.short_threshold;
-      }
     }
-    return { predictionsByModel: grouped, thresholdsByModel: thresholds };
+    return grouped;
   }, [predictions]);
 
   const modelIds = Object.keys(predictionsByModel);
 
   // Build a map of target values from indicators (TGT_* columns) by timestamp
+  // Note: Backend sends 0 for unknown targets, so we exclude 0 values for recent timestamps
+  // where the target horizon hasn't elapsed yet
   const indicatorTargetsByTimestamp = useMemo(() => {
-    const targetMap: Record<number, number> = {};
+    const targetMap: Record<number, number | null> = {};
     // Find the index of the TGT_* column
     const tgtIndex = indicatorNames.findIndex(name => name.startsWith('TGT'));
     if (tgtIndex === -1) return targetMap;
 
+    // Assume 4-hour target horizon - targets from the last 4 hours aren't known yet
+    const horizonMs = 4 * 60 * 60 * 1000;
+    const cutoffTime = Date.now() - horizonMs;
+
     for (const snapshot of indicators) {
       const tgtValue = snapshot.values[tgtIndex];
       if (tgtValue != null && !isNaN(tgtValue)) {
-        targetMap[snapshot.timestamp] = tgtValue;
+        // For recent timestamps, treat 0 as "unknown" since backend sends 0 for pending targets
+        if (snapshot.timestamp > cutoffTime && tgtValue === 0) {
+          targetMap[snapshot.timestamp] = null;
+        } else {
+          targetMap[snapshot.timestamp] = tgtValue;
+        }
       }
     }
     return targetMap;
   }, [indicators, indicatorNames]);
 
-  // Helper to get actual value - try indicator targets first, then WebSocket targets
-  const getActualForPrediction = (modelId: string, ts_ms: number): number | null => {
-    // First try indicator targets (most reliable source)
-    if (indicatorTargetsByTimestamp[ts_ms] !== undefined) {
-      return indicatorTargetsByTimestamp[ts_ms];
+  // Helper to get actual value - try prediction's actual first, then indicator targets, then WebSocket targets
+  const getActualForPrediction = (modelId: string, ts_ms: number, predActual?: number | null): number | null => {
+    // First try the prediction's own actual field (from /ws/predictions with proper null handling)
+    if (predActual != null) {
+      return predActual;
     }
-    // Then try WebSocket targets
+    // Then try indicator targets
+    const indicatorTarget = indicatorTargetsByTimestamp[ts_ms];
+    if (indicatorTarget != null) {
+      return indicatorTarget;
+    }
+    // Finally try WebSocket targets
     const value = targets[`${modelId}:${ts_ms}`] ?? targets[`active:${ts_ms}`];
     return value ?? null;
   };
@@ -439,23 +459,33 @@ export function LiveMarketData() {
                   </TabsTrigger>
                 ))}
               </TabsList>
-              {modelIds.map((modelId) => {
-                const thresholds = thresholdsByModel[modelId];
-                return (
+              {modelIds.map((modelId) => (
                   <TabsContent key={modelId} value={modelId}>
-                    {/* Thresholds Legend */}
-                    <div className="flex flex-wrap gap-4 mb-4 p-3 bg-muted/30 rounded-lg text-sm">
-                      <div className="flex items-center gap-2">
-                        <span className="text-muted-foreground">Long Threshold:</span>
-                        <span className="font-mono text-success font-semibold">
-                          {thresholds?.long?.toFixed(2) ?? 'N/A'}
-                        </span>
+                    {/* Thresholds Legend - All 4 thresholds */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 p-3 bg-muted/30 rounded-lg text-sm">
+                      <div>
+                        <span className="text-muted-foreground text-xs">Long (ROC Optimal)</span>
+                        <div className="font-mono text-success font-semibold">
+                          {allThresholds.longOptimal?.toFixed(2) ?? 'N/A'}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-muted-foreground">Short Threshold:</span>
-                        <span className="font-mono text-loss font-semibold">
-                          {thresholds?.short?.toFixed(2) ?? 'N/A'}
-                        </span>
+                      <div>
+                        <span className="text-muted-foreground text-xs">Long (95th Percentile)</span>
+                        <div className="font-mono text-success/70 font-semibold">
+                          {allThresholds.longPercentile95?.toFixed(2) ?? 'N/A'}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground text-xs">Short (ROC Optimal)</span>
+                        <div className="font-mono text-loss font-semibold">
+                          {allThresholds.shortOptimal?.toFixed(2) ?? 'N/A'}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground text-xs">Short (5th Percentile)</span>
+                        <div className="font-mono text-loss/70 font-semibold">
+                          {allThresholds.shortPercentile05?.toFixed(2) ?? 'N/A'}
+                        </div>
                       </div>
                     </div>
                     {/* Predictions Table */}
@@ -471,11 +501,12 @@ export function LiveMarketData() {
                         </TableHeader>
                         <TableBody>
                           {predictionsByModel[modelId].slice(0, 30).map((pred) => {
-                            const longThresh = thresholds?.long ?? Infinity;
-                            const shortThresh = thresholds?.short ?? -Infinity;
+                            // Use ROC optimal thresholds for signal determination
+                            const longThresh = allThresholds.longOptimal ?? Infinity;
+                            const shortThresh = allThresholds.shortOptimal ?? -Infinity;
                             const signal = pred.prediction >= longThresh ? 'LONG' :
                                            pred.prediction <= shortThresh ? 'SHORT' : 'NONE';
-                            const actual = pred.actual ?? getActualForPrediction(modelId, pred.ts_ms);
+                            const actual = getActualForPrediction(modelId, pred.ts_ms, pred.actual);
                             return (
                               <TableRow key={pred.ts_ms}>
                                 <TableCell className="text-xs text-muted-foreground">
@@ -499,8 +530,7 @@ export function LiveMarketData() {
                       </Table>
                     </div>
                   </TabsContent>
-                );
-              })}
+              ))}
             </Tabs>
           )}
         </CardContent>
