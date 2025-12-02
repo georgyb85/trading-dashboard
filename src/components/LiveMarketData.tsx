@@ -51,9 +51,29 @@ export function LiveMarketData() {
 
   const modelIds = Object.keys(predictionsByModel);
 
-  // Helper to get actual value from targets by matching timestamp
+  // Build a map of target values from indicators (TGT_* columns) by timestamp
+  const indicatorTargetsByTimestamp = useMemo(() => {
+    const targetMap: Record<number, number> = {};
+    // Find the index of the TGT_* column
+    const tgtIndex = indicatorNames.findIndex(name => name.startsWith('TGT'));
+    if (tgtIndex === -1) return targetMap;
+
+    for (const snapshot of indicators) {
+      const tgtValue = snapshot.values[tgtIndex];
+      if (tgtValue != null && !isNaN(tgtValue)) {
+        targetMap[snapshot.timestamp] = tgtValue;
+      }
+    }
+    return targetMap;
+  }, [indicators, indicatorNames]);
+
+  // Helper to get actual value - try indicator targets first, then WebSocket targets
   const getActualForPrediction = (modelId: string, ts_ms: number): number | null => {
-    // Try model-specific key first, then generic 'active' key
+    // First try indicator targets (most reliable source)
+    if (indicatorTargetsByTimestamp[ts_ms] !== undefined) {
+      return indicatorTargetsByTimestamp[ts_ms];
+    }
+    // Then try WebSocket targets
     const value = targets[`${modelId}:${ts_ms}`] ?? targets[`active:${ts_ms}`];
     return value ?? null;
   };

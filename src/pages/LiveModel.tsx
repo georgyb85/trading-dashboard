@@ -32,6 +32,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { krakenClient } from '@/lib/kraken/client';
 import { Input } from '@/components/ui/input';
 import { useLiveStreams } from '@/contexts/LiveStreamsContext';
+import { useMarketDataContext } from '@/contexts/MarketDataContext';
 
 const LiveModelPage = () => {
   const { cachedRuns } = useRunsContext();
@@ -46,6 +47,22 @@ const LiveModelPage = () => {
   const deleteModel = useDeleteModel();
   const updateThresholds = useUpdateThresholds();
   const { predictions: livePredictions, targets: liveTargets } = useLiveStreams();
+  const { indicators, indicatorNames } = useMarketDataContext();
+
+  // Build a map of target values from indicators (TGT_* columns) by timestamp
+  const indicatorTargetsByTimestamp = useMemo(() => {
+    const targetMap: Record<number, number> = {};
+    const tgtIndex = indicatorNames.findIndex(name => name.startsWith('TGT'));
+    if (tgtIndex === -1) return targetMap;
+
+    for (const snapshot of indicators) {
+      const tgtValue = snapshot.values[tgtIndex];
+      if (tgtValue != null && !isNaN(tgtValue)) {
+        targetMap[snapshot.timestamp] = tgtValue;
+      }
+    }
+    return targetMap;
+  }, [indicators, indicatorNames]);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [longThresholdInput, setLongThresholdInput] = useState<string>('');
   const [shortThresholdInput, setShortThresholdInput] = useState<string>('');
@@ -473,8 +490,11 @@ const LiveModelPage = () => {
                     .filter((p) => !metricsModelId || p.model_id === metricsModelId)
                     .slice(0, 15)
                     .map((p) => {
-                      // Try actual from prediction first, then from targets WebSocket
-                      const actual = p.actual ?? liveTargets[`${p.model_id}:${p.ts_ms}`] ?? liveTargets[`active:${p.ts_ms}`];
+                      // Try indicator targets first (most reliable), then prediction actual, then WebSocket targets
+                      const actual = indicatorTargetsByTimestamp[p.ts_ms]
+                        ?? p.actual
+                        ?? liveTargets[`${p.model_id}:${p.ts_ms}`]
+                        ?? liveTargets[`active:${p.ts_ms}`];
                       let trigger: string | null = null;
                       if (p.long_threshold !== undefined && p.prediction > p.long_threshold) {
                         trigger = 'LONG';
