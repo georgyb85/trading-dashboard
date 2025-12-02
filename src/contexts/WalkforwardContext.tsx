@@ -27,6 +27,10 @@ interface WalkforwardContextType {
   getCachedTestModel: (datasetId: string, runIndex: number, foldNumber: number) => XGBoostTrainResult | undefined;
   cacheTestModel: (datasetId: string, runIndex: number, foldNumber: number, result: XGBoostTrainResult) => void;
 
+  // Live model result (the last model that was deployed)
+  liveModelResult: XGBoostTrainResult | null;
+  setLiveModelResult: (result: XGBoostTrainResult | null) => void;
+
   clearWalkforwardCache: () => void;
 }
 
@@ -50,6 +54,9 @@ export const WalkforwardProvider = ({ children }: WalkforwardProviderProps) => {
 
   // Cache for test model results (keyed by datasetId:runIndex:foldNumber)
   const [testModelCache, setTestModelCache] = useState<Map<string, TestModelCache>>(new Map());
+
+  // Live model result - the training result for the currently deployed live model
+  const [liveModelResult, setLiveModelResult] = useState<XGBoostTrainResult | null>(null);
 
   const getTestModelKey = (datasetId: string, runIndex: number, foldNumber: number) =>
     `${datasetId}:${runIndex}:${foldNumber}`;
@@ -114,6 +121,7 @@ export const WalkforwardProvider = ({ children }: WalkforwardProviderProps) => {
     console.log('[WalkforwardContext] Clearing all cached walkforward data');
     setSimulationCache(new Map());
     setTestModelCache(new Map());
+    setLiveModelResult(null);
   }, []);
 
   return (
@@ -123,6 +131,8 @@ export const WalkforwardProvider = ({ children }: WalkforwardProviderProps) => {
         cacheSimulation,
         getCachedTestModel,
         cacheTestModel,
+        liveModelResult,
+        setLiveModelResult,
         clearWalkforwardCache,
       }}
     >

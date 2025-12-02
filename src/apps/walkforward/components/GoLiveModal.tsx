@@ -52,7 +52,11 @@ export const GoLiveModal = ({ open, onClose, onSubmit, run, isSubmitting }: GoLi
               </div>
               <div>
                 <div className="text-muted-foreground">Features</div>
-                <div className="font-mono text-xs line-clamp-2">{(run.feature_columns as any[]).join(', ')}</div>
+                <div className="font-mono text-xs line-clamp-2">
+                  {Array.isArray(run.feature_columns)
+                    ? run.feature_columns.join(', ')
+                    : (typeof run.feature_columns === 'string' ? run.feature_columns : 'N/A')}
+                </div>
               </div>
             </div>
             <div className="space-y-2">
