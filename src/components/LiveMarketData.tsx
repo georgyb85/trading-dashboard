@@ -22,24 +22,41 @@ export function LiveMarketData() {
     latestIndicator,
     error: marketDataError,
   } = useMarketDataContext();
-  const { predictions } = useLiveStreams();
+  const { predictions, targets } = useLiveStreams();
 
   const [selectedIndicatorIndex, setSelectedIndicatorIndex] = useState(0);
 
-  // Group predictions by model_id
-  const predictionsByModel = useMemo(() => {
+  // Group predictions by model_id and extract thresholds
+  const { predictionsByModel, thresholdsByModel } = useMemo(() => {
     const grouped: Record<string, typeof predictions> = {};
+    const thresholds: Record<string, { long: number | null; short: number | null }> = {};
+
     for (const pred of predictions) {
       const modelId = pred.model_id || 'unknown';
       if (!grouped[modelId]) {
         grouped[modelId] = [];
+        thresholds[modelId] = { long: null, short: null };
       }
       grouped[modelId].push(pred);
+      // Extract thresholds from first prediction (they're constant)
+      if (thresholds[modelId].long === null && pred.long_threshold != null) {
+        thresholds[modelId].long = pred.long_threshold;
+      }
+      if (thresholds[modelId].short === null && pred.short_threshold != null) {
+        thresholds[modelId].short = pred.short_threshold;
+      }
     }
-    return grouped;
+    return { predictionsByModel: grouped, thresholdsByModel: thresholds };
   }, [predictions]);
 
   const modelIds = Object.keys(predictionsByModel);
+
+  // Helper to get actual value from targets by matching timestamp
+  const getActualForPrediction = (modelId: string, ts_ms: number): number | null => {
+    // Try model-specific key first, then generic 'active' key
+    const value = targets[`${modelId}:${ts_ms}`] ?? targets[`active:${ts_ms}`];
+    return value ?? null;
+  };
 
   // Get top symbols by activity - filter out invalid prices
   const topSymbols = useMemo(() => {
@@ -385,110 +402,77 @@ export function LiveMarketData() {
               <p>No predictions available</p>
               <p className="text-xs mt-1">Predictions will appear when the model generates them</p>
             </div>
-          ) : modelIds.length === 1 ? (
-            // Single model - no tabs needed
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Time</TableHead>
-                    <TableHead>Prediction</TableHead>
-                    <TableHead>Long Threshold</TableHead>
-                    <TableHead>Short Threshold</TableHead>
-                    <TableHead>Signal</TableHead>
-                    <TableHead>Actual</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {predictionsByModel[modelIds[0]].slice(0, 20).map((pred) => {
-                    const signal = pred.prediction >= (pred.long_threshold ?? Infinity) ? 'LONG' :
-                                   pred.prediction <= (pred.short_threshold ?? -Infinity) ? 'SHORT' : 'NONE';
-                    return (
-                      <TableRow key={pred.ts_ms}>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {formatDateTime(pred.ts_ms)}
-                        </TableCell>
-                        <TableCell className="font-mono font-semibold">
-                          {pred.prediction.toFixed(2)}
-                        </TableCell>
-                        <TableCell className="font-mono text-success">
-                          {pred.long_threshold?.toFixed(2) ?? 'N/A'}
-                        </TableCell>
-                        <TableCell className="font-mono text-loss">
-                          {pred.short_threshold?.toFixed(2) ?? 'N/A'}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={signal === 'LONG' ? 'default' : signal === 'SHORT' ? 'destructive' : 'secondary'}>
-                            {signal}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-mono">
-                          {pred.actual != null ? pred.actual.toFixed(2) : '—'}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
           ) : (
-            // Multiple models - use tabs
             <Tabs defaultValue={modelIds[0]} className="w-full">
               <TabsList className="mb-4">
                 {modelIds.map((modelId) => (
-                  <TabsTrigger key={modelId} value={modelId} className="text-xs">
-                    {modelId.slice(0, 8)}…
+                  <TabsTrigger key={modelId} value={modelId} className="font-mono text-xs">
+                    {modelId}
                   </TabsTrigger>
                 ))}
               </TabsList>
-              {modelIds.map((modelId) => (
-                <TabsContent key={modelId} value={modelId}>
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Time</TableHead>
-                          <TableHead>Prediction</TableHead>
-                          <TableHead>Long Threshold</TableHead>
-                          <TableHead>Short Threshold</TableHead>
-                          <TableHead>Signal</TableHead>
-                          <TableHead>Actual</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {predictionsByModel[modelId].slice(0, 20).map((pred) => {
-                          const signal = pred.prediction >= (pred.long_threshold ?? Infinity) ? 'LONG' :
-                                         pred.prediction <= (pred.short_threshold ?? -Infinity) ? 'SHORT' : 'NONE';
-                          return (
-                            <TableRow key={pred.ts_ms}>
-                              <TableCell className="text-xs text-muted-foreground">
-                                {formatDateTime(pred.ts_ms)}
-                              </TableCell>
-                              <TableCell className="font-mono font-semibold">
-                                {pred.prediction.toFixed(2)}
-                              </TableCell>
-                              <TableCell className="font-mono text-success">
-                                {pred.long_threshold?.toFixed(2) ?? 'N/A'}
-                              </TableCell>
-                              <TableCell className="font-mono text-loss">
-                                {pred.short_threshold?.toFixed(2) ?? 'N/A'}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant={signal === 'LONG' ? 'default' : signal === 'SHORT' ? 'destructive' : 'secondary'}>
-                                  {signal}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="font-mono">
-                                {pred.actual != null ? pred.actual.toFixed(2) : '—'}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </TabsContent>
-              ))}
+              {modelIds.map((modelId) => {
+                const thresholds = thresholdsByModel[modelId];
+                return (
+                  <TabsContent key={modelId} value={modelId}>
+                    {/* Thresholds Legend */}
+                    <div className="flex flex-wrap gap-4 mb-4 p-3 bg-muted/30 rounded-lg text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">Long Threshold:</span>
+                        <span className="font-mono text-success font-semibold">
+                          {thresholds?.long?.toFixed(2) ?? 'N/A'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-muted-foreground">Short Threshold:</span>
+                        <span className="font-mono text-loss font-semibold">
+                          {thresholds?.short?.toFixed(2) ?? 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Predictions Table */}
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Time</TableHead>
+                            <TableHead>Prediction</TableHead>
+                            <TableHead>Signal</TableHead>
+                            <TableHead>Actual</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {predictionsByModel[modelId].slice(0, 30).map((pred) => {
+                            const longThresh = thresholds?.long ?? Infinity;
+                            const shortThresh = thresholds?.short ?? -Infinity;
+                            const signal = pred.prediction >= longThresh ? 'LONG' :
+                                           pred.prediction <= shortThresh ? 'SHORT' : 'NONE';
+                            const actual = pred.actual ?? getActualForPrediction(modelId, pred.ts_ms);
+                            return (
+                              <TableRow key={pred.ts_ms}>
+                                <TableCell className="text-xs text-muted-foreground">
+                                  {formatDateTime(pred.ts_ms)}
+                                </TableCell>
+                                <TableCell className="font-mono font-semibold">
+                                  {pred.prediction.toFixed(2)}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant={signal === 'LONG' ? 'default' : signal === 'SHORT' ? 'destructive' : 'secondary'}>
+                                    {signal}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="font-mono">
+                                  {actual != null ? actual.toFixed(2) : '—'}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </TabsContent>
+                );
+              })}
             </Tabs>
           )}
         </CardContent>

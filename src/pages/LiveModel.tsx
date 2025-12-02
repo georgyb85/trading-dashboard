@@ -473,19 +473,26 @@ const LiveModelPage = () => {
                     .filter((p) => !metricsModelId || p.model_id === metricsModelId)
                     .slice(0, 15)
                     .map((p) => {
-                      const actual = liveTargets[`${p.model_id}:${p.ts_ms}`];
+                      // Try actual from prediction first, then from targets WebSocket
+                      const actual = p.actual ?? liveTargets[`${p.model_id}:${p.ts_ms}`] ?? liveTargets[`active:${p.ts_ms}`];
                       let trigger: string | null = null;
                       if (p.long_threshold !== undefined && p.prediction > p.long_threshold) {
-                        trigger = 'long';
+                        trigger = 'LONG';
                       } else if (p.short_threshold !== undefined && p.prediction < p.short_threshold) {
-                        trigger = 'short';
+                        trigger = 'SHORT';
                       }
                       return (
                         <TableRow key={`${p.model_id}-${p.ts_ms}`}>
                           <TableCell className="font-mono text-xs">{new Date(p.ts_ms).toLocaleString()}</TableCell>
-                          <TableCell className="font-mono text-xs">{p.prediction.toFixed(4)}</TableCell>
-                          <TableCell className="font-mono text-xs">{actual === undefined ? '—' : (actual ?? NaN)}</TableCell>
-                          <TableCell className="font-mono text-xs">{trigger ?? '—'}</TableCell>
+                          <TableCell className="font-mono text-xs">{p.prediction.toFixed(2)}</TableCell>
+                          <TableCell className="font-mono text-xs">{actual != null ? actual.toFixed(2) : '—'}</TableCell>
+                          <TableCell>
+                            {trigger ? (
+                              <Badge variant={trigger === 'LONG' ? 'default' : 'destructive'}>{trigger}</Badge>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
                         </TableRow>
                       );
                     })}
