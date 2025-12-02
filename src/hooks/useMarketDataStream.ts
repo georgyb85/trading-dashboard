@@ -1,22 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-// Indicator names in order (matches var.txt from the WebSocket API)
-export const INDICATOR_NAMES = [
-  'ADX_L',
-  'AROON_DIFF_S',
-  'BOL_WIDTH_M',
-  'CMMA_S',
-  'DTR_RSI_M',
-  'PCO_10_20',
-  'PV_FIT_M',
-] as const;
-
-export type IndicatorName = typeof INDICATOR_NAMES[number];
-
 export interface IndicatorSnapshot {
   timestamp: number;
   values: number[];
   valid: boolean;
+  featureNames?: string[];
 }
 
 export interface OhlcvBar {
@@ -104,6 +92,7 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
   const [clientId, setClientId] = useState<string | null>(null);
   const [tradingRules, setTradingRules] = useState<TradingRules | null>(null);
   const [indicators, setIndicators] = useState<IndicatorSnapshot[]>([]);
+  const [indicatorNames, setIndicatorNames] = useState<string[]>([]);
   const [ohlcv, setOhlcv] = useState<OhlcvBar[]>([]);
   const [atr, setAtr] = useState<AtrData | null>(null);
   const [position, setPosition] = useState<PositionData | null>(null);
@@ -131,6 +120,12 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
               `[MarketDataStream] Received ${data.snapshots.length} indicator snapshots (${validSnapshots.length} valid)`
             );
             setIndicators(validSnapshots.slice(-maxHistorySize));
+            // Extract indicator names from the latest snapshot or first valid snapshot
+            const namesSource = data.latest || validSnapshots[validSnapshots.length - 1];
+            if (namesSource?.featureNames && Array.isArray(namesSource.featureNames)) {
+              console.log('[MarketDataStream] Indicator names from backend:', namesSource.featureNames);
+              setIndicatorNames(namesSource.featureNames);
+            }
           } else if (!isInitial) {
             // Only append if the snapshot is valid
             if (data.valid !== false) {
@@ -143,6 +138,16 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
                 console.log('[MarketDataStream] New indicator update:', new Date(data.timestamp).toISOString());
                 return [...prev.slice(-(maxHistorySize - 1)), data];
               });
+              // Update names if provided (in case they change)
+              if (data.featureNames && Array.isArray(data.featureNames)) {
+                setIndicatorNames((prev) => {
+                  if (JSON.stringify(prev) !== JSON.stringify(data.featureNames)) {
+                    console.log('[MarketDataStream] Indicator names updated:', data.featureNames);
+                    return data.featureNames;
+                  }
+                  return prev;
+                });
+              }
             }
           }
           break;
@@ -408,6 +413,7 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
     clientId,
     tradingRules,
     indicators,
+    indicatorNames,
     ohlcv,
     atr,
     position,

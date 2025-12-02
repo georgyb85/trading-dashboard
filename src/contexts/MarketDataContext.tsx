@@ -7,7 +7,6 @@ import {
   PositionData,
   PerformanceData,
   TradingRules,
-  INDICATOR_NAMES,
 } from '@/hooks/useMarketDataStream';
 
 interface MarketDataContextType {
@@ -15,6 +14,7 @@ interface MarketDataContextType {
   clientId: string | null;
   tradingRules: TradingRules | null;
   indicators: IndicatorSnapshot[];
+  indicatorNames: string[];
   ohlcv: OhlcvBar[];
   atr: AtrData | null;
   position: PositionData | null;
@@ -58,8 +58,7 @@ export const MarketDataProvider = ({ children }: MarketDataProviderProps) => {
   );
 };
 
-// Re-export types and constants for convenience
-export { INDICATOR_NAMES };
+// Re-export types for convenience
 export type {
   IndicatorSnapshot,
   OhlcvBar,

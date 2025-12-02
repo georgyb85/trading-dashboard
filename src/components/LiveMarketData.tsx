@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Activity, WifiOff, Loader2, TrendingUp, Zap, BarChart3, LineChart } from "lucide-react";
 import { useStatusStreamContext } from "@/contexts/StatusStreamContext";
-import { useMarketDataContext, INDICATOR_NAMES } from "@/contexts/MarketDataContext";
+import { useMarketDataContext } from "@/contexts/MarketDataContext";
 import { LiveTimeSeriesChart, LiveHistogramChart } from "@/components/LiveIndicatorCharts";
 import { useMemo, useState } from "react";
 
@@ -13,6 +13,7 @@ export function LiveMarketData() {
   const {
     connected: marketDataConnected,
     indicators,
+    indicatorNames,
     atr,
     position,
     performance,
@@ -154,8 +155,8 @@ export function LiveMarketData() {
                       <SelectValue placeholder="Select indicator" />
                     </SelectTrigger>
                     <SelectContent>
-                      {INDICATOR_NAMES.map((name, idx) => (
-                        <SelectItem key={name} value={String(idx)}>
+                      {indicatorNames.map((name, idx) => (
+                        <SelectItem key={`${name}-${idx}`} value={String(idx)}>
                           {name}
                         </SelectItem>
                       ))}
@@ -164,11 +165,11 @@ export function LiveMarketData() {
                 </div>
 
                 {/* Latest Indicator Values Grid */}
-                {latestIndicator && (
-                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-                    {INDICATOR_NAMES.map((name, idx) => (
+                {latestIndicator && indicatorNames.length > 0 && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+                    {indicatorNames.map((name, idx) => (
                       <div
-                        key={name}
+                        key={`${name}-${idx}`}
                         className={`p-3 rounded-lg cursor-pointer transition-colors ${
                           idx === selectedIndicatorIndex
                             ? 'bg-primary/10 border-2 border-primary'
@@ -196,18 +197,20 @@ export function LiveMarketData() {
           </Card>
 
           {/* Charts */}
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <LiveTimeSeriesChart
-              data={indicators}
-              selectedIndicatorIndex={selectedIndicatorIndex}
-              indicatorName={INDICATOR_NAMES[selectedIndicatorIndex]}
-            />
-            <LiveHistogramChart
-              data={indicators}
-              selectedIndicatorIndex={selectedIndicatorIndex}
-              indicatorName={INDICATOR_NAMES[selectedIndicatorIndex]}
-            />
-          </div>
+          {indicatorNames.length > 0 && (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <LiveTimeSeriesChart
+                data={indicators}
+                selectedIndicatorIndex={selectedIndicatorIndex}
+                indicatorName={indicatorNames[selectedIndicatorIndex] || `Indicator ${selectedIndicatorIndex}`}
+              />
+              <LiveHistogramChart
+                data={indicators}
+                selectedIndicatorIndex={selectedIndicatorIndex}
+                indicatorName={indicatorNames[selectedIndicatorIndex] || `Indicator ${selectedIndicatorIndex}`}
+              />
+            </div>
+          )}
         </>
       )}
 
