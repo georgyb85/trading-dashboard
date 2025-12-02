@@ -20,18 +20,33 @@ export const LiveStreamsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
-        if (msg.topic === 'predictions' && msg.type === 'update') {
-          const pred: LivePrediction = {
-            ts_ms: msg.ts_ms,
-            model_id: msg.model_id,
-            prediction: msg.prediction,
-            long_threshold: msg.thresholds?.long_optimal ?? msg.thresholds?.long,
-            short_threshold: msg.thresholds?.short_optimal ?? msg.thresholds?.short,
-          };
-          predsRef.current = [...predsRef.current.filter((p) => !(p.model_id === pred.model_id && p.ts_ms === pred.ts_ms)), pred]
-            .sort((a, b) => b.ts_ms - a.ts_ms)
-            .slice(0, 200);
-          setPredictions([...predsRef.current]);
+        if (msg.topic === 'predictions') {
+          if (msg.type === 'snapshot' && Array.isArray(msg.predictions)) {
+            // Handle initial snapshot of predictions
+            const preds: LivePrediction[] = msg.predictions.map((p: any) => ({
+              ts_ms: p.ts_ms,
+              model_id: p.model_id || msg.model_id,
+              prediction: p.prediction,
+              long_threshold: p.long_threshold,
+              short_threshold: p.short_threshold,
+              actual: p.target ?? p.actual,
+            }));
+            predsRef.current = preds.sort((a, b) => b.ts_ms - a.ts_ms).slice(0, 200);
+            setPredictions([...predsRef.current]);
+          } else if (msg.type === 'update') {
+            // Handle individual prediction update
+            const pred: LivePrediction = {
+              ts_ms: msg.ts_ms,
+              model_id: msg.model_id,
+              prediction: msg.prediction,
+              long_threshold: msg.thresholds?.long_optimal ?? msg.thresholds?.long ?? msg.long_threshold,
+              short_threshold: msg.thresholds?.short_optimal ?? msg.thresholds?.short ?? msg.short_threshold,
+            };
+            predsRef.current = [...predsRef.current.filter((p) => !(p.model_id === pred.model_id && p.ts_ms === pred.ts_ms)), pred]
+              .sort((a, b) => b.ts_ms - a.ts_ms)
+              .slice(0, 200);
+            setPredictions([...predsRef.current]);
+          }
         }
       } catch {
         // ignore
