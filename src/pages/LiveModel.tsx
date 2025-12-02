@@ -501,9 +501,12 @@ const LiveModelPage = () => {
                       } else if (p.short_threshold !== undefined && p.prediction < p.short_threshold) {
                         trigger = 'SHORT';
                       }
+                      // Convert bar-end timestamp to bar-start for display
+                      const barStart = new Date(p.ts_ms);
+                      barStart.setMinutes(0, 0, 0);
                       return (
                         <TableRow key={`${p.model_id}-${p.ts_ms}`}>
-                          <TableCell className="font-mono text-xs">{new Date(p.ts_ms).toLocaleString()}</TableCell>
+                          <TableCell className="font-mono text-xs">{barStart.toLocaleString()}</TableCell>
                           <TableCell className="font-mono text-xs">{p.prediction.toFixed(2)}</TableCell>
                           <TableCell className="font-mono text-xs">{actual != null ? actual.toFixed(2) : '—'}</TableCell>
                           <TableCell>

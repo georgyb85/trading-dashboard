@@ -109,6 +109,14 @@ export function LiveMarketData() {
     return date.toLocaleString();
   };
 
+  // Convert bar-end timestamp (XX:59:59.999) to bar-start (XX:00:00) for display
+  const formatBarTime = (timestamp: number) => {
+    // Round down to the start of the hour
+    const date = new Date(timestamp);
+    date.setMinutes(0, 0, 0);
+    return date.toLocaleString();
+  };
+
   // Only show loading on initial load when we have no data at all
   const hasAnyData = indicators.length > 0 || Object.keys(lastPrices).length > 0 || trades.length > 0;
 
@@ -471,7 +479,7 @@ export function LiveMarketData() {
                             return (
                               <TableRow key={pred.ts_ms}>
                                 <TableCell className="text-xs text-muted-foreground">
-                                  {formatDateTime(pred.ts_ms)}
+                                  {formatBarTime(pred.ts_ms)}
                                 </TableCell>
                                 <TableCell className="font-mono font-semibold">
                                   {pred.prediction.toFixed(2)}
