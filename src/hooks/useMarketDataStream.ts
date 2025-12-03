@@ -380,17 +380,17 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
       return;
     }
 
-    // Connect to V3 unified /ws/live endpoint
+    // Connect to /api/market-data-ws endpoint for indicators and market data
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/ws/live`;
+    const wsUrl = `${protocol}//${host}/api/market-data-ws`;
 
     console.log('[MarketDataStream] Connecting to:', wsUrl);
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log('[MarketDataStream] WebSocket connected to /ws/live');
+      console.log('[MarketDataStream] WebSocket connected to /api/market-data-ws');
       setConnected(true);
       setError(null);
       reconnectAttemptsRef.current = 0;
