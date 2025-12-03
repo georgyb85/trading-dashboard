@@ -5,6 +5,7 @@ export interface IndicatorSnapshot {
   values: number[];
   valid: boolean;
   featureNames?: string[];
+  featureHash?: string;
 }
 
 export interface OhlcvBar {
@@ -14,6 +15,7 @@ export interface OhlcvBar {
   low: number;
   close: number;
   volume: number;
+  synthetic?: boolean;
 }
 
 export interface AtrData {
@@ -43,6 +45,13 @@ export interface PerformanceData {
   averagePnl: number;
   maxDrawdown: number;
   sharpeRatio: number;
+  // V3 additional fields
+  mse?: number;
+  mae?: number;
+  r2?: number;
+  samples?: number;
+  missed?: number;
+  lastUpdate?: number;
 }
 
 export interface TradingRules {
@@ -108,7 +117,93 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
   // Track if we've received snapshot data - don't request again on reconnect
   const hasSnapshotRef = useRef(false);
 
-  // Handle topic-specific data (both initial snapshot and updates)
+  // Handle V3 unified /ws/live messages
+  const handleV3Message = useCallback(
+    (msg: any) => {
+      // V3 sends topic-based messages directly
+      switch (msg.topic) {
+        case 'minute':
+          // V3 minute bar: { topic: "minute", start_ts, end_ts, open, high, low, close, volume, synthetic }
+          // We accumulate minute bars but primarily use hour bars for display
+          console.log('[MarketDataStream] Minute bar received:', new Date(msg.start_ts).toISOString());
+          break;
+
+        case 'hour':
+          // V3 hour bar: { topic: "hour", start_ts, end_ts, open, high, low, close, volume, synthetic }
+          const hourBar: OhlcvBar = {
+            timestamp: msg.start_ts,
+            open: msg.open,
+            high: msg.high,
+            low: msg.low,
+            close: msg.close,
+            volume: msg.volume,
+            synthetic: msg.synthetic,
+          };
+          setOhlcv((prev) => {
+            const exists = prev.some((bar) => bar.timestamp === hourBar.timestamp);
+            if (exists) {
+              return prev;
+            }
+            console.log('[MarketDataStream] New hour bar:', new Date(hourBar.timestamp).toISOString());
+            return [...prev.slice(-(maxHistorySize - 1)), hourBar];
+          });
+          break;
+
+        case 'indicators':
+          // V3 indicators: { topic: "indicators", ts, feature_hash, names: [], values: [] }
+          const indicatorSnapshot: IndicatorSnapshot = {
+            timestamp: msg.ts,
+            values: msg.values || [],
+            valid: true,
+            featureNames: msg.names || [],
+            featureHash: msg.feature_hash,
+          };
+          setIndicators((prev) => {
+            const exists = prev.some((s) => s.timestamp === indicatorSnapshot.timestamp);
+            if (exists) {
+              return prev;
+            }
+            console.log('[MarketDataStream] New indicators:', new Date(indicatorSnapshot.timestamp).toISOString());
+            return [...prev.slice(-(maxHistorySize - 1)), indicatorSnapshot];
+          });
+          // Update names if provided
+          if (msg.names && Array.isArray(msg.names) && msg.names.length > 0) {
+            setIndicatorNames((prev) => {
+              if (JSON.stringify(prev) !== JSON.stringify(msg.names)) {
+                console.log('[MarketDataStream] Indicator names updated:', msg.names);
+                return msg.names;
+              }
+              return prev;
+            });
+          }
+          break;
+
+        case 'performance':
+          // V3 performance: { topic: "performance", model_id, mse, mae, r2, samples, missed, last_update }
+          const perfData: PerformanceData = {
+            totalTrades: 0,
+            winningTrades: 0,
+            losingTrades: 0,
+            winRate: 0,
+            totalPnl: 0,
+            averagePnl: 0,
+            maxDrawdown: 0,
+            sharpeRatio: 0,
+            mse: msg.mse,
+            mae: msg.mae,
+            r2: msg.r2,
+            samples: msg.samples,
+            missed: msg.missed,
+            lastUpdate: msg.last_update,
+          };
+          setPerformance(perfData);
+          break;
+      }
+    },
+    [maxHistorySize]
+  );
+
+  // Handle legacy V2 topic-specific data (both initial snapshot and updates)
   const handleTopicData = useCallback(
     (topic: string, data: any, isInitial: boolean) => {
       switch (topic) {
@@ -189,9 +284,16 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
     [maxHistorySize]
   );
 
-  // Handle incoming messages
+  // Handle incoming messages (supports both V3 and legacy V2 formats)
   const handleMessage = useCallback(
     (msg: any) => {
+      // Check for V3 format first (topic-based without type wrapper)
+      if (msg.topic && !msg.type) {
+        handleV3Message(msg);
+        return;
+      }
+
+      // Legacy V2 format handling
       switch (msg.type) {
         case 'initial_data':
           if (msg.clientId) {
@@ -259,10 +361,15 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
           break;
 
         default:
-          console.warn('[MarketDataStream] Unknown message type:', msg.type);
+          // Try V3 format if no type matched
+          if (msg.topic) {
+            handleV3Message(msg);
+          } else {
+            console.warn('[MarketDataStream] Unknown message type:', msg.type);
+          }
       }
     },
-    [handleTopicData]
+    [handleTopicData, handleV3Message]
   );
 
   const connect = useCallback(() => {
@@ -273,17 +380,17 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
       return;
     }
 
-    // Use nginx-proxied WebSocket endpoint
+    // Connect to V3 unified /ws/live endpoint
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/api/market-data-ws`;
+    const wsUrl = `${protocol}//${host}/ws/live`;
 
     console.log('[MarketDataStream] Connecting to:', wsUrl);
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log('[MarketDataStream] WebSocket connected');
+      console.log('[MarketDataStream] WebSocket connected to /ws/live');
       setConnected(true);
       setError(null);
       reconnectAttemptsRef.current = 0;
