@@ -86,12 +86,13 @@ export function LiveMarketData() {
   }, [indicators, indicatorNames, targetHorizonBars]);
 
   // Helper to get actual value - try prediction's actual first, then indicator targets, then WebSocket targets
+  // Note: Both predictions and indicators use bar-end timestamps (XX:59:59.999), so we can match directly
   const getActualForPrediction = (modelId: string, ts_ms: number, predActual?: number | null): number | null => {
     // First try the prediction's own actual field (from /ws/predictions with proper null handling)
     if (predActual != null) {
       return predActual;
     }
-    // Then try indicator targets
+    // Try indicator targets (both use bar-end timestamps, so direct lookup works)
     const indicatorTarget = indicatorTargetsByTimestamp[ts_ms];
     if (indicatorTarget != null) {
       return indicatorTarget;

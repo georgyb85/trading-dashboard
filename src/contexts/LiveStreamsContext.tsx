@@ -19,6 +19,42 @@ export const LiveStreamsProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
 
+  // Fetch initial predictions via REST API
+  useEffect(() => {
+    const fetchInitialPredictions = async () => {
+      try {
+        // First get active model ID
+        const activeModelRes = await fetch('/api/live/active_model');
+        if (!activeModelRes.ok) return;
+        const activeModel = await activeModelRes.json();
+        if (!activeModel.model_id) return;
+
+        // Then fetch predictions for that model
+        const predsRes = await fetch(`/api/live/predictions?model_id=${activeModel.model_id}`);
+        if (!predsRes.ok) return;
+        const data = await predsRes.json();
+
+        if (data.predictions && Array.isArray(data.predictions)) {
+          const preds: LivePrediction[] = data.predictions.map((p: any) => ({
+            ts_ms: p.ts_ms ?? p.ts,
+            model_id: p.model_id || data.model_id,
+            prediction: p.prediction,
+            long_threshold: p.long_threshold,
+            short_threshold: p.short_threshold,
+            actual: p.target ?? p.actual,
+          }));
+          predsRef.current = preds.sort((a, b) => b.ts_ms - a.ts_ms).slice(0, 200);
+          console.log('[LiveStreams] Loaded initial predictions:', predsRef.current.length);
+          setPredictions([...predsRef.current]);
+        }
+      } catch (err) {
+        console.error('[LiveStreams] Failed to fetch initial predictions:', err);
+      }
+    };
+
+    fetchInitialPredictions();
+  }, []);
+
   useEffect(() => {
     let shouldReconnect = true;
 

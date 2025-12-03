@@ -501,8 +501,12 @@ const LiveModelPage = () => {
                 </TableHeader>
                 <TableBody>
                   {livePredictions.map((p) => {
+                      // Both predictions and indicators use bar-end timestamps (XX:59:59.999)
+                      // so direct lookup works. Convert to bar-start only for display.
+                      const barStartDisplay = new Date(p.ts_ms);
+                      barStartDisplay.setMinutes(0, 0, 0);
                       // Try prediction's actual first (from /ws/predictions with proper null handling),
-                      // then indicator targets, then WebSocket targets
+                      // then indicator targets (using bar-end timestamp directly), then WebSocket targets
                       const actual = p.actual
                         ?? indicatorTargetsByTimestamp[p.ts_ms]
                         ?? liveTargets[`${p.model_id}:${p.ts_ms}`]
@@ -513,12 +517,9 @@ const LiveModelPage = () => {
                       } else if (p.short_threshold !== undefined && p.prediction < p.short_threshold) {
                         trigger = 'SHORT';
                       }
-                      // Convert bar-end timestamp to bar-start for display
-                      const barStart = new Date(p.ts_ms);
-                      barStart.setMinutes(0, 0, 0);
                       return (
                         <TableRow key={`${p.model_id}-${p.ts_ms}`}>
-                          <TableCell className="font-mono text-xs">{barStart.toLocaleString()}</TableCell>
+                          <TableCell className="font-mono text-xs">{barStartDisplay.toLocaleString()}</TableCell>
                           <TableCell className="font-mono text-xs">{p.prediction.toFixed(2)}</TableCell>
                           <TableCell className="font-mono text-xs">{actual != null ? actual.toFixed(2) : '—'}</TableCell>
                           <TableCell>
