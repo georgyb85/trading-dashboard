@@ -79,7 +79,7 @@ export const GoLiveModal = ({ open, onClose, onSubmit, run, isSubmitting }: GoLi
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Failed to load available features from engine. Ensure the backend indicator engine is running.
+                  Failed to load available features. Ensure the backend trading pipeline is running.
                 </AlertDescription>
               </Alert>
             )}
@@ -87,7 +87,7 @@ export const GoLiveModal = ({ open, onClose, onSubmit, run, isSubmitting }: GoLi
             {featuresData && (
               <div className="space-y-2">
                 <div className="text-sm">
-                  <span className="text-muted-foreground">Global Engine Features: </span>
+                  <span className="text-muted-foreground">Available Features: </span>
                   <span className="font-mono text-xs">{featuresData.features.length} available</span>
                   {featuresData.feature_hash && (
                     <span className="ml-2 text-muted-foreground text-xs">
@@ -100,7 +100,7 @@ export const GoLiveModal = ({ open, onClose, onSubmit, run, isSubmitting }: GoLi
                   <Alert>
                     <CheckCircle2 className="h-4 w-4 text-green-600" />
                     <AlertDescription className="text-green-700">
-                      All {runFeatures.length} run features are available in the global engine.
+                      All {runFeatures.length} run features are available in the live indicator buffer.
                     </AlertDescription>
                   </Alert>
                 ) : (
@@ -110,7 +110,7 @@ export const GoLiveModal = ({ open, onClose, onSubmit, run, isSubmitting }: GoLi
                       <div className="font-medium">Missing features ({validation.missing.length}):</div>
                       <div className="font-mono text-xs mt-1">{validation.missing.join(', ')}</div>
                       <div className="mt-2 text-xs">
-                        Update the global indicator engine configuration to include these features.
+                        Update the indicator script (live_trading.indicator_script in config) to include these features.
                       </div>
                     </AlertDescription>
                   </Alert>

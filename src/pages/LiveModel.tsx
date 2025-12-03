@@ -217,7 +217,7 @@ const LiveModelPage = () => {
               <CardContent className="text-sm text-muted-foreground space-y-2">
                 <p>1. Load a run in <strong>Walkforward Pilot</strong> first - it will appear in the selector above.</p>
                 <p>2. Select the run and click <strong>Go Live</strong>.</p>
-                <p>3. The system validates that the run's features are available in the global indicator engine.</p>
+                <p>3. The system validates that the run's features are available in the live indicator buffer.</p>
                 <p>4. Refresh metrics to see how the model performs on today's data.</p>
               </CardContent>
             </Card>
