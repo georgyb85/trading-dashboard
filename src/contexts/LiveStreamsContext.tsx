@@ -19,34 +19,59 @@ export const LiveStreamsProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
 
-  // Fetch initial predictions via REST API
+  // Fetch initial predictions for all active models via REST API
   useEffect(() => {
     const fetchInitialPredictions = async () => {
       try {
-        // First get active model ID
-        const activeModelRes = await fetch('/api/live/active_model');
-        if (!activeModelRes.ok) return;
-        const activeModel = await activeModelRes.json();
-        if (!activeModel.model_id) return;
+        // Get all live models
+        const modelsRes = await fetch('/api/live/models');
+        if (!modelsRes.ok) return;
+        const modelsData = await modelsRes.json();
+        const models = modelsData.models || [];
 
-        // Then fetch predictions for that model
-        const predsRes = await fetch(`/api/live/predictions?model_id=${activeModel.model_id}`);
-        if (!predsRes.ok) return;
-        const data = await predsRes.json();
-
-        if (data.predictions && Array.isArray(data.predictions)) {
-          const preds: LivePrediction[] = data.predictions.map((p: any) => ({
-            ts_ms: p.ts_ms ?? p.ts,
-            model_id: p.model_id || data.model_id,
-            prediction: p.prediction,
-            long_threshold: p.long_threshold,
-            short_threshold: p.short_threshold,
-            actual: p.target ?? p.actual,
-          }));
-          predsRef.current = preds.sort((a, b) => b.ts_ms - a.ts_ms).slice(0, 200);
-          console.log('[LiveStreams] Loaded initial predictions:', predsRef.current.length);
-          setPredictions([...predsRef.current]);
+        // Filter to active models only
+        const activeModels = models.filter((m: any) => m.status === 'active');
+        if (activeModels.length === 0) {
+          console.log('[LiveStreams] No active models found');
+          return;
         }
+
+        // Fetch predictions for all active models in parallel
+        const allPreds: LivePrediction[] = [];
+        await Promise.all(
+          activeModels.map(async (model: any) => {
+            try {
+              const predsRes = await fetch(`/api/live/predictions?model_id=${model.model_id}`);
+              if (!predsRes.ok) return;
+              const data = await predsRes.json();
+
+              if (data.predictions && Array.isArray(data.predictions)) {
+                const preds: LivePrediction[] = data.predictions.map((p: any) => ({
+                  ts_ms: p.ts_ms ?? p.ts,
+                  model_id: p.model_id || data.model_id,
+                  prediction: p.prediction,
+                  long_threshold: p.long_threshold,
+                  short_threshold: p.short_threshold,
+                  actual: p.target ?? p.actual,
+                }));
+                allPreds.push(...preds);
+              }
+            } catch (err) {
+              console.error(`[LiveStreams] Failed to fetch predictions for model ${model.model_id}:`, err);
+            }
+          })
+        );
+
+        // Dedupe by model_id + ts_ms, sort by timestamp descending, limit to 200
+        const predMap = new Map<string, LivePrediction>();
+        for (const p of allPreds) {
+          predMap.set(`${p.model_id}:${p.ts_ms}`, p);
+        }
+        predsRef.current = Array.from(predMap.values())
+          .sort((a, b) => b.ts_ms - a.ts_ms)
+          .slice(0, 200);
+        console.log('[LiveStreams] Loaded initial predictions for', activeModels.length, 'active models:', predsRef.current.length, 'total');
+        setPredictions([...predsRef.current]);
       } catch (err) {
         console.error('[LiveStreams] Failed to fetch initial predictions:', err);
       }

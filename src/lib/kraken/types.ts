@@ -3,8 +3,15 @@ import type { XGBoostTrainResult } from '@/lib/types/xgboost';
 
 export interface GoLiveRequest {
   run_id: string;
-  indicator_script: string;
+  timeframe?: string;  // defaults to "1h"
+  // indicator_script removed - backend uses global engine
   run?: Stage1RunDetail;
+}
+
+export interface AvailableFeaturesResponse {
+  features: string[];
+  feature_hash: string;
+  timeframe: string;
 }
 
 export interface GoLiveResponse {

@@ -6,6 +6,7 @@ import type {
   ActiveModelResponse,
   LiveModelSummary,
   LiveModelMetricsResponse,
+  AvailableFeaturesResponse,
 } from './types';
 
 class KrakenClient {
@@ -82,6 +83,11 @@ class KrakenClient {
   async getPredictions(modelId: string, limit = 50): Promise<KrakenApiResponse<{ model_id: string; predictions: Array<{ ts_ms: number; prediction: number; long_threshold: number; short_threshold: number; feature_hash?: string }> }>> {
     const params = new URLSearchParams({ model_id: modelId, limit: String(limit) });
     return this.request<{ model_id: string; predictions: Array<{ ts_ms: number; prediction: number; long_threshold: number; short_threshold: number; feature_hash?: string }> }>(`/api/live/predictions?${params.toString()}`);
+  }
+
+  async getAvailableFeatures(timeframe?: string): Promise<KrakenApiResponse<AvailableFeaturesResponse>> {
+    const params = timeframe ? `?timeframe=${timeframe}` : '';
+    return this.request<AvailableFeaturesResponse>(`/api/live/available-features${params}`);
   }
 }
 

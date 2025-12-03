@@ -134,12 +134,12 @@ const LiveModelPage = () => {
     staleTime: 30_000,
   });
 
-  const handleGoLive = (script: string) => {
+  const handleGoLive = () => {
     if (!selectedRun) {
       toast({ title: 'No run selected', description: 'Load a run from Walkforward first', variant: 'destructive' });
       return;
     }
-    goLiveMutation.mutate({ run_id: selectedRun.run_id, indicator_script: script, run: selectedRun });
+    goLiveMutation.mutate({ run_id: selectedRun.run_id, run: selectedRun });
     setModalOpen(false);
   };
 
@@ -217,7 +217,7 @@ const LiveModelPage = () => {
               <CardContent className="text-sm text-muted-foreground space-y-2">
                 <p>1. Load a run in <strong>Walkforward Pilot</strong> first - it will appear in the selector above.</p>
                 <p>2. Select the run and click <strong>Go Live</strong>.</p>
-                <p>3. Provide the indicator script that matches the run's features.</p>
+                <p>3. The system validates that the run's features are available in the global indicator engine.</p>
                 <p>4. Refresh metrics to see how the model performs on today's data.</p>
               </CardContent>
             </Card>
@@ -482,17 +482,25 @@ const LiveModelPage = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle>Recent Predictions</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Recent Predictions</CardTitle>
+                {metricsModelId && (
+                  <Badge variant="outline" className="font-mono text-xs">
+                    {metricsModelId.slice(0, 10)}…
+                  </Badge>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="text-sm">
               {horizonBars > 0 && (
                 <div className="text-xs text-muted-foreground mb-2">
-                  Showing predictions older than {horizonBars} hour horizon (targets not known before that).
+                  Target horizon: {horizonBars} bars. Actuals shown only for predictions older than this.
                 </div>
               )}
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead>Model</TableHead>
                     <TableHead>Timestamp</TableHead>
                     <TableHead>Prediction</TableHead>
                     <TableHead>Actual</TableHead>
@@ -500,7 +508,9 @@ const LiveModelPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {livePredictions.map((p) => {
+                  {livePredictions
+                    .filter((p) => !metricsModelId || p.model_id === metricsModelId)
+                    .map((p) => {
                       // Both predictions and indicators use bar-end timestamps (XX:59:59.999)
                       // so direct lookup works. Convert to bar-start only for display.
                       const barStartDisplay = new Date(p.ts_ms);
@@ -517,8 +527,16 @@ const LiveModelPage = () => {
                       } else if (p.short_threshold !== undefined && p.prediction < p.short_threshold) {
                         trigger = 'SHORT';
                       }
+                      // Determine if this model is active
+                      const isActiveModel = liveModels.find((m) => m.model_id === p.model_id)?.status === 'active';
                       return (
                         <TableRow key={`${p.model_id}-${p.ts_ms}`}>
+                          <TableCell className="font-mono text-xs">
+                            <div className="flex items-center gap-1">
+                              {isActiveModel && <span className="w-2 h-2 rounded-full bg-green-500" title="Active" />}
+                              {p.model_id.slice(0, 8)}…
+                            </div>
+                          </TableCell>
                           <TableCell className="font-mono text-xs">{barStartDisplay.toLocaleString()}</TableCell>
                           <TableCell className="font-mono text-xs">{p.prediction.toFixed(2)}</TableCell>
                           <TableCell className="font-mono text-xs">{actual != null ? actual.toFixed(2) : '—'}</TableCell>

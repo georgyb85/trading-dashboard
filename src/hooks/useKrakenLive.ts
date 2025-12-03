@@ -162,3 +162,17 @@ export const useUpdateThresholds = () => {
     },
   });
 };
+
+export const useAvailableFeatures = (timeframe?: string) => {
+  return useQuery({
+    queryKey: ['kraken', 'available_features', timeframe],
+    queryFn: async () => {
+      const resp = await krakenClient.getAvailableFeatures(timeframe);
+      if (!resp.success || !resp.data) {
+        throw new Error(resp.error || 'Failed to load available features');
+      }
+      return resp.data;
+    },
+    retry: false,
+  });
+};
