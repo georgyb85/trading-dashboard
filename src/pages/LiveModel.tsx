@@ -574,8 +574,8 @@ const LiveModelPage = () => {
                 </TableHeader>
                 <TableBody>
                   {combinedPredictions.map((p) => {
+                    // Display actual timestamp - no rounding/faking
                     const barStartDisplay = new Date(p.ts);
-                    barStartDisplay.setMinutes(0, 0, 0);
                     // Prefer actual from API (calculated from OHLCV), fall back to WebSocket target matured events
                     const actual =
                       p.actual ??

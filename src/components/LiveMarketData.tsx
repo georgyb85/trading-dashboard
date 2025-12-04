@@ -140,11 +140,11 @@ export function LiveMarketData() {
     return date.toLocaleString();
   };
 
-  // Convert bar-end timestamp (XX:59:59.999) to bar-start (XX:00:00) for display
+  // Display actual timestamp - no rounding/faking
+  // If timestamps appear misaligned (e.g., XX:47:59 instead of XX:00:00),
+  // that's a backend bug that needs fixing, not masking in frontend
   const formatBarTime = (timestamp: number) => {
-    // Round down to the start of the hour
     const date = new Date(timestamp);
-    date.setMinutes(0, 0, 0);
     return date.toLocaleString();
   };
 
