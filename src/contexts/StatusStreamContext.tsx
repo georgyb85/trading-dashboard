@@ -1,13 +1,12 @@
 import { createContext, useContext, ReactNode } from 'react';
 import { useStatusStream } from '@/hooks/useStatusStream';
-import { StatsData, TradeData, OHLCVData } from '@/types/status';
+import { StatsData, TradeData } from '@/types/status';
 
 interface StatusStreamContextType {
   connected: boolean;
   error: string | null;
   stats: StatsData | null;
   trades: TradeData[];
-  ohlcv: OHLCVData[];
   lastPrices: Record<string, number>;
   connect: () => void;
   disconnect: () => void;
@@ -33,7 +32,6 @@ export const StatusStreamProvider = ({ children }: StatusStreamProviderProps) =>
     reconnect: true,
     reconnectInterval: 500,
     maxTradeHistory: 100,
-    maxOHLCVHistory: 50,
   });
 
   return (

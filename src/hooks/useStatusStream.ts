@@ -1,12 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StatusMessage,
-  StatusSnapshotMessage,
   StatusStatsMessage,
   StatusTradeMessage,
-  StatusOHLCVMessage,
   TradeData,
-  OHLCVData,
   StatsData
 } from '@/types/status';
 
@@ -38,7 +35,6 @@ interface UseStatusStreamOptions {
   reconnect?: boolean;
   reconnectInterval?: number;
   maxTradeHistory?: number;
-  maxOHLCVHistory?: number;
 }
 
 export function useStatusStream(options: UseStatusStreamOptions = {}) {
@@ -46,15 +42,12 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
     autoConnect = true,
     reconnect = true,
     reconnectInterval = 5000,
-    maxTradeHistory = 100,
-    maxOHLCVHistory = 50
+    maxTradeHistory = 100
   } = options;
 
   const [connected, setConnected] = useState(false);
   const [stats, setStats] = useState<StatsData | null>(null);
   const [trades, setTrades] = useState<TradeData[]>([]);
-  // OHLCV stored as a map: symbol -> latest candle (one per symbol)
-  const [ohlcvMap, setOhlcvMap] = useState<Record<string, OHLCVData>>({});
   const [lastPrices, setLastPrices] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
 
@@ -95,19 +88,6 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
       setTrades(prev => {
         const newTrades = [...prev, ...message.trades];
         return newTrades.slice(-maxTradeHistory);
-      });
-    }
-    if (message.ohlcv && Array.isArray(message.ohlcv) && message.ohlcv.length > 0) {
-      console.log('[StatusStream] Snapshot ohlcv:', message.ohlcv.length, 'symbols');
-      // Update map: one candle per symbol
-      setOhlcvMap(prev => {
-        const updated = { ...prev };
-        for (const candle of message.ohlcv) {
-          if (candle.symbol) {
-            updated[candle.symbol] = candle;
-          }
-        }
-        return updated;
       });
     }
   }, [maxTradeHistory]);
@@ -175,22 +155,6 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
         return newTrades.slice(-maxTradeHistory);
       });
     }
-
-    // Handle ohlcv in update - update map per symbol
-    if (message.ohlcv) {
-      const ohlcvData = Array.isArray(message.ohlcv) ? message.ohlcv : [message.ohlcv];
-      if (ohlcvData.length > 0) {
-        setOhlcvMap(prev => {
-          const updated = { ...prev };
-          for (const candle of ohlcvData) {
-            if (candle.symbol) {
-              updated[candle.symbol] = candle;
-            }
-          }
-          return updated;
-        });
-      }
-    }
   }, [maxTradeHistory]);
 
   const handleTrade = useCallback((message: StatusTradeMessage) => {
@@ -215,30 +179,6 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
       [message.symbol]: message.price
     }));
   }, [maxTradeHistory]);
-
-  const handleOHLCV = useCallback((message: StatusOHLCVMessage) => {
-    const candle: OHLCVData = {
-      exchange: message.exchange,
-      symbol: message.symbol,
-      timeframe: message.timeframe,
-      timestamp: message.timestamp,
-      timestamp_iso: message.timestamp_iso,
-      open: message.open,
-      high: message.high,
-      low: message.low,
-      close: message.close,
-      volume: message.volume,
-      trades: message.trades,
-      vwap: message.vwap,
-      text: message.text
-    };
-
-    // Update map: replace candle for this symbol
-    setOhlcvMap(prev => ({
-      ...prev,
-      [candle.symbol]: candle
-    }));
-  }, []);
 
   // Now define connect AFTER all handlers
   const connect = useCallback(() => {
@@ -290,9 +230,6 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
           case 'trade':
             handleTrade(message as StatusTradeMessage);
             break;
-          case 'ohlcv':
-            handleOHLCV(message as StatusOHLCVMessage);
-            break;
           case 'update':
             handleUpdate(message);
             break;
@@ -335,7 +272,7 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
         }, delay);
       }
     };
-  }, [reconnect, handleSnapshot, handleStats, handleUpdate, handleTrade, handleOHLCV]);
+  }, [reconnect, handleSnapshot, handleStats, handleUpdate, handleTrade]);
 
   const disconnect = useCallback(() => {
     shouldConnectRef.current = false;
@@ -376,15 +313,11 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Empty deps - only run on mount/unmount
 
-  // Convert ohlcvMap to array sorted by symbol for consistent display
-  const ohlcv = Object.values(ohlcvMap).sort((a, b) => a.symbol.localeCompare(b.symbol));
-
   return {
     connected,
     error,
     stats,
     trades,
-    ohlcv,
     lastPrices,
     connect,
     disconnect
