@@ -79,15 +79,8 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
     );
   }
 
-  // Use test data if available, otherwise fall back to validation data
-  // (Live models may not have test data at deployment time)
-  const testPredictions = (result.predictions?.test?.length ?? 0) > 0
-    ? result.predictions.test
-    : (result.predictions?.validation ?? []);
-  const testActuals = (result.actuals?.test?.length ?? 0) > 0
-    ? result.actuals.test
-    : (result.actuals?.validation ?? []);
-  const usingValidation = (result.predictions?.test?.length ?? 0) === 0;
+  const testPredictions = result.predictions?.test ?? [];
+  const testActuals = result.actuals?.test ?? [];
   const roc = computeRocCurve(testPredictions, testActuals);
 
   // Active thresholds (use dynamic if set, otherwise fall back to result thresholds)
@@ -356,9 +349,7 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
         {/* Right Column */}
         <div className="space-y-4">
           <Card className="p-4">
-            <h4 className="font-semibold mb-3 text-sm">
-              ROC Curve {usingValidation && <span className="text-xs text-muted-foreground ml-2">(validation data)</span>}
-            </h4>
+            <h4 className="font-semibold mb-3 text-sm">ROC Curve</h4>
             {roc.points.length > 0 ? (
               <ResponsiveContainer width="100%" height={220}>
                 <LineChart margin={{ left: 20, right: 10, top: 5, bottom: 5 }}>
@@ -388,9 +379,7 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
           </Card>
 
           <Card className="p-4">
-            <h4 className="font-semibold mb-3 text-sm">
-              Predictions vs Actuals {usingValidation && <span className="text-xs text-muted-foreground ml-2">(validation data)</span>}
-            </h4>
+            <h4 className="font-semibold mb-3 text-sm">Predictions vs Actuals</h4>
             {scatterData.length > 0 ? (
               <ResponsiveContainer width="100%" height={220}>
                 <ScatterChart margin={{ top: 10, right: 20, left: 20, bottom: 20 }}>
@@ -443,9 +432,7 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
           </Card>
 
           <Card className="p-4">
-            <h4 className="font-semibold mb-3 text-sm">
-              Prediction Distribution {usingValidation && <span className="text-xs text-muted-foreground ml-2">(validation data)</span>}
-            </h4>
+            <h4 className="font-semibold mb-3 text-sm">Prediction Distribution</h4>
             {histogramData.length > 0 ? (
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={histogramData} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>

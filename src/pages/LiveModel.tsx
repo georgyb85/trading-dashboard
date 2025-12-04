@@ -124,7 +124,7 @@ const LiveModelPage = () => {
   };
 
   const hasActiveModel = activeModel && activeModel.model_id;
-  const trainResult: XGBoostTrainResult | null = (metricsQuery.data?.train_result as XGBoostTrainResult | undefined)
+  const baseTrainResult: XGBoostTrainResult | null = (metricsQuery.data?.train_result as XGBoostTrainResult | undefined)
     || (activeModel?.train_result as XGBoostTrainResult | undefined)
     || null;
   const horizonBars = metricsQuery.data?.target_horizon_bars ?? activeModel?.target_horizon_bars ?? 0;
@@ -179,6 +179,41 @@ const LiveModelPage = () => {
       .sort((a, b) => b.ts - a.ts)
       .slice(0, 50);
   }, [activeModel?.stream_id, livePredictions, metricsModelId, predictionsQuery.data]);
+
+  // Build trainResult with live predictions as "test" data for FoldResults visualization
+  // Only include predictions that have matured actuals
+  const trainResult = useMemo(() => {
+    if (!baseTrainResult) return null;
+
+    // Extract predictions with actuals from combinedPredictions (these are live predictions)
+    const liveWithActuals = combinedPredictions.filter((p) => p.actual !== undefined);
+
+    if (liveWithActuals.length === 0) {
+      // No live actuals yet, return base result (will show "awaiting predictions")
+      return baseTrainResult;
+    }
+
+    // Populate test arrays from live data
+    const testPredictions = liveWithActuals.map((p) => p.prediction);
+    const testActuals = liveWithActuals.map((p) => p.actual as number);
+    const testTimestamps = liveWithActuals.map((p) => p.ts);
+
+    return {
+      ...baseTrainResult,
+      predictions: {
+        ...baseTrainResult.predictions,
+        test: testPredictions,
+      },
+      actuals: {
+        ...baseTrainResult.actuals,
+        test: testActuals,
+      },
+      timestamps: {
+        ...baseTrainResult.timestamps,
+        test: testTimestamps,
+      },
+    };
+  }, [baseTrainResult, combinedPredictions]);
 
   return (
     <div className="p-6 space-y-4">
