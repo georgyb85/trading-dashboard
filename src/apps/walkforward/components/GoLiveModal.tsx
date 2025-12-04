@@ -29,7 +29,19 @@ export const GoLiveModal = ({ open, onClose, onSubmit, run, isSubmitting }: GoLi
   const runFeatures = useMemo(() => {
     if (!run) return [];
     if (Array.isArray(run.feature_columns)) return run.feature_columns;
-    if (typeof run.feature_columns === 'string') return run.feature_columns.split(',').map((f) => f.trim());
+    if (typeof run.feature_columns === 'string') {
+      // Try to parse as JSON array first (Stage1 may return JSON string)
+      if (run.feature_columns.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(run.feature_columns);
+          if (Array.isArray(parsed)) return parsed;
+        } catch {
+          // Fall through to comma-split
+        }
+      }
+      // Fallback to comma-separated string
+      return run.feature_columns.split(',').map((f) => f.trim());
+    }
     return [];
   }, [run]);
 
