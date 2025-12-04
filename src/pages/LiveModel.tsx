@@ -156,30 +156,48 @@ const LiveModelPage = () => {
   const metricsError = metricsQuery.error instanceof Error ? metricsQuery.error.message : null;
 
   const combinedPredictions = useMemo(() => {
-    const liveRows = livePredictions
-      .filter((p) => !metricsModelId || p.modelId === metricsModelId)
-      .map((p) => ({
-        modelId: p.modelId,
-        streamId: p.streamId,
-        ts: p.ts,
-        prediction: p.prediction,
-        longThreshold: p.longThreshold,
-        shortThreshold: p.shortThreshold,
-      }));
+    // Use a Map to deduplicate by timestamp - historical (REST) predictions take priority
+    // since they come from the backend's prediction buffer with proper transform
+    const predMap = new Map<number, {
+      modelId: string;
+      streamId: string;
+      ts: number;
+      prediction: number;
+      longThreshold: number;
+      shortThreshold: number;
+    }>();
 
-    const historicalRows =
-      predictionsQuery.data
-        ?.filter((p) => !metricsModelId || p.model_id === metricsModelId)
-        .map((p) => ({
+    // Add historical predictions first (these are authoritative)
+    predictionsQuery.data
+      ?.filter((p) => !metricsModelId || p.model_id === metricsModelId)
+      .forEach((p) => {
+        predMap.set(p.ts_ms, {
           modelId: p.model_id ?? metricsModelId ?? 'unknown',
           streamId: activeModel?.stream_id ?? 'unknown',
           ts: p.ts_ms,
           prediction: p.prediction,
           longThreshold: p.long_threshold,
           shortThreshold: p.short_threshold,
-        })) ?? [];
+        });
+      });
 
-    return [...liveRows, ...historicalRows]
+    // Add live predictions only if not already present (avoid overwriting historical)
+    livePredictions
+      .filter((p) => !metricsModelId || p.modelId === metricsModelId)
+      .forEach((p) => {
+        if (!predMap.has(p.ts)) {
+          predMap.set(p.ts, {
+            modelId: p.modelId,
+            streamId: p.streamId,
+            ts: p.ts,
+            prediction: p.prediction,
+            longThreshold: p.longThreshold,
+            shortThreshold: p.shortThreshold,
+          });
+        }
+      });
+
+    return Array.from(predMap.values())
       .sort((a, b) => b.ts - a.ts)
       .slice(0, 50);
   }, [activeModel?.stream_id, livePredictions, metricsModelId, predictionsQuery.data]);
