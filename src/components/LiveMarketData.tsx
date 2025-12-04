@@ -675,6 +675,8 @@ export function LiveMarketData() {
                     <TableHead>Low</TableHead>
                     <TableHead>Close</TableHead>
                     <TableHead>Volume</TableHead>
+                    <TableHead>VWAP</TableHead>
+                    <TableHead>Trades</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -698,6 +700,12 @@ export function LiveMarketData() {
                       </TableCell>
                       <TableCell className="font-mono">
                         {formatNumber(candle.volume, 4)}
+                      </TableCell>
+                      <TableCell className="font-mono">
+                        {candle.vwap != null ? formatCurrency(candle.vwap) : '—'}
+                      </TableCell>
+                      <TableCell className="font-mono">
+                        {candle.tradeCount ?? '—'}
                       </TableCell>
                     </TableRow>
                   ))}

@@ -16,6 +16,8 @@ export interface OhlcvBar {
   low: number;
   close: number;
   volume: number;
+  vwap?: number;        // Volume Weighted Average Price
+  tradeCount?: number;  // Number of trades in bar
   synthetic?: boolean;
   streamId: string;  // e.g. "btcusdt_1h" - required for deduplication
   symbol?: string;   // Display-friendly symbol (derived from streamId)
@@ -184,6 +186,8 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
             low: msg.low,
             close: msg.close ?? msg.close_price,
             volume: msg.volume ?? 0,
+            vwap: msg.vwap,
+            tradeCount: msg.trade_count ?? msg.tradeCount,
             synthetic: msg.synthetic,
             finalized: msg.finalized,
             streamId,
