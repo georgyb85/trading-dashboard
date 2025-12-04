@@ -45,36 +45,11 @@ const LiveModelPage = () => {
   const deactivateModel = useDeactivateModel();
   const deleteModel = useDeleteModel();
   const updateThresholds = useUpdateThresholds();
-  const { indicators, indicatorNames, predictions: livePredictions, targets: liveTargets } = useMarketDataContext();
+  const { predictions: livePredictions, targets: liveTargets } = useMarketDataContext();
 
-  // Get target horizon from active model metadata
-  const targetHorizonBars = activeModel?.target_horizon_bars ?? 0;
-
-  // Build a map of target values from indicators (TGT_* columns) by timestamp
-  // Note: Backend sends 0 for unknown targets, so we exclude 0 values for recent timestamps
-  // where the target horizon hasn't elapsed yet
-  const indicatorTargetsByTimestamp = useMemo(() => {
-    const targetMap: Record<number, number | null> = {};
-    const tgtIndex = indicatorNames.findIndex(name => name.startsWith('TGT'));
-    if (tgtIndex === -1) return targetMap;
-
-    // Use target horizon from model metadata (bars * 1 hour per bar)
-    const horizonMs = targetHorizonBars * 60 * 60 * 1000;
-    const cutoffTime = Date.now() - horizonMs;
-
-    for (const snapshot of indicators) {
-      const tgtValue = snapshot.values[tgtIndex];
-      if (tgtValue != null && !isNaN(tgtValue)) {
-        // For recent timestamps, treat 0 as "unknown" since backend sends 0 for pending targets
-        if (horizonMs > 0 && snapshot.timestamp > cutoffTime && tgtValue === 0) {
-          targetMap[snapshot.timestamp] = null;
-        } else {
-          targetMap[snapshot.timestamp] = tgtValue;
-        }
-      }
-    }
-    return targetMap;
-  }, [indicators, indicatorNames, targetHorizonBars]);
+  // Map of matured target values from /ws/live WebSocket events
+  // Target values are calculated from OHLCV: close[T+horizon] - close[T]
+  // This is the single source of truth for live target values (indicator TGT_* columns are not stored)
   const maturedTargetsByStreamTs = useMemo(() => {
     const map = new Map<string, number>();
     liveTargets.forEach((t) => {
@@ -566,10 +541,9 @@ const LiveModelPage = () => {
                   {combinedPredictions.map((p) => {
                     const barStartDisplay = new Date(p.ts);
                     barStartDisplay.setMinutes(0, 0, 0);
-                    // Prefer actual from API (calculated from OHLCV), fall back to indicator/WebSocket lookups
+                    // Prefer actual from API (calculated from OHLCV), fall back to WebSocket target matured events
                     const actual =
                       p.actual ??
-                      indicatorTargetsByTimestamp[p.ts] ??
                       maturedTargetsByStreamTs.get(`${p.streamId}:${p.ts}`) ??
                       null;
                     let trigger: string | null = null;
