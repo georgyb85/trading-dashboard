@@ -126,7 +126,7 @@ const LiveModelPage = () => {
     },
     staleTime: 30_000,
   });
-  const predictionsQuery = useQuery<{ ts_ms: number; prediction: number; long_threshold: number; short_threshold: number; feature_hash?: string }[]>({
+  const predictionsQuery = useQuery<{ ts_ms: number; prediction: number; long_threshold: number; short_threshold: number; feature_hash?: string; model_id?: string; actual?: number; matched?: boolean }[]>({
     queryKey: ['kraken', 'predictions', metricsModelId],
     enabled: !!metricsModelId,
     queryFn: async () => {
@@ -157,7 +157,7 @@ const LiveModelPage = () => {
 
   const combinedPredictions = useMemo(() => {
     // Use a Map to deduplicate by timestamp - historical (REST) predictions take priority
-    // since they come from the backend's prediction buffer with proper transform
+    // since they come from the backend's prediction buffer with proper transform and actual values
     const predMap = new Map<number, {
       modelId: string;
       streamId: string;
@@ -165,9 +165,10 @@ const LiveModelPage = () => {
       prediction: number;
       longThreshold: number;
       shortThreshold: number;
+      actual?: number;  // Calculated from OHLCV by backend for matured predictions
     }>();
 
-    // Add historical predictions first (these are authoritative)
+    // Add historical predictions first (these are authoritative, include actual values from API)
     predictionsQuery.data
       ?.filter((p) => !metricsModelId || p.model_id === metricsModelId)
       .forEach((p) => {
@@ -178,6 +179,7 @@ const LiveModelPage = () => {
           prediction: p.prediction,
           longThreshold: p.long_threshold,
           shortThreshold: p.short_threshold,
+          actual: p.actual,  // Backend calculates this from OHLCV: close[T+horizon] - close[T]
         });
       });
 
@@ -193,6 +195,7 @@ const LiveModelPage = () => {
             prediction: p.prediction,
             longThreshold: p.longThreshold,
             shortThreshold: p.shortThreshold,
+            // No actual for live predictions - they're too recent to have matured
           });
         }
       });
@@ -563,7 +566,9 @@ const LiveModelPage = () => {
                   {combinedPredictions.map((p) => {
                     const barStartDisplay = new Date(p.ts);
                     barStartDisplay.setMinutes(0, 0, 0);
+                    // Prefer actual from API (calculated from OHLCV), fall back to indicator/WebSocket lookups
                     const actual =
+                      p.actual ??
                       indicatorTargetsByTimestamp[p.ts] ??
                       maturedTargetsByStreamTs.get(`${p.streamId}:${p.ts}`) ??
                       null;

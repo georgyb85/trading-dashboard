@@ -80,9 +80,9 @@ class KrakenClient {
     });
   }
 
-  async getPredictions(modelId: string, limit = 50): Promise<KrakenApiResponse<{ model_id: string; predictions: Array<{ ts_ms: number; prediction: number; long_threshold: number; short_threshold: number; feature_hash?: string }> }>> {
+  async getPredictions(modelId: string, limit = 50): Promise<KrakenApiResponse<{ model_id: string; predictions: Array<{ ts_ms: number; prediction: number; long_threshold: number; short_threshold: number; feature_hash?: string; model_id?: string; actual?: number; matched?: boolean }> }>> {
     const params = new URLSearchParams({ model_id: modelId, limit: String(limit) });
-    return this.request<{ model_id: string; predictions: Array<{ ts_ms: number; prediction: number; long_threshold: number; short_threshold: number; feature_hash?: string }> }>(`/api/live/predictions?${params.toString()}`);
+    return this.request<{ model_id: string; predictions: Array<{ ts_ms: number; prediction: number; long_threshold: number; short_threshold: number; feature_hash?: string; model_id?: string; actual?: number; matched?: boolean }> }>(`/api/live/predictions?${params.toString()}`);
   }
 
   async getAvailableFeatures(timeframe?: string): Promise<KrakenApiResponse<AvailableFeaturesResponse>> {
