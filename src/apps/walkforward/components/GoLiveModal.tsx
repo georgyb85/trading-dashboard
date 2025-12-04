@@ -17,6 +17,13 @@ interface GoLiveModalProps {
 export const GoLiveModal = ({ open, onClose, onSubmit, run, isSubmitting }: GoLiveModalProps) => {
   const { data: featuresData, isLoading: featuresLoading, error: featuresError } = useAvailableFeatures();
 
+  // Normalize feature hash to string for safe display
+  const featureHashText = useMemo(() => {
+    const raw = featuresData?.feature_hash;
+    if (raw === undefined || raw === null) return undefined;
+    return typeof raw === 'string' ? raw : String(raw);
+  }, [featuresData?.feature_hash]);
+
   const runFeatures = useMemo(() => {
     if (!run) return [];
     if (Array.isArray(run.feature_columns)) return run.feature_columns;
@@ -27,13 +34,13 @@ export const GoLiveModal = ({ open, onClose, onSubmit, run, isSubmitting }: GoLi
   const validation = useMemo(() => {
     if (!featuresData || !run) return { valid: false, missing: [], available: [] };
 
-    const availableSet = new Set(featuresData.features);
+    const availableSet = new Set(featuresData.features || []);
     const missing = runFeatures.filter((f) => !availableSet.has(f));
 
     return {
       valid: missing.length === 0,
       missing,
-      available: featuresData.features,
+      available: featuresData.features || [],
     };
   }, [featuresData, run, runFeatures]);
 
@@ -89,9 +96,9 @@ export const GoLiveModal = ({ open, onClose, onSubmit, run, isSubmitting }: GoLi
                 <div className="text-sm">
                   <span className="text-muted-foreground">Available Features: </span>
                   <span className="font-mono text-xs">{featuresData.features.length} available</span>
-                  {featuresData.feature_hash && (
+                  {featureHashText && (
                     <span className="ml-2 text-muted-foreground text-xs">
-                      (hash: {featuresData.feature_hash.slice(0, 8)})
+                      (hash: {featureHashText.slice(0, 8)})
                     </span>
                   )}
                 </div>
