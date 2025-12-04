@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useAvailableFeatures } from '@/hooks/useKrakenLive';
 import type { Stage1RunDetail } from '@/lib/stage1/types';
+import { useMarketDataContext } from '@/contexts/MarketDataContext';
 
 interface GoLiveModalProps {
   open: boolean;
@@ -16,6 +17,7 @@ interface GoLiveModalProps {
 
 export const GoLiveModal = ({ open, onClose, onSubmit, run, isSubmitting }: GoLiveModalProps) => {
   const { data: featuresData, isLoading: featuresLoading, error: featuresError } = useAvailableFeatures();
+  const { indicatorNames } = useMarketDataContext();
 
   // Normalize feature hash to string for safe display
   const featureHashText = useMemo(() => {
@@ -32,17 +34,22 @@ export const GoLiveModal = ({ open, onClose, onSubmit, run, isSubmitting }: GoLi
   }, [run]);
 
   const validation = useMemo(() => {
-    if (!featuresData || !run) return { valid: false, missing: [], available: [] };
+    if (!run) return { valid: false, missing: [], available: [] };
 
-    const availableSet = new Set(featuresData.features || []);
+    // Union server-advertised features with live indicator names to avoid false negatives
+    const available = featuresData?.features && featuresData.features.length > 0
+      ? [...featuresData.features, ...indicatorNames]
+      : indicatorNames;
+
+    const availableSet = new Set(available || []);
     const missing = runFeatures.filter((f) => !availableSet.has(f));
 
     return {
       valid: missing.length === 0,
       missing,
-      available: featuresData.features || [],
+      available,
     };
-  }, [featuresData, run, runFeatures]);
+  }, [featuresData, indicatorNames, run, runFeatures]);
 
   const handleSubmit = () => {
     if (!run || !validation.valid) return;
@@ -95,7 +102,9 @@ export const GoLiveModal = ({ open, onClose, onSubmit, run, isSubmitting }: GoLi
               <div className="space-y-2">
                 <div className="text-sm">
                   <span className="text-muted-foreground">Available Features: </span>
-                  <span className="font-mono text-xs">{featuresData.features.length} available</span>
+                  <span className="font-mono text-xs">
+                    {new Set([...(featuresData?.features ?? []), ...indicatorNames]).size} available
+                  </span>
                   {featureHashText && (
                     <span className="ml-2 text-muted-foreground text-xs">
                       (hash: {featureHashText.slice(0, 8)})
