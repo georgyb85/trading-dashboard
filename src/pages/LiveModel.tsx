@@ -565,7 +565,7 @@ const LiveModelPage = () => {
                           </div>
                         </TableCell>
                         <TableCell className="font-mono text-xs">{barStartDisplay.toLocaleString()}</TableCell>
-                        <TableCell className="font-mono text-xs">{p.prediction.toFixed(2)}</TableCell>
+                        <TableCell className="font-mono text-xs">{Math.abs(p.prediction) < 0.01 ? p.prediction.toExponential(2) : p.prediction.toFixed(4)}</TableCell>
                         <TableCell className="font-mono text-xs">{actual != null ? actual.toFixed(2) : '—'}</TableCell>
                         <TableCell>
                           {trigger ? (
