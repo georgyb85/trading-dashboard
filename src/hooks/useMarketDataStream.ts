@@ -194,10 +194,13 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
             symbol,
           };
           setOhlcv((prev) => {
-            // Deduplicate by streamId + timestamp (same bar from same stream)
-            const exists = prev.some((b) => b.streamId === bar.streamId && b.timestamp === bar.timestamp);
-            if (exists) {
-              return prev;
+            // Find existing bar with same streamId + timestamp
+            const existingIdx = prev.findIndex((b) => b.streamId === bar.streamId && b.timestamp === bar.timestamp);
+            if (existingIdx >= 0) {
+              // Update existing bar (e.g., when bar finalizes with VWAP)
+              const updated = [...prev];
+              updated[existingIdx] = bar;
+              return updated;
             }
             console.log('[MarketDataStream] New bar:', symbol, new Date(bar.timestamp).toISOString());
             return [...prev.slice(-(maxHistorySize - 1)), bar];
