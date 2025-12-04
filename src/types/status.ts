@@ -1,7 +1,8 @@
 // Status Stream API Types
 // Based on status_stream_api.md
+// Note: OHLCV data now comes from /ws/live (MarketDataContext), not /ws/status
 
-export type StatusMessageType = 'snapshot' | 'stats' | 'trade' | 'ohlcv';
+export type StatusMessageType = 'snapshot' | 'stats' | 'trade';
 
 export interface StatusMessage {
   topic: 'status';
@@ -38,7 +39,6 @@ export interface StatusSnapshotMessage extends StatusMessage {
   type: 'snapshot';
   stats?: StatsData;
   trades?: TradeData[];
-  ohlcv?: OHLCVData[];
 }
 
 export interface StatusStatsMessage extends StatusMessage {
@@ -70,39 +70,6 @@ export interface StatusTradeMessage extends StatusMessage {
   timestamp: number;
   timestamp_iso: string;
   message_counts?: MessageCounts;
-}
-
-export interface OHLCVData {
-  exchange: string;
-  symbol: string;
-  timeframe: string;
-  timestamp: number;
-  timestamp_iso: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-  trades: number;
-  vwap: number;
-  text?: string;
-}
-
-export interface StatusOHLCVMessage extends StatusMessage {
-  type: 'ohlcv';
-  exchange: string;
-  symbol: string;
-  timeframe: string;
-  timestamp: number;
-  timestamp_iso: string;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-  trades: number;
-  vwap: number;
-  text?: string;
 }
 
 // Client -> Server Messages

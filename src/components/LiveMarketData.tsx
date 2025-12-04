@@ -13,8 +13,9 @@ import { useQuery } from "@tanstack/react-query";
 import { krakenClient } from "@/lib/kraken/client";
 
 export function LiveMarketData() {
-  // Status stream: trades, stats, lastPrices (legacy ohlcv is deprecated)
+  // Status stream (/ws/status): trades, stats, lastPrices
   const { connected: statusConnected, error: statusError, stats, trades, lastPrices } = useStatusStreamContext();
+  // Market data stream (/ws/live): indicators, predictions, ohlcv bars
   const {
     connected: marketDataConnected,
     indicators,
@@ -27,7 +28,7 @@ export function LiveMarketData() {
     predictions,
     targets,
     signals,
-    ohlcv,  // Minute bars now come from /ws/live (StreamManager), not legacy adapter
+    ohlcv,
   } = useMarketDataContext();
   const { data: activeModel } = useActiveModel();
 

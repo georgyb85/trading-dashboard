@@ -65,7 +65,6 @@ interface StatusUpdate {
     ringBuffers: Record<string, RingBufferStats>;
   };
   trades: any[];
-  ohlcv: any[];
 }
 
 interface UsageUpdateNew {
