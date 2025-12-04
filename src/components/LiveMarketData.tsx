@@ -9,6 +9,8 @@ import { useMarketDataContext } from "@/contexts/MarketDataContext";
 import { useActiveModel } from "@/hooks/useKrakenLive";
 import { LiveTimeSeriesChart, LiveHistogramChart } from "@/components/LiveIndicatorCharts";
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { krakenClient } from "@/lib/kraken/client";
 
 export function LiveMarketData() {
   const { connected: statusConnected, error: statusError, stats, trades, ohlcv, lastPrices } = useStatusStreamContext();
@@ -28,6 +30,31 @@ export function LiveMarketData() {
   const { data: activeModel } = useActiveModel();
 
   const [selectedIndicatorIndex, setSelectedIndicatorIndex] = useState(0);
+
+  // Fetch predictions with correct actual values from REST API (calculated from OHLCV)
+  const activeModelId = activeModel?.model_id;
+  const predictionsApiQuery = useQuery({
+    queryKey: ['kraken', 'predictions', activeModelId],
+    enabled: !!activeModelId,
+    queryFn: async () => {
+      const resp = await krakenClient.getPredictions(activeModelId!, 100);
+      if (!resp.success || !resp.data) return [];
+      return resp.data.predictions;
+    },
+    staleTime: 30_000,
+    refetchInterval: 60_000,  // Refresh every minute to get updated actuals
+  });
+
+  // Build map of actual values from REST API (these are calculated correctly from OHLCV)
+  const apiActualsByTimestamp = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const p of predictionsApiQuery.data ?? []) {
+      if (p.actual != null) {
+        map.set(p.ts_ms, p.actual);
+      }
+    }
+    return map;
+  }, [predictionsApiQuery.data]);
 
   // Get all 4 thresholds from active model's train_result
   const allThresholds = useMemo(() => {
@@ -95,11 +122,15 @@ export function LiveMarketData() {
     return map;
   }, [targets]);
 
-  // Helper to get actual value - prefer indicator targets, then matured targets from the live stream
-  // Note: Both predictions and indicators use bar-end timestamps (XX:59:59.999), so we can match directly
+  // Helper to get actual value - prefer REST API actuals (calculated from OHLCV: close[T+horizon] - close[T])
+  // The indicator buffer TGT values are stale (computed at bar close when future wasn't known)
   const getActualForPrediction = (modelId: string, streamId: string | undefined, ts_ms: number): number | null => {
-    // First try the prediction's own actual field (from /ws/predictions with proper null handling)
-    // Try indicator targets (both use bar-end timestamps, so direct lookup works)
+    // First try the REST API actual (correctly calculated from OHLCV data)
+    const apiActual = apiActualsByTimestamp.get(ts_ms);
+    if (apiActual != null) {
+      return apiActual;
+    }
+    // Fallback to indicator targets (may be stale, but better than nothing)
     const indicatorTarget = indicatorTargetsByTimestamp[ts_ms];
     if (indicatorTarget != null) {
       return indicatorTarget;
