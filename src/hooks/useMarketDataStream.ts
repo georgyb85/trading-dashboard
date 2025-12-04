@@ -17,8 +17,10 @@ export interface OhlcvBar {
   close: number;
   volume: number;
   synthetic?: boolean;
-  streamId?: string;
+  streamId: string;  // e.g. "btcusdt_1h" - required for deduplication
+  symbol?: string;   // Display-friendly symbol (derived from streamId)
   startTimestamp?: number;
+  finalized?: boolean;
 }
 
 export interface AtrData {
@@ -171,7 +173,10 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
       switch (msg.topic) {
         case 'bar':
         case 'timeframe_bar': {
-          const hourBar: OhlcvBar = {
+          const streamId = msg.stream_id ?? msg.streamId ?? 'unknown';
+          // Derive symbol from streamId (e.g. "btcusdt_1h" -> "BTCUSDT")
+          const symbol = streamId.split('_')[0]?.toUpperCase() || streamId;
+          const bar: OhlcvBar = {
             timestamp: msg.bar_end_ts ?? msg.barEndTs ?? msg.end_ts ?? msg.ts ?? Date.now(),
             startTimestamp: msg.bar_start_ts ?? msg.start_ts,
             open: msg.open ?? msg.open_price,
@@ -180,15 +185,18 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
             close: msg.close ?? msg.close_price,
             volume: msg.volume ?? 0,
             synthetic: msg.synthetic,
-            streamId: msg.stream_id ?? msg.streamId,
+            finalized: msg.finalized,
+            streamId,
+            symbol,
           };
           setOhlcv((prev) => {
-            const exists = prev.some((bar) => bar.timestamp === hourBar.timestamp);
+            // Deduplicate by streamId + timestamp (same bar from same stream)
+            const exists = prev.some((b) => b.streamId === bar.streamId && b.timestamp === bar.timestamp);
             if (exists) {
               return prev;
             }
-            console.log('[MarketDataStream] New bar:', new Date(hourBar.timestamp).toISOString());
-            return [...prev.slice(-(maxHistorySize - 1)), hourBar];
+            console.log('[MarketDataStream] New bar:', symbol, new Date(bar.timestamp).toISOString());
+            return [...prev.slice(-(maxHistorySize - 1)), bar];
           });
           return;
         }

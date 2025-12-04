@@ -654,13 +654,13 @@ export function LiveMarketData() {
         </Card>
       )}
 
-      {/* OHLCV Candles - One per symbol */}
+      {/* OHLCV Candles from /ws/live */}
       {ohlcv.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
-              Latest Candles (1m)
+              Latest Candles
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -668,21 +668,19 @@ export function LiveMarketData() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Symbol</TableHead>
+                    <TableHead>Stream</TableHead>
                     <TableHead>Time</TableHead>
                     <TableHead>Open</TableHead>
                     <TableHead>High</TableHead>
                     <TableHead>Low</TableHead>
                     <TableHead>Close</TableHead>
                     <TableHead>Volume</TableHead>
-                    <TableHead>VWAP</TableHead>
-                    <TableHead>Trades</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {ohlcv.map((candle) => (
-                    <TableRow key={candle.symbol}>
-                      <TableCell className="font-medium">{candle.symbol}</TableCell>
+                  {ohlcv.slice(-20).map((candle) => (
+                    <TableRow key={`${candle.streamId}-${candle.timestamp}`}>
+                      <TableCell className="font-medium">{candle.symbol || candle.streamId}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {formatTime(candle.timestamp)}
                       </TableCell>
@@ -699,13 +697,7 @@ export function LiveMarketData() {
                         {formatCurrency(candle.close)}
                       </TableCell>
                       <TableCell className="font-mono">
-                        {formatNumber(candle.volume, 2)}
-                      </TableCell>
-                      <TableCell className="font-mono text-primary">
-                        {formatCurrency(candle.vwap)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{candle.trades}</Badge>
+                        {formatNumber(candle.volume, 4)}
                       </TableCell>
                     </TableRow>
                   ))}
