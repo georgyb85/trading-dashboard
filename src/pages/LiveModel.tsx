@@ -31,7 +31,6 @@ import { Activity, BarChart3, Settings, Info, RefreshCw, Loader2 } from 'lucide-
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { krakenClient } from '@/lib/kraken/client';
 import { Input } from '@/components/ui/input';
-import { useLiveStreams } from '@/contexts/LiveStreamsContext';
 import { useMarketDataContext } from '@/contexts/MarketDataContext';
 
 const LiveModelPage = () => {
@@ -46,8 +45,7 @@ const LiveModelPage = () => {
   const deactivateModel = useDeactivateModel();
   const deleteModel = useDeleteModel();
   const updateThresholds = useUpdateThresholds();
-  const { predictions: livePredictions, targets: liveTargets } = useLiveStreams();
-  const { indicators, indicatorNames } = useMarketDataContext();
+  const { indicators, indicatorNames, predictions: livePredictions, targets: liveTargets } = useMarketDataContext();
 
   // Get target horizon from active model metadata
   const targetHorizonBars = activeModel?.target_horizon_bars ?? 0;
@@ -77,6 +75,13 @@ const LiveModelPage = () => {
     }
     return targetMap;
   }, [indicators, indicatorNames, targetHorizonBars]);
+  const maturedTargetsByStreamTs = useMemo(() => {
+    const map = new Map<string, number>();
+    liveTargets.forEach((t) => {
+      map.set(`${t.streamId}:${t.originTs}`, t.value);
+    });
+    return map;
+  }, [liveTargets]);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [longThresholdInput, setLongThresholdInput] = useState<string>('');
   const [shortThresholdInput, setShortThresholdInput] = useState<string>('');
@@ -149,6 +154,35 @@ const LiveModelPage = () => {
     || null;
   const horizonBars = metricsQuery.data?.target_horizon_bars ?? activeModel?.target_horizon_bars ?? 0;
   const metricsError = metricsQuery.error instanceof Error ? metricsQuery.error.message : null;
+
+  const combinedPredictions = useMemo(() => {
+    const liveRows = livePredictions
+      .filter((p) => !metricsModelId || p.modelId === metricsModelId)
+      .map((p) => ({
+        modelId: p.modelId,
+        streamId: p.streamId,
+        ts: p.ts,
+        prediction: p.prediction,
+        longThreshold: p.longThreshold,
+        shortThreshold: p.shortThreshold,
+      }));
+
+    const historicalRows =
+      predictionsQuery.data
+        ?.filter((p) => !metricsModelId || p.model_id === metricsModelId)
+        .map((p) => ({
+          modelId: p.model_id ?? metricsModelId ?? 'unknown',
+          streamId: activeModel?.stream_id ?? 'unknown',
+          ts: p.ts_ms,
+          prediction: p.prediction,
+          longThreshold: p.long_threshold,
+          shortThreshold: p.short_threshold,
+        })) ?? [];
+
+    return [...liveRows, ...historicalRows]
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, 50);
+  }, [activeModel?.stream_id, livePredictions, metricsModelId, predictionsQuery.data]);
 
   return (
     <div className="p-6 space-y-4">
@@ -508,48 +542,41 @@ const LiveModelPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {livePredictions
-                    .filter((p) => !metricsModelId || p.model_id === metricsModelId)
-                    .map((p) => {
-                      // Both predictions and indicators use bar-end timestamps (XX:59:59.999)
-                      // so direct lookup works. Convert to bar-start only for display.
-                      const barStartDisplay = new Date(p.ts_ms);
-                      barStartDisplay.setMinutes(0, 0, 0);
-                      // Try prediction's actual first (from /ws/predictions with proper null handling),
-                      // then indicator targets (using bar-end timestamp directly), then WebSocket targets
-                      const actual = p.actual
-                        ?? indicatorTargetsByTimestamp[p.ts_ms]
-                        ?? liveTargets[`${p.model_id}:${p.ts_ms}`]
-                        ?? liveTargets[`active:${p.ts_ms}`];
-                      let trigger: string | null = null;
-                      if (p.long_threshold !== undefined && p.prediction > p.long_threshold) {
-                        trigger = 'LONG';
-                      } else if (p.short_threshold !== undefined && p.prediction < p.short_threshold) {
-                        trigger = 'SHORT';
-                      }
-                      // Determine if this model is active
-                      const isActiveModel = liveModels.find((m) => m.model_id === p.model_id)?.status === 'active';
-                      return (
-                        <TableRow key={`${p.model_id}-${p.ts_ms}`}>
-                          <TableCell className="font-mono text-xs">
-                            <div className="flex items-center gap-1">
-                              {isActiveModel && <span className="w-2 h-2 rounded-full bg-green-500" title="Active" />}
-                              {p.model_id.slice(0, 8)}…
-                            </div>
-                          </TableCell>
-                          <TableCell className="font-mono text-xs">{barStartDisplay.toLocaleString()}</TableCell>
-                          <TableCell className="font-mono text-xs">{p.prediction.toFixed(2)}</TableCell>
-                          <TableCell className="font-mono text-xs">{actual != null ? actual.toFixed(2) : '—'}</TableCell>
-                          <TableCell>
-                            {trigger ? (
-                              <Badge variant={trigger === 'LONG' ? 'default' : 'destructive'}>{trigger}</Badge>
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                  {combinedPredictions.map((p) => {
+                    const barStartDisplay = new Date(p.ts);
+                    barStartDisplay.setMinutes(0, 0, 0);
+                    const actual =
+                      indicatorTargetsByTimestamp[p.ts] ??
+                      maturedTargetsByStreamTs.get(`${p.streamId}:${p.ts}`) ??
+                      null;
+                    let trigger: string | null = null;
+                    if (p.longThreshold !== undefined && p.prediction > p.longThreshold) {
+                      trigger = 'LONG';
+                    } else if (p.shortThreshold !== undefined && p.prediction < p.shortThreshold) {
+                      trigger = 'SHORT';
+                    }
+                    const isActiveModel = liveModels.find((m) => m.model_id === p.modelId)?.status === 'active';
+                    return (
+                      <TableRow key={`${p.modelId}-${p.ts}`}>
+                        <TableCell className="font-mono text-xs">
+                          <div className="flex items-center gap-1">
+                            {isActiveModel && <span className="w-2 h-2 rounded-full bg-green-500" title="Active" />}
+                            {p.modelId.slice(0, 8)}…
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{barStartDisplay.toLocaleString()}</TableCell>
+                        <TableCell className="font-mono text-xs">{p.prediction.toFixed(2)}</TableCell>
+                        <TableCell className="font-mono text-xs">{actual != null ? actual.toFixed(2) : '—'}</TableCell>
+                        <TableCell>
+                          {trigger ? (
+                            <Badge variant={trigger === 'LONG' ? 'default' : 'destructive'}>{trigger}</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>

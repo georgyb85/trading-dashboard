@@ -4,16 +4,13 @@ import "./index.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { RunsProvider } from "@/contexts/RunsContext";
 import { WalkforwardProvider } from "@/contexts/WalkforwardContext";
-import { LiveStreamsProvider } from "@/contexts/LiveStreamsContext";
 import { Toaster } from "@/components/ui/toaster";
 
 createRoot(document.getElementById("root")!).render(
   <ThemeProvider>
     <RunsProvider>
       <WalkforwardProvider>
-        <LiveStreamsProvider>
-          <App />
-        </LiveStreamsProvider>
+        <App />
       </WalkforwardProvider>
     </RunsProvider>
     <Toaster />

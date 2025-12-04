@@ -6,7 +6,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Activity, WifiOff, Loader2, TrendingUp, Zap, BarChart3, LineChart, Brain } from "lucide-react";
 import { useStatusStreamContext } from "@/contexts/StatusStreamContext";
 import { useMarketDataContext } from "@/contexts/MarketDataContext";
-import { useLiveStreams } from "@/contexts/LiveStreamsContext";
 import { useActiveModel } from "@/hooks/useKrakenLive";
 import { LiveTimeSeriesChart, LiveHistogramChart } from "@/components/LiveIndicatorCharts";
 import { useMemo, useState } from "react";
@@ -22,8 +21,10 @@ export function LiveMarketData() {
     performance,
     latestIndicator,
     error: marketDataError,
+    predictions,
+    targets,
+    signals,
   } = useMarketDataContext();
-  const { predictions, targets } = useLiveStreams();
   const { data: activeModel } = useActiveModel();
 
   const [selectedIndicatorIndex, setSelectedIndicatorIndex] = useState(0);
@@ -44,7 +45,7 @@ export function LiveMarketData() {
     const grouped: Record<string, typeof predictions> = {};
 
     for (const pred of predictions) {
-      const modelId = pred.model_id || 'unknown';
+      const modelId = pred.modelId || 'unknown';
       if (!grouped[modelId]) {
         grouped[modelId] = [];
       }
@@ -85,20 +86,28 @@ export function LiveMarketData() {
     return targetMap;
   }, [indicators, indicatorNames, targetHorizonBars]);
 
-  // Helper to get actual value - try prediction's actual first, then indicator targets, then WebSocket targets
-  // Note: Both predictions and indicators use bar-end timestamps (XX:59:59.999), so we can match directly
-  const getActualForPrediction = (modelId: string, ts_ms: number, predActual?: number | null): number | null => {
-    // First try the prediction's own actual field (from /ws/predictions with proper null handling)
-    if (predActual != null) {
-      return predActual;
+  const maturedTargetsByStreamTs = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of targets) {
+      const key = `${t.streamId}:${t.originTs}`;
+      map.set(key, t.value);
     }
+    return map;
+  }, [targets]);
+
+  // Helper to get actual value - prefer indicator targets, then matured targets from the live stream
+  // Note: Both predictions and indicators use bar-end timestamps (XX:59:59.999), so we can match directly
+  const getActualForPrediction = (modelId: string, streamId: string | undefined, ts_ms: number): number | null => {
+    // First try the prediction's own actual field (from /ws/predictions with proper null handling)
     // Try indicator targets (both use bar-end timestamps, so direct lookup works)
     const indicatorTarget = indicatorTargetsByTimestamp[ts_ms];
     if (indicatorTarget != null) {
       return indicatorTarget;
     }
-    // Finally try WebSocket targets
-    const value = targets[`${modelId}:${ts_ms}`] ?? targets[`active:${ts_ms}`];
+    // Finally try matured targets from /ws/live
+    const value =
+      maturedTargetsByStreamTs.get(`${streamId ?? 'unknown'}:${ts_ms}`) ??
+      maturedTargetsByStreamTs.get(`active:${ts_ms}`);
     return value ?? null;
   };
 
@@ -175,7 +184,7 @@ export function LiveMarketData() {
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card>
           <CardContent className="p-4">
             <div className="text-2xl font-bold">{Object.keys(lastPrices).length}</div>
@@ -198,6 +207,15 @@ export function LiveMarketData() {
               {indicators.length}
             </div>
             <p className="text-xs text-muted-foreground">Indicator Snapshots</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-accent">
+              {signals.length}
+            </div>
+            <p className="text-xs text-muted-foreground">Active Signals</p>
           </CardContent>
         </Card>
 
@@ -505,16 +523,15 @@ export function LiveMarketData() {
                         </TableHeader>
                         <TableBody>
                           {predictionsByModel[modelId].slice(0, 30).map((pred) => {
-                            // Use ROC optimal thresholds for signal determination
-                            const longThresh = allThresholds.longOptimal ?? Infinity;
-                            const shortThresh = allThresholds.shortOptimal ?? -Infinity;
+                            const longThresh = pred.longThreshold ?? allThresholds.longOptimal ?? Infinity;
+                            const shortThresh = pred.shortThreshold ?? allThresholds.shortOptimal ?? -Infinity;
                             const signal = pred.prediction >= longThresh ? 'LONG' :
                                            pred.prediction <= shortThresh ? 'SHORT' : 'NONE';
-                            const actual = getActualForPrediction(modelId, pred.ts_ms, pred.actual);
+                            const actual = getActualForPrediction(modelId, pred.streamId, pred.ts);
                             return (
-                              <TableRow key={pred.ts_ms}>
+                              <TableRow key={pred.ts}>
                                 <TableCell className="text-xs text-muted-foreground">
-                                  {formatBarTime(pred.ts_ms)}
+                                  {formatBarTime(pred.ts)}
                                 </TableCell>
                                 <TableCell className="font-mono font-semibold">
                                   {pred.prediction.toFixed(2)}

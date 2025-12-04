@@ -7,6 +7,10 @@ import {
   PositionData,
   PerformanceData,
   TradingRules,
+  PredictionData,
+  TargetData,
+  PerformanceSnapshot,
+  StreamHealth,
 } from '@/hooks/useMarketDataStream';
 
 interface MarketDataContextType {
@@ -19,10 +23,15 @@ interface MarketDataContextType {
   atr: AtrData | null;
   position: PositionData | null;
   performance: PerformanceData | null;
+  performanceHistory: PerformanceSnapshot[];
   error: string | null;
   subscribedTopics: string[];
   latestIndicator: IndicatorSnapshot | null;
   latestOhlcv: OhlcvBar | null;
+  predictions: PredictionData[];
+  targets: TargetData[];
+  signals: PredictionData[];
+  health: StreamHealth[];
   connect: () => void;
   disconnect: () => void;
   subscribe: (topics: string[]) => void;
@@ -66,4 +75,8 @@ export type {
   PositionData,
   PerformanceData,
   TradingRules,
+  PredictionData,
+  TargetData,
+  PerformanceSnapshot,
+  StreamHealth,
 };

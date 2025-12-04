@@ -6,6 +6,7 @@ export interface IndicatorSnapshot {
   valid: boolean;
   featureNames?: string[];
   featureHash?: string;
+  streamId?: string;
 }
 
 export interface OhlcvBar {
@@ -16,6 +17,8 @@ export interface OhlcvBar {
   close: number;
   volume: number;
   synthetic?: boolean;
+  streamId?: string;
+  startTimestamp?: number;
 }
 
 export interface AtrData {
@@ -52,6 +55,8 @@ export interface PerformanceData {
   samples?: number;
   missed?: number;
   lastUpdate?: number;
+  modelId?: string;
+  streamId?: string;
 }
 
 export interface TradingRules {
@@ -80,6 +85,46 @@ export interface TradingRules {
   };
 }
 
+export interface PredictionData {
+  ts: number;
+  modelId: string;
+  streamId: string;
+  prediction: number;
+  longThreshold: number;
+  shortThreshold: number;
+  signal: 'long' | 'short' | 'flat';
+}
+
+export interface TargetData {
+  originTs: number;
+  maturedAtTs: number;
+  value: number;
+  streamId: string;
+  targetName: string;
+  horizonBars?: number;
+}
+
+export interface PerformanceSnapshot {
+  modelId: string;
+  streamId: string;
+  mae?: number;
+  directionalAccuracy?: number;
+  sampleCount?: number;
+  evaluatedAtTs?: number;
+}
+
+export interface StreamHealth {
+  streamId: string;
+  lastBarTs: number;
+  lastIndicatorTs: number;
+  ohlcvBufferSize: number;
+  indicatorBufferSize: number;
+  featureCount: number;
+  registeredTargets: number;
+  featureHash: number;
+  stale: boolean;
+}
+
 interface UseMarketDataStreamOptions {
   autoConnect?: boolean;
   reconnect?: boolean;
@@ -106,81 +151,139 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
   const [atr, setAtr] = useState<AtrData | null>(null);
   const [position, setPosition] = useState<PositionData | null>(null);
   const [performance, setPerformance] = useState<PerformanceData | null>(null);
+  const [performanceHistory, setPerformanceHistory] = useState<PerformanceSnapshot[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [subscribedTopics, setSubscribedTopics] = useState<string[]>([]);
+  const [predictions, setPredictions] = useState<PredictionData[]>([]);
+  const [targets, setTargets] = useState<TargetData[]>([]);
+  const [health, setHealth] = useState<StreamHealth[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
   const heartbeatIntervalRef = useRef<NodeJS.Timeout>();
   const shouldConnectRef = useRef(autoConnect);
   const reconnectAttemptsRef = useRef(0);
-  // Track if we've received snapshot data - don't request again on reconnect
-  const hasSnapshotRef = useRef(false);
 
   // Handle V3 unified /ws/live messages
   const handleV3Message = useCallback(
     (msg: any) => {
       // V3 sends topic-based messages directly
       switch (msg.topic) {
-        case 'minute':
-          // V3 minute bar: { topic: "minute", start_ts, end_ts, open, high, low, close, volume, synthetic }
-          // We accumulate minute bars but primarily use hour bars for display
-          console.log('[MarketDataStream] Minute bar received:', new Date(msg.start_ts).toISOString());
-          break;
-
-        case 'hour':
-          // V3 hour bar: { topic: "hour", start_ts, end_ts, open, high, low, close, volume, synthetic }
+        case 'bar':
+        case 'timeframe_bar': {
           const hourBar: OhlcvBar = {
-            timestamp: msg.start_ts,
-            open: msg.open,
+            timestamp: msg.bar_end_ts ?? msg.barEndTs ?? msg.end_ts ?? msg.ts ?? Date.now(),
+            startTimestamp: msg.bar_start_ts ?? msg.start_ts,
+            open: msg.open ?? msg.open_price,
             high: msg.high,
             low: msg.low,
-            close: msg.close,
-            volume: msg.volume,
+            close: msg.close ?? msg.close_price,
+            volume: msg.volume ?? 0,
             synthetic: msg.synthetic,
+            streamId: msg.stream_id ?? msg.streamId,
           };
           setOhlcv((prev) => {
             const exists = prev.some((bar) => bar.timestamp === hourBar.timestamp);
             if (exists) {
               return prev;
             }
-            console.log('[MarketDataStream] New hour bar:', new Date(hourBar.timestamp).toISOString());
+            console.log('[MarketDataStream] New bar:', new Date(hourBar.timestamp).toISOString());
             return [...prev.slice(-(maxHistorySize - 1)), hourBar];
           });
-          break;
+          return;
+        }
 
         case 'indicators':
-          // V3 indicators: { topic: "indicators", ts, feature_hash, names: [], values: [] }
-          const indicatorSnapshot: IndicatorSnapshot = {
-            timestamp: msg.ts,
-            values: msg.values || [],
-            valid: true,
-            featureNames: msg.names || [],
-            featureHash: msg.feature_hash,
-          };
-          setIndicators((prev) => {
-            const exists = prev.some((s) => s.timestamp === indicatorSnapshot.timestamp);
-            if (exists) {
-              return prev;
-            }
-            console.log('[MarketDataStream] New indicators:', new Date(indicatorSnapshot.timestamp).toISOString());
-            return [...prev.slice(-(maxHistorySize - 1)), indicatorSnapshot];
-          });
-          // Update names if provided
-          if (msg.names && Array.isArray(msg.names) && msg.names.length > 0) {
-            setIndicatorNames((prev) => {
-              if (JSON.stringify(prev) !== JSON.stringify(msg.names)) {
-                console.log('[MarketDataStream] Indicator names updated:', msg.names);
-                return msg.names;
+          {
+            const names = msg.names && Array.isArray(msg.names)
+              ? msg.names
+              : msg.indicators
+              ? Object.keys(msg.indicators)
+              : [];
+            const values = names.map((name: string) => msg.indicators?.[name]);
+            const ts = msg.bar_end_ts ?? msg.ts ?? msg.barEndTs ?? Date.now();
+            const indicatorSnapshot: IndicatorSnapshot = {
+              timestamp: ts,
+              values,
+              valid: true,
+              featureNames: names,
+              featureHash: msg.feature_hash ?? msg.featureHash,
+              streamId: msg.stream_id ?? msg.streamId,
+            };
+            setIndicators((prev) => {
+              const exists = prev.some((s) => s.timestamp === indicatorSnapshot.timestamp);
+              if (exists) {
+                return prev;
               }
-              return prev;
+              console.log('[MarketDataStream] New indicators:', new Date(indicatorSnapshot.timestamp).toISOString());
+              return [...prev.slice(-(maxHistorySize - 1)), indicatorSnapshot];
             });
+            if (names.length > 0) {
+              setIndicatorNames((prev) => {
+                if (JSON.stringify(prev) !== JSON.stringify(names)) {
+                  return names;
+                }
+                return prev;
+              });
+            }
           }
-          break;
+          return;
 
-        case 'performance':
-          // V3 performance: { topic: "performance", model_id, mse, mae, r2, samples, missed, last_update }
-          const perfData: PerformanceData = {
+        case 'prediction': {
+          const ts = msg.bar_end_ts ?? msg.ts ?? msg.barEndTs ?? Date.now();
+          const predictionValue = msg.prediction ?? 0;
+          const longThreshold = msg.long_threshold ?? msg.longThreshold ?? 0;
+          const shortThreshold = msg.short_threshold ?? msg.shortThreshold ?? 0;
+          const signal: PredictionData['signal'] =
+            predictionValue > longThreshold ? 'long' : predictionValue < shortThreshold ? 'short' : 'flat';
+
+          const pred: PredictionData = {
+            ts,
+            modelId: msg.model_id ?? msg.modelId ?? 'unknown',
+            streamId: msg.stream_id ?? msg.streamId ?? 'unknown',
+            prediction: predictionValue,
+            longThreshold,
+            shortThreshold,
+            signal,
+          };
+
+          setPredictions((prev) => {
+            const filtered = prev.filter((p) => !(p.modelId === pred.modelId && p.ts === pred.ts));
+            return [...filtered, pred].sort((a, b) => b.ts - a.ts).slice(0, maxHistorySize);
+          });
+          return;
+        }
+
+        case 'target_matured': {
+          const target: TargetData = {
+            originTs: msg.origin_bar_ts ?? msg.origin_ts ?? msg.ts ?? Date.now(),
+            maturedAtTs: msg.matured_at_ts ?? msg.matured_ts ?? Date.now(),
+            value: msg.value,
+            streamId: msg.stream_id ?? msg.streamId ?? 'unknown',
+            targetName: msg.target_name ?? msg.target ?? 'unknown',
+            horizonBars: msg.horizon_bars,
+          };
+          setTargets((prev) => {
+            const filtered = prev.filter((t) => !(t.originTs === target.originTs && t.targetName === target.targetName && t.streamId === target.streamId));
+            return [...filtered, target].sort((a, b) => b.originTs - a.originTs).slice(0, maxHistorySize);
+          });
+          return;
+        }
+
+        case 'performance': {
+          const perf: PerformanceSnapshot = {
+            modelId: msg.model_id ?? msg.modelId ?? 'unknown',
+            streamId: msg.stream_id ?? msg.streamId ?? 'unknown',
+            mae: msg.mae,
+            directionalAccuracy: msg.directional_accuracy,
+            sampleCount: msg.sample_count ?? msg.sampleCount,
+            evaluatedAtTs: msg.evaluated_at_ts ?? msg.evaluatedAtTs ?? Date.now(),
+          };
+          setPerformanceHistory((prev) => {
+            const filtered = prev.filter((p) => !(p.modelId === perf.modelId && p.streamId === perf.streamId));
+            return [...filtered, perf];
+          });
+          setPerformance({
             totalTrades: 0,
             winningTrades: 0,
             losingTrades: 0,
@@ -189,96 +292,15 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
             averagePnl: 0,
             maxDrawdown: 0,
             sharpeRatio: 0,
-            mse: msg.mse,
-            mae: msg.mae,
-            r2: msg.r2,
-            samples: msg.samples,
-            missed: msg.missed,
-            lastUpdate: msg.last_update,
-          };
-          setPerformance(perfData);
-          break;
-      }
-    },
-    [maxHistorySize]
-  );
-
-  // Handle legacy V2 topic-specific data (both initial snapshot and updates)
-  const handleTopicData = useCallback(
-    (topic: string, data: any, isInitial: boolean) => {
-      switch (topic) {
-        case 'indicators':
-          if (isInitial && data.snapshots) {
-            // Filter to only valid snapshots
-            const validSnapshots = data.snapshots.filter((s: IndicatorSnapshot) => s.valid !== false);
-            console.log(
-              `[MarketDataStream] Received ${data.snapshots.length} indicator snapshots (${validSnapshots.length} valid)`
-            );
-            setIndicators(validSnapshots.slice(-maxHistorySize));
-            // Extract indicator names from the latest snapshot or first valid snapshot
-            const namesSource = data.latest || validSnapshots[validSnapshots.length - 1];
-            if (namesSource?.featureNames && Array.isArray(namesSource.featureNames)) {
-              console.log('[MarketDataStream] Indicator names from backend:', namesSource.featureNames);
-              setIndicatorNames(namesSource.featureNames);
-            }
-          } else if (!isInitial) {
-            // Only append if the snapshot is valid
-            if (data.valid !== false) {
-              setIndicators((prev) => {
-                // Deduplicate by timestamp
-                const exists = prev.some(s => s.timestamp === data.timestamp);
-                if (exists) {
-                  return prev;
-                }
-                console.log('[MarketDataStream] New indicator update:', new Date(data.timestamp).toISOString());
-                return [...prev.slice(-(maxHistorySize - 1)), data];
-              });
-              // Update names if provided (in case they change)
-              if (data.featureNames && Array.isArray(data.featureNames)) {
-                setIndicatorNames((prev) => {
-                  if (JSON.stringify(prev) !== JSON.stringify(data.featureNames)) {
-                    console.log('[MarketDataStream] Indicator names updated:', data.featureNames);
-                    return data.featureNames;
-                  }
-                  return prev;
-                });
-              }
-            }
-          }
-          break;
-
-        case 'ohlcv':
-          if (isInitial && data.bars) {
-            console.log(`[MarketDataStream] Received ${data.bars.length} historical OHLCV bars`);
-            setOhlcv(data.bars.slice(-maxHistorySize));
-          } else if (!isInitial) {
-            setOhlcv((prev) => {
-              // Deduplicate by timestamp
-              const exists = prev.some(bar => bar.timestamp === data.timestamp);
-              if (exists) {
-                return prev;
-              }
-              console.log('[MarketDataStream] New OHLCV bar:', new Date(data.timestamp).toISOString());
-              return [...prev.slice(-(maxHistorySize - 1)), data];
-            });
-          }
-          break;
-
-        case 'atr':
-          if (isInitial && data.current) {
-            setAtr(data.current);
-          } else if (!isInitial) {
-            setAtr(data);
-          }
-          break;
-
-        case 'position':
-          setPosition(data);
-          break;
-
-        case 'performance':
-          setPerformance(data);
-          break;
+            mae: perf.mae,
+            directionalAccuracy: perf.directionalAccuracy,
+            samples: perf.sampleCount,
+            lastUpdate: perf.evaluatedAtTs,
+            modelId: perf.modelId,
+            streamId: perf.streamId,
+          });
+          return;
+        }
       }
     },
     [maxHistorySize]
@@ -287,89 +309,13 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
   // Handle incoming messages (supports both V3 and legacy V2 formats)
   const handleMessage = useCallback(
     (msg: any) => {
-      // Check for V3 format first (topic-based without type wrapper)
-      if (msg.topic && !msg.type) {
+      // Unified V3 stream uses topic without type wrapper
+      if (msg.topic) {
         handleV3Message(msg);
         return;
       }
-
-      // Legacy V2 format handling
-      switch (msg.type) {
-        case 'initial_data':
-          if (msg.clientId) {
-            // Welcome message
-            console.log('[MarketDataStream] Welcome message received, clientId:', msg.clientId);
-            setClientId(msg.clientId);
-            setTradingRules(msg.tradingRules);
-
-            // Auto-subscribe to topics (lightweight, no data sent)
-            if (wsRef.current?.readyState === WebSocket.OPEN) {
-              wsRef.current.send(
-                JSON.stringify({
-                  type: 'subscribe',
-                  topics: ['indicators', 'ohlcv', 'atr', 'position', 'performance'],
-                })
-              );
-
-              // Only request snapshot on first connection, not on reconnects
-              if (!hasSnapshotRef.current) {
-                console.log('[MarketDataStream] Requesting initial snapshot...');
-                wsRef.current.send(
-                  JSON.stringify({
-                    type: 'snapshot',
-                    topics: ['indicators', 'ohlcv', 'atr', 'position', 'performance'],
-                  })
-                );
-              } else {
-                console.log('[MarketDataStream] Reconnected - using cached data, not requesting snapshot');
-              }
-            }
-          } else if (msg.topic) {
-            // Snapshot data for a topic
-            handleTopicData(msg.topic, msg.data, true);
-          }
-          break;
-
-        case 'update':
-          handleTopicData(msg.topic, msg.data, false);
-          break;
-
-        case 'subscribed':
-          console.log('[MarketDataStream] Subscribed to:', msg.topics);
-          setSubscribedTopics(msg.topics);
-          break;
-
-        case 'snapshot_complete':
-          console.log('[MarketDataStream] Snapshot complete for:', msg.topics);
-          hasSnapshotRef.current = true;
-          break;
-
-        case 'unsubscribed':
-          console.log('[MarketDataStream] Unsubscribed from:', msg.topics);
-          setSubscribedTopics((prev) => prev.filter((t) => !msg.topics.includes(t)));
-          break;
-
-        case 'error':
-          const errorMsg = msg.message || msg.error || JSON.stringify(msg);
-          console.error('[MarketDataStream] Server error:', errorMsg);
-          setError(errorMsg);
-          break;
-
-        case 'pong':
-        case 'heartbeat':
-          // Server heartbeat/pong - just acknowledge, no response needed
-          break;
-
-        default:
-          // Try V3 format if no type matched
-          if (msg.topic) {
-            handleV3Message(msg);
-          } else {
-            console.warn('[MarketDataStream] Unknown message type:', msg.type);
-          }
-      }
     },
-    [handleTopicData, handleV3Message]
+    [handleV3Message]
   );
 
   const connect = useCallback(() => {
@@ -380,17 +326,17 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
       return;
     }
 
-    // Connect to /api/market-data-ws endpoint for indicators and market data
+    // Connect to unified /ws/live endpoint
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/api/market-data-ws`;
+    const wsUrl = `${protocol}//${host}/ws/live`;
 
     console.log('[MarketDataStream] Connecting to:', wsUrl);
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log('[MarketDataStream] WebSocket connected to /api/market-data-ws');
+      console.log('[MarketDataStream] WebSocket connected to /ws/live');
       setConnected(true);
       setError(null);
       reconnectAttemptsRef.current = 0;
@@ -514,6 +460,45 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
   // Computed values
   const latestIndicator = indicators.length > 0 ? indicators[indicators.length - 1] : null;
   const latestOhlcv = ohlcv.length > 0 ? ohlcv[ohlcv.length - 1] : null;
+  const signals = predictions.filter((p) => p.signal !== 'flat');
+
+  // Health fetch (hourly)
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchHealth = async () => {
+      try {
+        const resp = await fetch('/api/live/health');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (cancelled) return;
+        if (Array.isArray(data.streams)) {
+          setHealth(
+            data.streams.map((s: any) => ({
+              streamId: s.id ?? s.streamId ?? s.stream_id ?? '',
+              lastBarTs: s.lastBarTs ?? s.last_bar_ts ?? 0,
+              lastIndicatorTs: s.lastIndicatorTs ?? s.last_indicator_ts ?? 0,
+              ohlcvBufferSize: s.ohlcvBufferSize ?? 0,
+              indicatorBufferSize: s.indicatorBufferSize ?? 0,
+              featureCount: s.featureCount ?? 0,
+              registeredTargets: s.registeredTargets ?? 0,
+              featureHash: s.featureHash ?? 0,
+              stale: Boolean(s.stale),
+            }))
+          );
+        }
+      } catch (err) {
+        console.warn('[MarketDataStream] Health fetch failed', err);
+      }
+    };
+
+    fetchHealth();
+    const interval = setInterval(fetchHealth, 60 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   return {
     connected,
@@ -525,10 +510,15 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
     atr,
     position,
     performance,
+    performanceHistory,
     error,
     subscribedTopics,
     latestIndicator,
     latestOhlcv,
+    predictions,
+    targets,
+    signals,
+    health,
     connect,
     disconnect,
     subscribe,
