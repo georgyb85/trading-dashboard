@@ -654,13 +654,13 @@ export function LiveMarketData() {
         </Card>
       )}
 
-      {/* OHLCV Candles from /ws/live */}
+      {/* OHLCV Candles from /ws/live - Latest bar per stream */}
       {ohlcv.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
-              Latest Candles
+              Latest Candles (per Stream)
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -680,8 +680,17 @@ export function LiveMarketData() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {ohlcv.slice(-20).map((candle) => (
-                    <TableRow key={`${candle.streamId}-${candle.timestamp}`}>
+                  {/* Show only the latest bar per stream */}
+                  {Array.from(
+                    ohlcv.reduce((map, candle) => {
+                      const existing = map.get(candle.streamId);
+                      if (!existing || candle.timestamp > existing.timestamp) {
+                        map.set(candle.streamId, candle);
+                      }
+                      return map;
+                    }, new Map<string, typeof ohlcv[0]>()).values()
+                  ).map((candle) => (
+                    <TableRow key={candle.streamId}>
                       <TableCell className="font-medium">{candle.symbol || candle.streamId}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {formatTime(candle.timestamp)}
