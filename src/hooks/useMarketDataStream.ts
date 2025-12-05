@@ -2,11 +2,44 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 
 export interface IndicatorSnapshot {
   timestamp: number;
-  values: number[];
+  values: (number | null)[];  // null for NaN values
   valid: boolean;
-  featureNames?: string[];
+  // UNIFIED SNAPSHOTS: parallel arrays format
+  columns: string[];          // Column names (features + targets)
+  shifts: number[];           // 0 for features, -N for targets
   featureHash?: string;
   streamId?: string;
+}
+
+/**
+ * Get the actual timestamp a column value refers to.
+ * For features (shift=0): returns snapshotTs
+ * For targets (shift=-H): returns snapshotTs + shift * barDurationMs
+ */
+export function getColumnTimestamp(
+  snapshotTs: number,
+  shift: number,
+  barDurationMs: number
+): number {
+  return snapshotTs + (shift * barDurationMs);
+}
+
+/**
+ * Find the target value for a prediction made at predictionTs.
+ * Since targets have shift=-H, we need to find a snapshot at
+ * (predictionTs + H * barDurationMs) which will contain the target.
+ */
+export function findTargetForPrediction(
+  snapshots: IndicatorSnapshot[],
+  predictionTs: number,
+  targetColIdx: number,
+  horizonBars: number,
+  barDurationMs: number
+): number | null {
+  const targetSnapshotTs = predictionTs + (horizonBars * barDurationMs);
+  const snap = snapshots.find(s => s.timestamp === targetSnapshotTs);
+  if (!snap) return null;
+  return snap.values[targetColIdx];
 }
 
 export interface OhlcvBar {
@@ -210,18 +243,18 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
 
         case 'indicators':
           {
-            const names = msg.names && Array.isArray(msg.names)
-              ? msg.names
-              : msg.indicators
-              ? Object.keys(msg.indicators)
-              : [];
-            const values = names.map((name: string) => msg.indicators?.[name]);
+            // UNIFIED SNAPSHOTS: parallel arrays format (columns, shifts, values)
+            const columns: string[] = msg.columns ?? [];
+            const shifts: number[] = msg.shifts ?? [];
+            const values: (number | null)[] = msg.values ?? [];
             const ts = msg.bar_end_ts ?? msg.ts ?? msg.barEndTs ?? Date.now();
+
             const indicatorSnapshot: IndicatorSnapshot = {
               timestamp: ts,
+              columns,
+              shifts,
               values,
-              valid: true,
-              featureNames: names,
+              valid: columns.length > 0 && values.length === columns.length,
               featureHash: msg.feature_hash ?? msg.featureHash,
               streamId: msg.stream_id ?? msg.streamId,
             };
@@ -233,10 +266,12 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
               console.log('[MarketDataStream] New indicators:', new Date(indicatorSnapshot.timestamp).toISOString());
               return [...prev.slice(-(maxHistorySize - 1)), indicatorSnapshot];
             });
-            if (names.length > 0) {
+            // Update column names (features only: shift === 0)
+            const featureNames = columns.filter((_, i) => shifts[i] === 0);
+            if (featureNames.length > 0) {
               setIndicatorNames((prev) => {
-                if (JSON.stringify(prev) !== JSON.stringify(names)) {
-                  return names;
+                if (JSON.stringify(prev) !== JSON.stringify(featureNames)) {
+                  return featureNames;
                 }
                 return prev;
               });
