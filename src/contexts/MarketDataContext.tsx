@@ -19,6 +19,7 @@ interface MarketDataContextType {
   tradingRules: TradingRules | null;
   indicators: IndicatorSnapshot[];
   indicatorNames: string[];
+  allColumnNames: string[];  // Features + Targets (includes TGT_*)
   ohlcv: OhlcvBar[];
   atr: AtrData | null;
   position: PositionData | null;

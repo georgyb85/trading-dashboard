@@ -184,6 +184,7 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
   const [tradingRules, setTradingRules] = useState<TradingRules | null>(null);
   const [indicators, setIndicators] = useState<IndicatorSnapshot[]>([]);
   const [indicatorNames, setIndicatorNames] = useState<string[]>([]);
+  const [allColumnNames, setAllColumnNames] = useState<string[]>([]);  // Features + Targets
   const [ohlcv, setOhlcv] = useState<OhlcvBar[]>([]);
   const [atr, setAtr] = useState<AtrData | null>(null);
   const [position, setPosition] = useState<PositionData | null>(null);
@@ -266,12 +267,22 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
               console.log('[MarketDataStream] New indicators:', new Date(indicatorSnapshot.timestamp).toISOString());
               return [...prev.slice(-(maxHistorySize - 1)), indicatorSnapshot];
             });
-            // Update column names (features only: shift === 0)
+            // Update column names
+            // indicatorNames: features only (shift === 0) - for model inference display
+            // allColumnNames: all columns including targets - for full data view
             const featureNames = columns.filter((_, i) => shifts[i] === 0);
             if (featureNames.length > 0) {
               setIndicatorNames((prev) => {
                 if (JSON.stringify(prev) !== JSON.stringify(featureNames)) {
                   return featureNames;
+                }
+                return prev;
+              });
+            }
+            if (columns.length > 0) {
+              setAllColumnNames((prev) => {
+                if (JSON.stringify(prev) !== JSON.stringify(columns)) {
+                  return columns;
                 }
                 return prev;
               });
@@ -556,6 +567,7 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
     tradingRules,
     indicators,
     indicatorNames,
+    allColumnNames,  // Features + Targets (includes TGT_*)
     ohlcv,
     atr,
     position,

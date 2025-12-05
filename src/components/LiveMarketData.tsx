@@ -20,6 +20,7 @@ export function LiveMarketData() {
     connected: marketDataConnected,
     indicators,
     indicatorNames,
+    allColumnNames,  // Features + Targets (includes TGT_*)
     atr,
     position,
     performance,
@@ -261,9 +262,9 @@ export function LiveMarketData() {
                       <SelectValue placeholder="Select indicator" />
                     </SelectTrigger>
                     <SelectContent>
-                      {indicatorNames.map((name, idx) => (
+                      {allColumnNames.map((name, idx) => (
                         <SelectItem key={`${name}-${idx}`} value={String(idx)}>
-                          {name}
+                          {name.startsWith('TGT_') ? `📊 ${name}` : name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -271,24 +272,31 @@ export function LiveMarketData() {
                 </div>
 
                 {/* Latest Indicator Values Grid */}
-                {latestIndicator && indicatorNames.length > 0 && (
+                {latestIndicator && allColumnNames.length > 0 && (
                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-                    {indicatorNames.map((name, idx) => (
-                      <div
-                        key={`${name}-${idx}`}
-                        className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                          idx === selectedIndicatorIndex
-                            ? 'bg-primary/10 border-2 border-primary'
-                            : 'bg-muted/30 border border-transparent hover:bg-muted/50'
-                        }`}
-                        onClick={() => setSelectedIndicatorIndex(idx)}
-                      >
-                        <p className="text-xs text-muted-foreground truncate">{name}</p>
-                        <p className="text-sm font-mono font-semibold">
-                          {latestIndicator.values[idx]?.toFixed(4) ?? 'N/A'}
-                        </p>
-                      </div>
-                    ))}
+                    {allColumnNames.map((name, idx) => {
+                      const isTarget = name.startsWith('TGT_');
+                      return (
+                        <div
+                          key={`${name}-${idx}`}
+                          className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                            idx === selectedIndicatorIndex
+                              ? 'bg-primary/10 border-2 border-primary'
+                              : isTarget
+                                ? 'bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20'
+                                : 'bg-muted/30 border border-transparent hover:bg-muted/50'
+                          }`}
+                          onClick={() => setSelectedIndicatorIndex(idx)}
+                        >
+                          <p className={`text-xs truncate ${isTarget ? 'text-amber-500' : 'text-muted-foreground'}`}>
+                            {isTarget ? `📊 ${name}` : name}
+                          </p>
+                          <p className="text-sm font-mono font-semibold">
+                            {latestIndicator.values[idx]?.toFixed(4) ?? 'N/A'}
+                          </p>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 
@@ -303,17 +311,17 @@ export function LiveMarketData() {
           </Card>
 
           {/* Charts */}
-          {indicatorNames.length > 0 && (
+          {allColumnNames.length > 0 && (
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
               <LiveTimeSeriesChart
                 data={indicators}
                 selectedIndicatorIndex={selectedIndicatorIndex}
-                indicatorName={indicatorNames[selectedIndicatorIndex] || `Indicator ${selectedIndicatorIndex}`}
+                indicatorName={allColumnNames[selectedIndicatorIndex] || `Indicator ${selectedIndicatorIndex}`}
               />
               <LiveHistogramChart
                 data={indicators}
                 selectedIndicatorIndex={selectedIndicatorIndex}
-                indicatorName={indicatorNames[selectedIndicatorIndex] || `Indicator ${selectedIndicatorIndex}`}
+                indicatorName={allColumnNames[selectedIndicatorIndex] || `Indicator ${selectedIndicatorIndex}`}
               />
             </div>
           )}
