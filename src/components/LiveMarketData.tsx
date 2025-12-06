@@ -503,7 +503,7 @@ export function LiveMarketData() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {predictions.length === 0 ? (
+          {combinedPredictions.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Brain className="h-10 w-10 mx-auto mb-3 opacity-50" />
               <p>No predictions available</p>
