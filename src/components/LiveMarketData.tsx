@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Activity, WifiOff, Loader2, TrendingUp, Zap, BarChart3, LineChart, Brain } from "lucide-react";
 import { useStatusStreamContext } from "@/contexts/StatusStreamContext";
-import { useMarketDataContext } from "@/contexts/MarketDataContext";
+import { useMarketDataContext, PredictionData } from "@/contexts/MarketDataContext";
 import { useActiveModel } from "@/hooks/useKrakenLive";
 import { LiveTimeSeriesChart, LiveHistogramChart } from "@/components/LiveIndicatorCharts";
 import { useMemo, useState } from "react";
@@ -71,11 +71,39 @@ export function LiveMarketData() {
     };
   }, [activeModel]);
 
-  // Group predictions by model_id
-  const predictionsByModel = useMemo(() => {
-    const grouped: Record<string, typeof predictions> = {};
+  // Combine REST API predictions with WebSocket predictions
+  // REST API provides historical predictions (persisted), WebSocket provides real-time updates
+  const combinedPredictions = useMemo(() => {
+    const predMap = new Map<number, PredictionData>();
 
+    // Add REST API predictions first (these include actual values calculated from OHLCV)
+    for (const p of predictionsApiQuery.data ?? []) {
+      predMap.set(p.ts_ms, {
+        ts: p.ts_ms,
+        modelId: p.model_id ?? activeModelId ?? 'unknown',
+        streamId: activeModel?.stream_id ?? 'unknown',
+        prediction: p.prediction,
+        longThreshold: p.long_threshold,
+        shortThreshold: p.short_threshold,
+        signal: p.prediction >= p.long_threshold ? 'long' : p.prediction <= p.short_threshold ? 'short' : 'flat',
+      });
+    }
+
+    // Add WebSocket predictions (may be more recent, don't overwrite REST API)
     for (const pred of predictions) {
+      if (!predMap.has(pred.ts)) {
+        predMap.set(pred.ts, pred);
+      }
+    }
+
+    return Array.from(predMap.values()).sort((a, b) => b.ts - a.ts);
+  }, [predictions, predictionsApiQuery.data, activeModelId, activeModel?.stream_id]);
+
+  // Group combined predictions by model_id
+  const predictionsByModel = useMemo(() => {
+    const grouped: Record<string, PredictionData[]> = {};
+
+    for (const pred of combinedPredictions) {
       const modelId = pred.modelId || 'unknown';
       if (!grouped[modelId]) {
         grouped[modelId] = [];
@@ -83,7 +111,7 @@ export function LiveMarketData() {
       grouped[modelId].push(pred);
     }
     return grouped;
-  }, [predictions]);
+  }, [combinedPredictions]);
 
   const modelIds = Object.keys(predictionsByModel);
 
