@@ -264,7 +264,6 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
               if (exists) {
                 return prev;
               }
-              console.log('[MarketDataStream] New indicators:', new Date(indicatorSnapshot.timestamp).toISOString());
               return [...prev.slice(-(maxHistorySize - 1)), indicatorSnapshot];
             });
             // Update column names
