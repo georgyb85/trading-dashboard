@@ -288,7 +288,7 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
             <div className="text-sm space-y-1">
               <div>ROC AUC: {numberFormatter(roc.auc, 3)} <span className="text-xs text-muted-foreground">({testPredictions.length} samples)</span></div>
               <div>
-                R-squared (training): {numberFormatter(result.test_metrics?.r2 ?? result.validation_metrics?.r2 ?? 0, 3)}
+                R² (validation): {numberFormatter(result.validation_metrics?.r2 ?? 0, 3)}
               </div>
             </div>
             {result.timings && (
