@@ -284,11 +284,11 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
           </Card>
 
           <Card className="p-4 space-y-3">
-            <h4 className="font-semibold text-sm">ROC & Metrics</h4>
+            <h4 className="font-semibold text-sm">ROC & Metrics (from displayed data)</h4>
             <div className="text-sm space-y-1">
-              <div>ROC AUC: {numberFormatter(roc.auc, 3)}</div>
+              <div>ROC AUC: {numberFormatter(roc.auc, 3)} <span className="text-xs text-muted-foreground">({testPredictions.length} samples)</span></div>
               <div>
-                R-squared (test): {numberFormatter(result.test_metrics?.r2 ?? result.validation_metrics?.r2 ?? 0, 3)}
+                R-squared (training): {numberFormatter(result.test_metrics?.r2 ?? result.validation_metrics?.r2 ?? 0, 3)}
               </div>
             </div>
             {result.timings && (

@@ -509,7 +509,7 @@ export function LiveMarketData() {
         <Card>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm">Live Model Performance</CardTitle>
+              <CardTitle className="text-sm">Live Model Performance (Real-time via WebSocket)</CardTitle>
               {performance.lastUpdate && (
                 <span className="text-xs text-muted-foreground">
                   Updated: {formatDateTime(performance.lastUpdate)}
@@ -520,6 +520,10 @@ export function LiveMarketData() {
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
               <div>
+                <p className="text-xs text-muted-foreground">Sample Count</p>
+                <p className="text-lg font-semibold">{performance.samples ?? 'N/A'}</p>
+              </div>
+              <div>
                 <p className="text-xs text-muted-foreground">Directional Accuracy</p>
                 <p className="text-lg font-semibold text-primary">
                   {performance.directionalAccuracy != null
@@ -528,38 +532,48 @@ export function LiveMarketData() {
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">ROC AUC</p>
+                <p className="text-xs text-muted-foreground">ROC AUC (Mann-Whitney)</p>
                 <p className="text-lg font-semibold text-primary">
                   {performance.rocAuc != null && performance.rocAuc >= 0 && Number.isFinite(performance.rocAuc)
                     ? performance.rocAuc.toFixed(3)
-                    : 'N/A'}
+                    : 'N/A (need 5+ per class)'}
                 </p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">MAE</p>
                 <p className="text-lg font-semibold">
-                  {performance.mae != null ? performance.mae.toFixed(4) : 'N/A'}
+                  {performance.mae != null ? performance.mae.toFixed(2) : 'N/A'}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Sample Count</p>
-                <p className="text-lg font-semibold">{performance.samples ?? 'N/A'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">True Pos / False Pos</p>
-                <p className="text-lg font-mono">
-                  <span className="text-success">{performance.truePositives ?? 0}</span>
-                  {' / '}
-                  <span className="text-loss">{performance.falsePositives ?? 0}</span>
+                <p className="text-xs text-muted-foreground">MSE</p>
+                <p className="text-lg font-semibold">
+                  {performance.mse != null ? performance.mse.toFixed(2) : 'N/A'}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">True Neg / False Neg</p>
-                <p className="text-lg font-mono">
-                  <span className="text-success">{performance.trueNegatives ?? 0}</span>
-                  {' / '}
-                  <span className="text-loss">{performance.falseNegatives ?? 0}</span>
+                <p className="text-xs text-muted-foreground">R²</p>
+                <p className="text-lg font-semibold">
+                  {performance.r2 != null ? performance.r2.toFixed(4) : 'N/A'}
                 </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t">
+              <div>
+                <p className="text-xs text-muted-foreground">True Positives</p>
+                <p className="text-lg font-mono text-success">{performance.truePositives ?? 0}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">False Positives</p>
+                <p className="text-lg font-mono text-loss">{performance.falsePositives ?? 0}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">True Negatives</p>
+                <p className="text-lg font-mono text-success">{performance.trueNegatives ?? 0}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">False Negatives</p>
+                <p className="text-lg font-mono text-loss">{performance.falseNegatives ?? 0}</p>
               </div>
             </div>
             {performance.modelId && (

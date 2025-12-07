@@ -527,6 +527,89 @@ const LiveModelPage = () => {
             </Card>
           )}
 
+          {/* Backend Live Metrics - from recompute-from-scratch calculation */}
+          {metricsQuery.data?.live_metrics && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5" />
+                  Live Performance Metrics (Backend)
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Sample Count</p>
+                    <p className="text-lg font-semibold">{metricsQuery.data.live_metrics.sample_count ?? 0}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Directional Accuracy</p>
+                    <p className="text-lg font-semibold text-primary">
+                      {metricsQuery.data.live_metrics.directional_accuracy != null
+                        ? ((metricsQuery.data.live_metrics.directional_accuracy * 100).toFixed(1) + '%')
+                        : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">ROC AUC (Mann-Whitney)</p>
+                    <p className="text-lg font-semibold text-primary">
+                      {metricsQuery.data.live_metrics.roc_auc != null &&
+                       typeof metricsQuery.data.live_metrics.roc_auc === 'number' &&
+                       metricsQuery.data.live_metrics.roc_auc >= 0
+                        ? metricsQuery.data.live_metrics.roc_auc.toFixed(3)
+                        : 'N/A (need 5+ per class)'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">MAE</p>
+                    <p className="text-lg font-semibold">
+                      {metricsQuery.data.live_metrics.mae != null
+                        ? metricsQuery.data.live_metrics.mae.toFixed(2)
+                        : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">MSE</p>
+                    <p className="text-lg font-semibold">
+                      {metricsQuery.data.live_metrics.mse != null
+                        ? metricsQuery.data.live_metrics.mse.toFixed(2)
+                        : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">R²</p>
+                    <p className="text-lg font-semibold">
+                      {metricsQuery.data.live_metrics.r2 != null
+                        ? metricsQuery.data.live_metrics.r2.toFixed(4)
+                        : 'N/A'}
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t">
+                  <div>
+                    <p className="text-xs text-muted-foreground">True Positives</p>
+                    <p className="text-lg font-mono text-green-600">{metricsQuery.data.live_metrics.true_positives ?? 0}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">False Positives</p>
+                    <p className="text-lg font-mono text-red-600">{metricsQuery.data.live_metrics.false_positives ?? 0}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">True Negatives</p>
+                    <p className="text-lg font-mono text-green-600">{metricsQuery.data.live_metrics.true_negatives ?? 0}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">False Negatives</p>
+                    <p className="text-lg font-mono text-red-600">{metricsQuery.data.live_metrics.false_negatives ?? 0}</p>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground mt-3">
+                  Metrics recomputed from scratch on each indicator event. ROC AUC uses Mann-Whitney U (requires 5+ samples per class).
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {trainResult ? (
             <FoldResults
               result={trainResult}

@@ -85,9 +85,9 @@ export interface PerformanceData {
   averagePnl: number;
   maxDrawdown: number;
   sharpeRatio: number;
-  // V3 additional fields
-  mse?: number;
+  // V3 additional fields - regression metrics
   mae?: number;
+  mse?: number;
   r2?: number;
   directionalAccuracy?: number;
   rocAuc?: number;
@@ -152,6 +152,8 @@ export interface PerformanceSnapshot {
   modelId: string;
   streamId: string;
   mae?: number;
+  mse?: number;
+  r2?: number;
   directionalAccuracy?: number;
   rocAuc?: number;
   sampleCount?: number;
@@ -352,6 +354,8 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
             modelId: msg.model_id ?? msg.modelId ?? 'unknown',
             streamId: msg.stream_id ?? msg.streamId ?? 'unknown',
             mae: msg.mae,
+            mse: msg.mse,
+            r2: msg.r2,
             directionalAccuracy: msg.directional_accuracy ?? msg.directionalAccuracy,
             rocAuc,
             sampleCount: msg.sample_count ?? msg.sampleCount,
@@ -376,6 +380,8 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
             maxDrawdown: 0,
             sharpeRatio: 0,
             mae: perf.mae,
+            mse: perf.mse,
+            r2: perf.r2,
             directionalAccuracy: perf.directionalAccuracy,
             rocAuc: perf.rocAuc,
             samples: perf.sampleCount,
