@@ -89,11 +89,18 @@ export interface PerformanceData {
   mse?: number;
   mae?: number;
   r2?: number;
+  directionalAccuracy?: number;
+  rocAuc?: number;
   samples?: number;
   missed?: number;
   lastUpdate?: number;
   modelId?: string;
   streamId?: string;
+  // Confusion matrix for detailed analysis
+  truePositives?: number;
+  falsePositives?: number;
+  trueNegatives?: number;
+  falseNegatives?: number;
 }
 
 export interface TradingRules {
@@ -146,8 +153,14 @@ export interface PerformanceSnapshot {
   streamId: string;
   mae?: number;
   directionalAccuracy?: number;
+  rocAuc?: number;
   sampleCount?: number;
   evaluatedAtTs?: number;
+  // Confusion matrix for detailed analysis
+  truePositives?: number;
+  falsePositives?: number;
+  trueNegatives?: number;
+  falseNegatives?: number;
 }
 
 export interface StreamHealth {
@@ -335,9 +348,15 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
             modelId: msg.model_id ?? msg.modelId ?? 'unknown',
             streamId: msg.stream_id ?? msg.streamId ?? 'unknown',
             mae: msg.mae,
-            directionalAccuracy: msg.directional_accuracy,
+            directionalAccuracy: msg.directional_accuracy ?? msg.directionalAccuracy,
+            rocAuc: msg.roc_auc ?? msg.rocAuc,
             sampleCount: msg.sample_count ?? msg.sampleCount,
             evaluatedAtTs: msg.evaluated_at_ts ?? msg.evaluatedAtTs ?? Date.now(),
+            // Confusion matrix from backend
+            truePositives: msg.true_positives ?? msg.truePositives,
+            falsePositives: msg.false_positives ?? msg.falsePositives,
+            trueNegatives: msg.true_negatives ?? msg.trueNegatives,
+            falseNegatives: msg.false_negatives ?? msg.falseNegatives,
           };
           setPerformanceHistory((prev) => {
             const filtered = prev.filter((p) => !(p.modelId === perf.modelId && p.streamId === perf.streamId));
@@ -354,10 +373,15 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
             sharpeRatio: 0,
             mae: perf.mae,
             directionalAccuracy: perf.directionalAccuracy,
+            rocAuc: perf.rocAuc,
             samples: perf.sampleCount,
             lastUpdate: perf.evaluatedAtTs,
             modelId: perf.modelId,
             streamId: perf.streamId,
+            truePositives: perf.truePositives,
+            falsePositives: perf.falsePositives,
+            trueNegatives: perf.trueNegatives,
+            falseNegatives: perf.falseNegatives,
           });
           return;
         }

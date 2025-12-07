@@ -12,6 +12,17 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { krakenClient } from "@/lib/kraken/client";
 
+// Derive bar duration from streamId suffix (e.g., btcusdt_1h → 1h in ms)
+const getBarDurationMs = (streamId?: string): number | null => {
+  if (!streamId) return null;
+  const match = streamId.match(/_(\d+)([smhd])/i);
+  if (!match) return null;
+  const amount = Number(match[1]);
+  const unit = match[2].toLowerCase();
+  const unitMs: Record<string, number> = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
+  return unitMs[unit] ? amount * unitMs[unit] : null;
+};
+
 export function LiveMarketData() {
   // Status stream (/ws/status): trades, stats, lastPrices
   const { connected: statusConnected, error: statusError, stats, trades, lastPrices } = useStatusStreamContext();
@@ -48,6 +59,12 @@ export function LiveMarketData() {
     staleTime: 30_000,
     refetchInterval: 60_000,  // Refresh every minute to get updated actuals
   });
+
+  // Bar duration derived from streamId (e.g., btcusdt_1h)
+  const barDurationMs = useMemo(() => getBarDurationMs(activeModel?.stream_id), [activeModel?.stream_id]);
+
+  // Target column name from active model training metadata
+  const targetColumnName = activeModel?.train_result?.target_column;
 
   // Build map of actual values from REST API (these are calculated correctly from OHLCV)
   const apiActualsByTimestamp = useMemo(() => {
@@ -127,12 +144,43 @@ export function LiveMarketData() {
     return map;
   }, [targets]);
 
+  // Map target actuals from indicator snapshots using shift semantics
+  // snapshotTs + (shift * barDurationMs) = origin bar timestamp for the prediction
+  const targetActualsByStreamTs = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!targetColumnName || !barDurationMs) return map;
+
+    for (const snap of indicators) {
+      const streamId = snap.streamId ?? 'unknown';
+      if (!snap.columns || snap.columns.length === 0) continue;
+
+      const colIdx = snap.columns.indexOf(targetColumnName);
+      if (colIdx < 0) continue;
+      if (colIdx >= snap.values.length || colIdx >= snap.shifts.length) continue;
+
+      const value = snap.values[colIdx];
+      if (value == null || Number.isNaN(value)) continue;
+
+      const shift = snap.shifts[colIdx];
+      if (typeof shift !== 'number' || shift >= 0) continue;  // target columns use negative shift
+
+      const originTs = snap.timestamp + shift * barDurationMs;
+      map.set(`${streamId}:${originTs}`, value as number);
+    }
+    return map;
+  }, [barDurationMs, indicators, targetColumnName]);
+
   // Helper to get actual value - prefer REST API actuals (calculated from OHLCV: close[T+horizon] - close[T])
   const getActualForPrediction = (modelId: string, streamId: string | undefined, ts_ms: number): number | null => {
     // First try the REST API actual (correctly calculated from OHLCV data)
     const apiActual = apiActualsByTimestamp.get(ts_ms);
     if (apiActual != null) {
       return apiActual;
+    }
+    // Next try indicator-derived target actuals (from snapshot shift semantics)
+    const indicatorActual = targetActualsByStreamTs.get(`${streamId ?? 'unknown'}:${ts_ms}`);
+    if (indicatorActual != null) {
+      return indicatorActual;
     }
     // Fall back to matured targets from /ws/live WebSocket events
     const value =
@@ -456,37 +504,69 @@ export function LiveMarketData() {
         </div>
       )}
 
-      {/* Performance Stats */}
+      {/* Performance Stats - displays real-time metrics from backend via WebSocket */}
       {performance && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Trading Performance</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm">Live Model Performance</CardTitle>
+              {performance.lastUpdate && (
+                <span className="text-xs text-muted-foreground">
+                  Updated: {formatDateTime(performance.lastUpdate)}
+                </span>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
               <div>
-                <p className="text-xs text-muted-foreground">Win Rate</p>
-                <p className="text-lg font-semibold">
-                  {performance.winRate != null ? ((performance.winRate * 100).toFixed(1) + '%') : 'N/A'}
+                <p className="text-xs text-muted-foreground">Directional Accuracy</p>
+                <p className="text-lg font-semibold text-primary">
+                  {performance.directionalAccuracy != null
+                    ? ((performance.directionalAccuracy * 100).toFixed(1) + '%')
+                    : 'N/A'}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Total P&L</p>
-                <p className={`text-lg font-semibold ${(performance.totalPnl ?? 0) >= 0 ? 'text-success' : 'text-loss'}`}>
-                  {performance.totalPnl != null ? formatCurrency(performance.totalPnl) : 'N/A'}
+                <p className="text-xs text-muted-foreground">ROC AUC</p>
+                <p className="text-lg font-semibold text-primary">
+                  {performance.rocAuc != null && performance.rocAuc >= 0
+                    ? performance.rocAuc.toFixed(3)
+                    : <span className="text-muted-foreground text-sm">Insufficient data</span>}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Total Trades</p>
-                <p className="text-lg font-semibold">{performance.totalTrades ?? 'N/A'}</p>
+                <p className="text-xs text-muted-foreground">MAE</p>
+                <p className="text-lg font-semibold">
+                  {performance.mae != null ? performance.mae.toFixed(4) : 'N/A'}
+                </p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Sharpe Ratio</p>
-                <p className="text-lg font-semibold">
-                  {performance.sharpeRatio != null ? performance.sharpeRatio.toFixed(2) : 'N/A'}
+                <p className="text-xs text-muted-foreground">Sample Count</p>
+                <p className="text-lg font-semibold">{performance.samples ?? 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">True Pos / False Pos</p>
+                <p className="text-lg font-mono">
+                  <span className="text-success">{performance.truePositives ?? 0}</span>
+                  {' / '}
+                  <span className="text-loss">{performance.falsePositives ?? 0}</span>
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">True Neg / False Neg</p>
+                <p className="text-lg font-mono">
+                  <span className="text-success">{performance.trueNegatives ?? 0}</span>
+                  {' / '}
+                  <span className="text-loss">{performance.falseNegatives ?? 0}</span>
                 </p>
               </div>
             </div>
+            {performance.modelId && (
+              <p className="text-xs text-muted-foreground mt-3">
+                Model: <span className="font-mono">{performance.modelId}</span>
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
