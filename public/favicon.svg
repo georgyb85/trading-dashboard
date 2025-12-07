@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="16" height="16" viewBox="0 0 16 16">
+  <defs>
+    <!-- neon green glow -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="0" stdDeviation="1.5" flood-color="#00f5d4" flood-opacity="1"/>
+    </filter>
+    <!-- subtle grid -->
+    <pattern id="grid" width="2" height="2" patternUnits="userSpaceOnUse">
+      <path d="M 2 0 L 0 0 0 2" fill="none" stroke="#0d1b2a" stroke-width="0.3"/>
+    </pattern>
+  </defs>
+
+  <!-- deep-space background -->
+  <rect width="16" height="16" fill="#020617"/>
+  <rect width="16" height="16" fill="url(#grid)"/>
+
+  <!-- glowing ticker bars -->
+  <rect x="2"  y="12" width="1.2" height="2" fill="#00f5d4" filter="url(#glow)"/>
+  <rect x="4"  y="9"  width="1.2" height="5" fill="#00f5d4" filter="url(#glow)"/>
+  <rect x="6"  y="6"  width="1.2" height="8" fill="#00f5d4" filter="url(#glow)"/>
+  <rect x="8"  y="4"  width="1.2" height="10" fill="#00f5d4" filter="url(#glow)"/>
+  <rect x="10" y="7"  width="1.2" height="7" fill="#00f5d4" filter="url(#glow)"/>
+  <rect x="12" y="10" width="1.2" height="4" fill="#00f5d4" filter="url(#glow)"/>
+
+  <!-- volatility spark -->
+  <polyline points="1,14 3,12 5,13 7,10 9,11 11,8 13,9 15,7"
+            fill="none" stroke="#f72585" stroke-width="0.9"
+            stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="15" cy="7" r="1" fill="#f72585" filter="url(#glow)"/>
+</svg>
