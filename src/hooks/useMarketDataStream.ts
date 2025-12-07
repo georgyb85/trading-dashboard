@@ -344,12 +344,16 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
         }
 
         case 'performance': {
+          const rawRocAuc = msg.roc_auc ?? msg.rocAuc;
+          const rocAuc = (typeof rawRocAuc === 'number' && isFinite(rawRocAuc) && rawRocAuc >= 0)
+            ? rawRocAuc
+            : null;
           const perf: PerformanceSnapshot = {
             modelId: msg.model_id ?? msg.modelId ?? 'unknown',
             streamId: msg.stream_id ?? msg.streamId ?? 'unknown',
             mae: msg.mae,
             directionalAccuracy: msg.directional_accuracy ?? msg.directionalAccuracy,
-            rocAuc: msg.roc_auc ?? msg.rocAuc,
+            rocAuc,
             sampleCount: msg.sample_count ?? msg.sampleCount,
             evaluatedAtTs: msg.evaluated_at_ts ?? msg.evaluatedAtTs ?? Date.now(),
             // Confusion matrix from backend

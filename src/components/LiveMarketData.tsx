@@ -530,9 +530,9 @@ export function LiveMarketData() {
               <div>
                 <p className="text-xs text-muted-foreground">ROC AUC</p>
                 <p className="text-lg font-semibold text-primary">
-                  {performance.rocAuc != null && performance.rocAuc >= 0
+                  {performance.rocAuc != null && performance.rocAuc >= 0 && Number.isFinite(performance.rocAuc)
                     ? performance.rocAuc.toFixed(3)
-                    : <span className="text-muted-foreground text-sm">Insufficient data</span>}
+                    : 'N/A'}
                 </p>
               </div>
               <div>
