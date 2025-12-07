@@ -275,9 +275,34 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
               streamId: msg.stream_id ?? msg.streamId,
             };
             setIndicators((prev) => {
-              const exists = prev.some((s) => s.timestamp === indicatorSnapshot.timestamp);
-              if (exists) {
-                return prev;
+              const existingIdx = prev.findIndex((s) => s.timestamp === indicatorSnapshot.timestamp);
+              if (existingIdx >= 0) {
+                // UPDATE existing snapshot (may have new values like matured targets)
+                const updated = [...prev];
+                updated[existingIdx] = indicatorSnapshot;
+
+                // Log target updates
+                const targetCols = columns.map((col, i) => ({ col, shift: shifts[i], val: values[i] }))
+                  .filter(x => x.shift < 0);
+                if (targetCols.length > 0) {
+                  console.log('[MarketDataStream] Indicator UPDATE (existing timestamp):', {
+                    ts: new Date(ts).toISOString(),
+                    streamId: indicatorSnapshot.streamId,
+                    targets: targetCols,
+                  });
+                }
+                return updated;
+              }
+
+              // Log new indicator with targets
+              const targetCols = columns.map((col, i) => ({ col, shift: shifts[i], val: values[i] }))
+                .filter(x => x.shift < 0);
+              if (targetCols.length > 0) {
+                console.log('[MarketDataStream] Indicator NEW:', {
+                  ts: new Date(ts).toISOString(),
+                  streamId: indicatorSnapshot.streamId,
+                  targets: targetCols,
+                });
               }
               return [...prev.slice(-(maxHistorySize - 1)), indicatorSnapshot];
             });

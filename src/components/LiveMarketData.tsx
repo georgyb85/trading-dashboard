@@ -46,7 +46,7 @@ export function LiveMarketData() {
 
   const [selectedIndicatorIndex, setSelectedIndicatorIndex] = useState(0);
 
-  // Fetch predictions with correct actual values from REST API (calculated from OHLCV)
+  // Fetch predictions on initial load only - real-time updates come via WebSocket
   const activeModelId = activeModel?.model_id;
   const predictionsApiQuery = useQuery({
     queryKey: ['kraken', 'predictions', activeModelId],
@@ -56,8 +56,7 @@ export function LiveMarketData() {
       if (!resp.success || !resp.data) return [];
       return resp.data.predictions;
     },
-    staleTime: 30_000,
-    refetchInterval: 60_000,  // Refresh every minute to get updated actuals
+    staleTime: Infinity,  // Never stale - WebSocket provides updates
   });
 
   // Bar duration derived from streamId (e.g., btcusdt_1h)
