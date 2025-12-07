@@ -45,11 +45,9 @@ const LiveModelPage = () => {
   const deactivateModel = useDeactivateModel();
   const deleteModel = useDeleteModel();
   const updateThresholds = useUpdateThresholds();
-  const { predictions: livePredictions, targets: liveTargets } = useMarketDataContext();
+  const { predictions: livePredictions, targets: liveTargets, maturedTargets } = useMarketDataContext();
 
-  // Map of matured target values from /ws/live WebSocket events
-  // Target values are calculated from OHLCV: close[T+horizon] - close[T]
-  // This is the single source of truth for live target values (indicator TGT_* columns are not stored)
+  // Map of matured target values from /ws/live WebSocket events (legacy target_matured events)
   const maturedTargetsByStreamTs = useMemo(() => {
     const map = new Map<string, number>();
     liveTargets.forEach((t) => {
@@ -57,6 +55,19 @@ const LiveModelPage = () => {
     });
     return map;
   }, [liveTargets]);
+
+  // Map of extracted targets from indicator snapshots
+  // Key: streamId:targetName:predictionTs -> value
+  // This is the primary source of real-time target updates
+  // Target name is included in key because different models may use different targets
+  const extractedTargetsByKey = useMemo(() => {
+    const map = new Map<string, number>();
+    maturedTargets.forEach((t) => {
+      // Key includes targetName for multi-model/multi-target support
+      map.set(`${t.streamId}:${t.targetName}:${t.predictionTs}`, t.value);
+    });
+    return map;
+  }, [maturedTargets]);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [longThresholdInput, setLongThresholdInput] = useState<string>('');
   const [shortThresholdInput, setShortThresholdInput] = useState<string>('');
@@ -128,6 +139,8 @@ const LiveModelPage = () => {
     || (activeModel?.train_result as XGBoostTrainResult | undefined)
     || null;
   const horizonBars = metricsQuery.data?.target_horizon_bars ?? activeModel?.target_horizon_bars ?? 0;
+  // Target column name - known from model training metadata, used for looking up actual values
+  const targetColumnName = baseTrainResult?.target_column ?? null;
   const metricsError = metricsQuery.error instanceof Error ? metricsQuery.error.message : null;
 
   const combinedPredictions = useMemo(() => {
@@ -175,10 +188,23 @@ const LiveModelPage = () => {
         }
       });
 
+    // Fill in actuals from extracted targets for predictions that don't have API actuals
+    // Uses explicit target column name from model training metadata (no guessing)
+    if (targetColumnName) {
+      for (const [ts, pred] of predMap) {
+        if (pred.actual === undefined) {
+          const extractedActual = extractedTargetsByKey.get(`${pred.streamId}:${targetColumnName}:${ts}`);
+          if (extractedActual !== undefined) {
+            pred.actual = extractedActual;
+          }
+        }
+      }
+    }
+
     return Array.from(predMap.values())
       .sort((a, b) => b.ts - a.ts)
       .slice(0, 50);
-  }, [activeModel?.stream_id, livePredictions, metricsModelId, predictionsQuery.data]);
+  }, [activeModel?.stream_id, extractedTargetsByKey, livePredictions, metricsModelId, predictionsQuery.data, targetColumnName]);
 
   // Build trainResult with live predictions as "test" data for FoldResults visualization
   // Only include predictions that have matured actuals
@@ -659,9 +685,11 @@ const LiveModelPage = () => {
                   {combinedPredictions.map((p) => {
                     // Display actual timestamp - no rounding/faking
                     const barStartDisplay = new Date(p.ts);
-                    // Prefer actual from API (calculated from OHLCV), fall back to WebSocket target matured events
+                    // Lookup actual value using explicit target column name (no guessing)
+                    // Priority: API actual > extracted targets (by targetName) > legacy matured events
                     const actual =
                       p.actual ??
+                      (targetColumnName ? extractedTargetsByKey.get(`${p.streamId}:${targetColumnName}:${p.ts}`) : undefined) ??
                       maturedTargetsByStreamTs.get(`${p.streamId}:${p.ts}`) ??
                       null;
                     let trigger: string | null = null;

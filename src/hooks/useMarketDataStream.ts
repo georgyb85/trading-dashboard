@@ -9,6 +9,7 @@ export interface IndicatorSnapshot {
   shifts: number[];           // 0 for features, -N for targets
   featureHash?: string;
   streamId?: string;
+  barDurationMs?: number;     // Duration of one bar in ms (for shift→timestamp conversion)
 }
 
 /**
@@ -23,6 +24,7 @@ export function getColumnTimestamp(
 ): number {
   return snapshotTs + (shift * barDurationMs);
 }
+
 
 /**
  * Find the target value for a prediction made at predictionTs.
@@ -148,6 +150,25 @@ export interface TargetData {
   horizonBars?: number;
 }
 
+/**
+ * Extracted target value from indicator snapshot.
+ * When a new indicator snapshot arrives at time T, targets with negative shifts
+ * contain the matured actual values for predictions made earlier.
+ *
+ * For a target with shift=-H:
+ * - snapshotTs = T (when snapshot was created)
+ * - predictionTs = T + (shift * barDurationMs) = T - (H * barDurationMs)
+ * - value = the actual outcome for the prediction made at predictionTs
+ */
+export interface MaturedTarget {
+  targetName: string;      // e.g., "TGT_115" - column name for multi-model lookup
+  predictionTs: number;    // Timestamp of the prediction this actual belongs to
+  snapshotTs: number;      // Timestamp of the snapshot containing this value
+  value: number;           // The actual target value
+  streamId: string;
+  horizonBars: number;     // Derived from -shift
+}
+
 export interface PerformanceSnapshot {
   modelId: string;
   streamId: string;
@@ -209,6 +230,7 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
   const [subscribedTopics, setSubscribedTopics] = useState<string[]>([]);
   const [predictions, setPredictions] = useState<PredictionData[]>([]);
   const [targets, setTargets] = useState<TargetData[]>([]);
+  const [maturedTargets, setMaturedTargets] = useState<MaturedTarget[]>([]);
   const [health, setHealth] = useState<StreamHealth[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -264,6 +286,8 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
             const shifts: number[] = msg.shifts ?? [];
             const values: (number | null)[] = msg.values ?? [];
             const ts = msg.bar_end_ts ?? msg.ts ?? msg.barEndTs ?? Date.now();
+            const barDurationMs = msg.bar_duration_ms ?? msg.barDurationMs;
+            const streamId = msg.stream_id ?? msg.streamId ?? 'unknown';
 
             const indicatorSnapshot: IndicatorSnapshot = {
               timestamp: ts,
@@ -272,8 +296,58 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
               values,
               valid: columns.length > 0 && values.length === columns.length,
               featureHash: msg.feature_hash ?? msg.featureHash,
-              streamId: msg.stream_id ?? msg.streamId,
+              streamId,
+              barDurationMs,
             };
+
+            // Extract matured targets from this snapshot
+            // For each target column (shift < 0), calculate the prediction timestamp
+            // and store the matured target value
+            if (barDurationMs && barDurationMs > 0) {
+              const extractedTargets: MaturedTarget[] = [];
+              for (let i = 0; i < columns.length; i++) {
+                const shift = shifts[i];
+                const value = values[i];
+                // Only process targets (negative shift) with valid values
+                if (shift < 0 && value !== null && typeof value === 'number' && !Number.isNaN(value)) {
+                  // Calculate the prediction timestamp this target belongs to
+                  // predictionTs = snapshotTs + (shift * barDurationMs)
+                  // e.g., snapshot at 16:00 UTC with shift=-5 and 1h bars: 16:00 + (-5 * 3600000) = 11:00 UTC
+                  const predictionTs = ts + (shift * barDurationMs);
+                  extractedTargets.push({
+                    targetName: columns[i],
+                    predictionTs,
+                    snapshotTs: ts,
+                    value,
+                    streamId,
+                    horizonBars: Math.abs(shift),
+                  });
+                }
+              }
+
+              if (extractedTargets.length > 0) {
+                console.log('[MarketDataStream] Extracted matured targets:', extractedTargets.map(t => ({
+                  target: t.targetName,
+                  predictionTs: new Date(t.predictionTs).toISOString(),
+                  value: t.value,
+                })));
+
+                setMaturedTargets((prev) => {
+                  // Merge with existing, replacing duplicates by (targetName, predictionTs, streamId)
+                  const merged = new Map<string, MaturedTarget>();
+                  for (const t of prev) {
+                    merged.set(`${t.streamId}:${t.targetName}:${t.predictionTs}`, t);
+                  }
+                  for (const t of extractedTargets) {
+                    merged.set(`${t.streamId}:${t.targetName}:${t.predictionTs}`, t);
+                  }
+                  return Array.from(merged.values())
+                    .sort((a, b) => b.predictionTs - a.predictionTs)
+                    .slice(0, maxHistorySize);
+                });
+              }
+            }
+
             setIndicators((prev) => {
               const existingIdx = prev.findIndex((s) => s.timestamp === indicatorSnapshot.timestamp);
               if (existingIdx >= 0) {
@@ -637,6 +711,7 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
     latestOhlcv,
     predictions,
     targets,
+    maturedTargets,  // Targets extracted from indicator snapshots, keyed by predictionTs
     signals,
     health,
     connect,

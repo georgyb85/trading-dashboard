@@ -9,6 +9,7 @@ import {
   TradingRules,
   PredictionData,
   TargetData,
+  MaturedTarget,
   PerformanceSnapshot,
   StreamHealth,
 } from '@/hooks/useMarketDataStream';
@@ -31,6 +32,7 @@ interface MarketDataContextType {
   latestOhlcv: OhlcvBar | null;
   predictions: PredictionData[];
   targets: TargetData[];
+  maturedTargets: MaturedTarget[];  // Targets extracted from indicator snapshots, keyed by predictionTs
   signals: PredictionData[];
   health: StreamHealth[];
   connect: () => void;
@@ -78,6 +80,7 @@ export type {
   TradingRules,
   PredictionData,
   TargetData,
+  MaturedTarget,
   PerformanceSnapshot,
   StreamHealth,
 };
