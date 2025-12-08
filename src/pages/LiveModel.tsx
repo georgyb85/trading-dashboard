@@ -444,109 +444,6 @@ const LiveModelPage = () => {
             </div>
           )}
 
-          {/* Training Configuration Section - shows ACTUAL training parameters */}
-          {hasActiveModel && activeModel.train_size && activeModel.train_size > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Training Configuration</CardTitle>
-                <p className="text-xs text-muted-foreground">
-                  Actual parameters used during model training (not defaults)
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 md:grid-cols-3">
-                  {/* Training Window */}
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-semibold">Training Window</h4>
-                    <div className="space-y-1 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Train Size</span>
-                        <span className="font-mono">{activeModel.train_size} bars</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Train/Val Gap</span>
-                        <span className="font-mono">{activeModel.train_test_gap} bars</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Val Split Ratio</span>
-                        <span className="font-mono">{(activeModel.val_split_ratio ?? 0).toFixed(2)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Training Timestamps */}
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-semibold">Training Data Range</h4>
-                    <div className="space-y-1 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Train Start</span>
-                        <span className="font-mono text-xs">
-                          {activeModel.train_start_ts ? new Date(activeModel.train_start_ts).toLocaleString() : 'N/A'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Train End</span>
-                        <span className="font-mono text-xs">
-                          {activeModel.train_end_ts ? new Date(activeModel.train_end_ts).toLocaleString() : 'N/A'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Val End</span>
-                        <span className="font-mono text-xs">
-                          {activeModel.val_end_ts ? new Date(activeModel.val_end_ts).toLocaleString() : 'N/A'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* XGBoost Config */}
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-semibold">XGBoost Hyperparameters</h4>
-                    <div className="space-y-1 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Objective</span>
-                        <span className="font-mono">{activeModel.xgb_objective ?? 'N/A'}</span>
-                      </div>
-                      {activeModel.xgb_objective === 'reg:quantileerror' && (
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Quantile Alpha</span>
-                          <span className="font-mono">{activeModel.xgb_quantile_alpha?.toFixed(2) ?? 'N/A'}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Max Depth</span>
-                        <span className="font-mono">{activeModel.xgb_max_depth ?? 'N/A'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Learning Rate</span>
-                        <span className="font-mono">{activeModel.xgb_eta?.toFixed(4) ?? 'N/A'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Subsample</span>
-                        <span className="font-mono">{activeModel.xgb_subsample?.toFixed(2) ?? 'N/A'}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Num Rounds</span>
-                        <span className="font-mono">{activeModel.xgb_n_rounds ?? 'N/A'}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Legacy model warning - show if train_size is -1 or missing */}
-          {hasActiveModel && (!activeModel.train_size || activeModel.train_size < 0) && (
-            <Card className="border-yellow-500/50 bg-yellow-500/5">
-              <CardContent className="p-4">
-                <p className="text-sm text-yellow-600 dark:text-yellow-400">
-                  ⚠️ Legacy model - training configuration not tracked. Re-deploy via "Go Live" to see actual training parameters.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
           {!hasActiveModel && !activeModelLoading && (
             <Card>
               <CardContent className="p-8 text-center text-muted-foreground">
@@ -831,64 +728,231 @@ const LiveModelPage = () => {
 
         {/* Configuration Tab */}
         <TabsContent value="config" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Selected Run Details</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                {selectedRun ? (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Run ID</span>
-                      <span className="font-mono text-xs">{selectedRun.run_id}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Dataset</span>
-                      <span className="font-mono text-xs">{selectedRun.dataset_id}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Target</span>
-                      <span className="font-mono text-xs">{String(selectedRun.target_column)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Features</span>
-                      <span className="font-mono text-xs">
-                        {Array.isArray(selectedRun.feature_columns)
-                          ? `${selectedRun.feature_columns.length} features`
-                          : 'N/A'}
-                      </span>
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-muted-foreground">No run selected</p>
-                )}
-              </CardContent>
-            </Card>
+          {/* Deployed Model Configuration Section */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold">Deployed Model Configuration</h3>
+              <p className="text-sm text-muted-foreground">
+                View training parameters for deployed models
+              </p>
+            </div>
+            <Select
+              value={selectedModelId ?? undefined}
+              onValueChange={(value) => setSelectedModelId(value)}
+              disabled={liveModels.length === 0}
+            >
+              <SelectTrigger className="w-[280px]">
+                <SelectValue placeholder={liveModels.length === 0 ? 'No deployed models' : 'Select deployed model'} />
+              </SelectTrigger>
+              <SelectContent>
+                {liveModels.map((m) => (
+                  <SelectItem key={m.model_id} value={m.model_id}>
+                    {m.model_id.slice(0, 8)}… ({m.dataset_id}) {m.status === 'active' && '✓'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>API Endpoints</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm font-mono">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Go Live</span>
-                  <span className="text-xs">POST /api/live/go</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Active Model</span>
-                  <span className="text-xs">GET /api/live/active_model</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Models</span>
-                  <span className="text-xs">GET /api/live/models</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Metrics</span>
-                  <span className="text-xs">GET /api/live/models/:id/metrics</span>
-                </div>
-              </CardContent>
-            </Card>
+          {/* Training Configuration for selected deployed model */}
+          {(() => {
+            const selectedModel = liveModels.find((m) => m.model_id === selectedModelId);
+            if (!selectedModel) {
+              return (
+                <Card>
+                  <CardContent className="p-8 text-center text-muted-foreground">
+                    <Settings className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>Select a deployed model to view its training configuration.</p>
+                  </CardContent>
+                </Card>
+              );
+            }
+
+            const hasTrainingConfig = selectedModel.train_size && selectedModel.train_size > 0;
+
+            if (!hasTrainingConfig) {
+              return (
+                <Card className="border-yellow-500/50 bg-yellow-500/5">
+                  <CardContent className="p-4">
+                    <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                      ⚠️ Legacy model - training configuration not tracked. Re-deploy via "Go Live" to see actual training parameters.
+                    </p>
+                  </CardContent>
+                </Card>
+              );
+            }
+
+            return (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base">Training Configuration</CardTitle>
+                      <p className="text-xs text-muted-foreground">
+                        Actual parameters used during model training
+                      </p>
+                    </div>
+                    <Badge variant={selectedModel.status === 'active' ? 'default' : 'secondary'}>
+                      {selectedModel.status}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    {/* Training Window */}
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-semibold">Training Window</h4>
+                      <div className="space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Train Size</span>
+                          <span className="font-mono">{selectedModel.train_size} bars</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Train/Val Gap</span>
+                          <span className="font-mono">{selectedModel.train_test_gap} bars</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Val Split Ratio</span>
+                          <span className="font-mono">{(selectedModel.val_split_ratio ?? 0).toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Target Horizon</span>
+                          <span className="font-mono">{selectedModel.target_horizon_bars ?? 'N/A'} bars</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Training Timestamps */}
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-semibold">Training Data Range</h4>
+                      <div className="space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Train Start</span>
+                          <span className="font-mono text-xs">
+                            {selectedModel.train_start_ts ? new Date(selectedModel.train_start_ts).toLocaleString() : 'N/A'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Train End</span>
+                          <span className="font-mono text-xs">
+                            {selectedModel.train_end_ts ? new Date(selectedModel.train_end_ts).toLocaleString() : 'N/A'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Val Start</span>
+                          <span className="font-mono text-xs">
+                            {selectedModel.val_start_ts ? new Date(selectedModel.val_start_ts).toLocaleString() : 'N/A'}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Val End</span>
+                          <span className="font-mono text-xs">
+                            {selectedModel.val_end_ts ? new Date(selectedModel.val_end_ts).toLocaleString() : 'N/A'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* XGBoost Config */}
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-semibold">XGBoost Hyperparameters</h4>
+                      <div className="space-y-1 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Objective</span>
+                          <span className="font-mono">{selectedModel.xgb_objective ?? 'N/A'}</span>
+                        </div>
+                        {selectedModel.xgb_objective === 'reg:quantileerror' && (
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Quantile Alpha</span>
+                            <span className="font-mono">{selectedModel.xgb_quantile_alpha?.toFixed(2) ?? 'N/A'}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Max Depth</span>
+                          <span className="font-mono">{selectedModel.xgb_max_depth ?? 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Learning Rate</span>
+                          <span className="font-mono">{selectedModel.xgb_eta?.toFixed(4) ?? 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Subsample</span>
+                          <span className="font-mono">{selectedModel.xgb_subsample?.toFixed(2) ?? 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Num Rounds</span>
+                          <span className="font-mono">{selectedModel.xgb_n_rounds ?? 'N/A'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })()}
+
+          {/* Run to Deploy Section */}
+          <div className="pt-4 border-t">
+            <h3 className="text-lg font-semibold mb-4">Run to Deploy</h3>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Selected Run Details</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  {selectedRun ? (
+                    <>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Run ID</span>
+                        <span className="font-mono text-xs">{selectedRun.run_id}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Dataset</span>
+                        <span className="font-mono text-xs">{selectedRun.dataset_id}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Target</span>
+                        <span className="font-mono text-xs">{String(selectedRun.target_column)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Features</span>
+                        <span className="font-mono text-xs">
+                          {Array.isArray(selectedRun.feature_columns)
+                            ? `${selectedRun.feature_columns.length} features`
+                            : 'N/A'}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-muted-foreground">No run selected</p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>API Endpoints</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm font-mono">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Go Live</span>
+                    <span className="text-xs">POST /api/live/go</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Active Model</span>
+                    <span className="text-xs">GET /api/live/active_model</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Models</span>
+                    <span className="text-xs">GET /api/live/models</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Metrics</span>
+                    <span className="text-xs">GET /api/live/models/:id/metrics</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
 
           {/* Feature list if run is selected */}
