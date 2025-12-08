@@ -37,6 +37,30 @@ export interface LiveModelSummary {
   feature_hash?: string;
   indicator_hash?: string;
   target_horizon_bars?: number;
+
+  // Training config (ACTUAL values from training, -1 = legacy/not set)
+  train_size?: number;
+  train_test_gap?: number;
+  val_split_ratio?: number;
+
+  // Actual training timestamps
+  train_start_ts?: number;
+  train_end_ts?: number;
+  val_start_ts?: number;
+  val_end_ts?: number;
+
+  // XGBoost config
+  xgb_max_depth?: number;
+  xgb_eta?: number;
+  xgb_subsample?: number;
+  xgb_colsample_bytree?: number;
+  xgb_n_rounds?: number;
+
+  // XGBoost objective and related params (CRITICAL: no hardcoding allowed)
+  xgb_objective?: string;       // e.g., "reg:squarederror", "reg:quantileerror"
+  xgb_quantile_alpha?: number;  // Used only when objective is "reg:quantileerror"
+  xgb_lambda?: number;          // L2 regularization
+  xgb_min_child_weight?: number; // Minimum sum of instance weight in child
 }
 
 export interface LiveModelDetail extends LiveModelSummary {

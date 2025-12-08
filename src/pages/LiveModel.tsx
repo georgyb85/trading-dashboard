@@ -444,6 +444,109 @@ const LiveModelPage = () => {
             </div>
           )}
 
+          {/* Training Configuration Section - shows ACTUAL training parameters */}
+          {hasActiveModel && activeModel.train_size && activeModel.train_size > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Training Configuration</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  Actual parameters used during model training (not defaults)
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-3">
+                  {/* Training Window */}
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold">Training Window</h4>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Train Size</span>
+                        <span className="font-mono">{activeModel.train_size} bars</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Train/Val Gap</span>
+                        <span className="font-mono">{activeModel.train_test_gap} bars</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Val Split Ratio</span>
+                        <span className="font-mono">{(activeModel.val_split_ratio ?? 0).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Training Timestamps */}
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold">Training Data Range</h4>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Train Start</span>
+                        <span className="font-mono text-xs">
+                          {activeModel.train_start_ts ? new Date(activeModel.train_start_ts).toLocaleString() : 'N/A'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Train End</span>
+                        <span className="font-mono text-xs">
+                          {activeModel.train_end_ts ? new Date(activeModel.train_end_ts).toLocaleString() : 'N/A'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Val End</span>
+                        <span className="font-mono text-xs">
+                          {activeModel.val_end_ts ? new Date(activeModel.val_end_ts).toLocaleString() : 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* XGBoost Config */}
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold">XGBoost Hyperparameters</h4>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Objective</span>
+                        <span className="font-mono">{activeModel.xgb_objective ?? 'N/A'}</span>
+                      </div>
+                      {activeModel.xgb_objective === 'reg:quantileerror' && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Quantile Alpha</span>
+                          <span className="font-mono">{activeModel.xgb_quantile_alpha?.toFixed(2) ?? 'N/A'}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Max Depth</span>
+                        <span className="font-mono">{activeModel.xgb_max_depth ?? 'N/A'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Learning Rate</span>
+                        <span className="font-mono">{activeModel.xgb_eta?.toFixed(4) ?? 'N/A'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Subsample</span>
+                        <span className="font-mono">{activeModel.xgb_subsample?.toFixed(2) ?? 'N/A'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Num Rounds</span>
+                        <span className="font-mono">{activeModel.xgb_n_rounds ?? 'N/A'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Legacy model warning - show if train_size is -1 or missing */}
+          {hasActiveModel && (!activeModel.train_size || activeModel.train_size < 0) && (
+            <Card className="border-yellow-500/50 bg-yellow-500/5">
+              <CardContent className="p-4">
+                <p className="text-sm text-yellow-600 dark:text-yellow-400">
+                  ⚠️ Legacy model - training configuration not tracked. Re-deploy via "Go Live" to see actual training parameters.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           {!hasActiveModel && !activeModelLoading && (
             <Card>
               <CardContent className="p-8 text-center text-muted-foreground">
