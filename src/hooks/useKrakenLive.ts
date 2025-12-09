@@ -36,6 +36,8 @@ export const useActiveModel = () => {
       return resp.data;
     },
     retry: false,
+    // Refetch every 30s to catch server-side retrains (daily at 00:00 UTC)
+    refetchInterval: 30_000,
   });
 };
 
@@ -50,6 +52,8 @@ export const useLiveModels = () => {
       return resp.data.models;
     },
     retry: false,
+    // Refetch every 30s to catch server-side retrains (daily at 00:00 UTC)
+    refetchInterval: 30_000,
   });
 };
 
