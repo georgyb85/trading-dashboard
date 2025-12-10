@@ -2,7 +2,7 @@
 
 import { ApiResponse, ApiError } from '@/lib/types/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://45.85.147.236:33931';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // ms
 
