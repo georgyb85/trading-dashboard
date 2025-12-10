@@ -8,6 +8,7 @@ import type {
   LiveModelMetricsResponse,
   AvailableFeaturesResponse,
   ExecutorConfig,
+  HealthResponse,
 } from './types';
 
 class KrakenClient {
@@ -139,6 +140,13 @@ class KrakenClient {
     return this.request<{ success: boolean; message: string }>(`/api/live/models/${modelId}/undeploy`, {
       method: 'POST',
     });
+  }
+
+  /**
+   * Get system health status
+   */
+  async getHealth(): Promise<KrakenApiResponse<HealthResponse>> {
+    return this.request<HealthResponse>('/api/live/health');
   }
 }
 

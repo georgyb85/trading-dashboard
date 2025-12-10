@@ -126,3 +126,83 @@ export interface KrakenApiResponse<T> {
   data?: T;
   error?: string;
 }
+
+// Health API Types (verified from live_model_api.cpp:1027-1098)
+
+export interface StreamHealth {
+  stream_id: string;
+  last_bar_ts: number;
+  last_indicator_ts: number;
+  ohlcv_buffer_size: number;
+  indicator_buffer_size: number;
+  feature_count: number;
+  target_count: number;
+  max_target_horizon: number;
+  feature_hash: number;
+  stale: boolean;
+}
+
+export interface QueueHealth {
+  capacity: number;
+  pending: number;
+}
+
+export interface ModelHealth {
+  model_id: string;
+  status: string;
+  sample_count?: number;
+  mae?: number;
+  last_update_ts?: number;
+  stale?: boolean;
+}
+
+export interface HealthResponse {
+  streams: StreamHealth[];
+  queues: {
+    indicator_bar: QueueHealth;
+    inference_indicator: QueueHealth;
+    trader_bar: QueueHealth;
+    trader_prediction: QueueHealth;
+  };
+  uptime_ms: number;
+  pipeline: string;
+  models: ModelHealth[];
+  active_model_id: string | null;
+  error?: string;
+}
+
+// /usage WebSocket message types (verified from usage_stream.cpp)
+
+export interface UsageUpdate {
+  type: 'usage_update';
+  cpu_percent: number;
+  ram_percent: number;
+  ram_used_mb: number;
+  ram_total_mb: number;
+  gpu_percent?: number;
+  gpu_mem_used_mb?: number;
+  gpu_mem_total_mb?: number;
+  timestamp: number;
+  message_rates?: {
+    total_per_sec: number;
+    trades_per_sec: number;
+    orderbooks_per_sec: number;
+  };
+}
+
+export interface SystemInfo {
+  type: 'system_info';
+  cpu_count: number;
+  cpu_model: string;
+  ram_total_mb: number;
+  gpu_count: number;
+  hostname: string;
+  timestamp: number;
+  gpus: Array<{
+    index: number;
+    name: string;
+    memory_mb: number;
+  }>;
+}
+
+export type UsageMessage = UsageUpdate | SystemInfo;

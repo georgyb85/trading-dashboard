@@ -15,14 +15,22 @@ import {
   Filter,
   Route,
   LineChart,
+  LayoutDashboard,
+  HeartPulse,
 } from "lucide-react";
 
 const navigationItems = [
   {
-    title: "System Health",
+    title: "Live Overview",
     url: "/",
-    icon: Activity,
-    description: "Monitor system status"
+    icon: LayoutDashboard,
+    description: "At-a-glance system health"
+  },
+  {
+    title: "Execution Health",
+    url: "/health",
+    icon: HeartPulse,
+    description: "Thread status & message rates"
   },
   {
     title: "Trading Overview",
@@ -79,10 +87,10 @@ const navigationItems = [
     description: "Performance reports"
   },
   {
-    title: "Indicators",
-    url: "/indicators",
+    title: "Market Data",
+    url: "/market-data",
     icon: LineChart,
-    description: "Trading indicator analysis"
+    description: "Indicators & data export"
   },
   {
     title: "Trade Simulator",

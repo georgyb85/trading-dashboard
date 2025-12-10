@@ -27,6 +27,8 @@ import TradesimDashboard from "@/apps/tradesim";
 import LfsDashboard from "@/apps/lfs";
 import WalkforwardDashboard from "@/apps/walkforward";
 import LiveModelPage from "./pages/LiveModel";
+import LiveOverview from "./pages/LiveOverview";
+import ExecutionHealth from "./pages/ExecutionHealth";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -54,7 +56,9 @@ const App = () => (
                     <StatusStreamProvider>
                       <TradingLayout>
                 <Routes>
-            <Route path="/" element={<SystemHealthDashboard />} />
+            <Route path="/" element={<LiveOverview />} />
+            <Route path="/overview" element={<LiveOverview />} />
+            <Route path="/health" element={<ExecutionHealth />} />
             <Route path="/trading" element={<TradingOverview />} />
             <Route path="/positions" element={<PositionsTable />} />
             <Route path="/balances" element={<BalancesTable />} />
@@ -65,6 +69,7 @@ const App = () => (
             <Route path="/config" element={<StrategyConfiguration />} />
             <Route path="/analytics" element={<AnalyticsDashboard />} />
             <Route path="/indicators" element={<Indicators />} />
+            <Route path="/market-data" element={<Indicators />} />
             <Route path="/tradesim" element={<TradesimDashboard />} />
             <Route path="/lfs" element={<LfsDashboard />} />
             <Route path="/walkforward" element={<WalkforwardDashboard />} />
