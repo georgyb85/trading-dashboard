@@ -7,6 +7,7 @@ import type {
   LiveModelSummary,
   LiveModelMetricsResponse,
   AvailableFeaturesResponse,
+  ExecutorConfig,
 } from './types';
 
 class KrakenClient {
@@ -88,6 +89,56 @@ class KrakenClient {
   async getAvailableFeatures(timeframe?: string): Promise<KrakenApiResponse<AvailableFeaturesResponse>> {
     const params = timeframe ? `?timeframe=${timeframe}` : '';
     return this.request<AvailableFeaturesResponse>(`/api/live/available-features${params}`);
+  }
+
+  // Model-Executor Decoupling API
+
+  /**
+   * Deploy a model for predictions only (no trading)
+   */
+  async deployModel(runId: string, streamId?: string): Promise<KrakenApiResponse<{ model_id: string; stream_id: string; mode: string }>> {
+    return this.request<{ model_id: string; stream_id: string; mode: string }>('/api/live/models/deploy', {
+      method: 'POST',
+      body: JSON.stringify({ run_id: runId, stream_id: streamId }),
+    });
+  }
+
+  /**
+   * Attach an executor to a deployed model
+   */
+  async attachExecutor(modelId: string, config: ExecutorConfig): Promise<KrakenApiResponse<{ success: boolean; message: string }>> {
+    return this.request<{ success: boolean; message: string }>(`/api/live/models/${modelId}/executor`, {
+      method: 'POST',
+      body: JSON.stringify(config),
+    });
+  }
+
+  /**
+   * Update an existing executor's config
+   */
+  async updateExecutor(modelId: string, config: ExecutorConfig): Promise<KrakenApiResponse<{ success: boolean; message: string }>> {
+    return this.request<{ success: boolean; message: string }>(`/api/live/models/${modelId}/executor`, {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    });
+  }
+
+  /**
+   * Detach executor from a model (model continues predicting)
+   */
+  async detachExecutor(modelId: string): Promise<KrakenApiResponse<{ success: boolean; message: string }>> {
+    return this.request<{ success: boolean; message: string }>(`/api/live/models/${modelId}/executor`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Undeploy a model entirely
+   */
+  async undeployModel(modelId: string): Promise<KrakenApiResponse<{ success: boolean; message: string }>> {
+    return this.request<{ success: boolean; message: string }>(`/api/live/models/${modelId}/undeploy`, {
+      method: 'POST',
+    });
   }
 }
 

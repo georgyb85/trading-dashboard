@@ -1,17 +1,20 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { 
-  Brain, 
-  TrendingUp, 
-  Target, 
-  Gauge,
-  RefreshCw,
-  BarChart3,
+import { Button } from "@/components/ui/button";
+import {
+  Brain,
+  Target,
   Clock,
   Zap,
-  Activity
+  Activity,
+  RefreshCw,
+  Wifi,
+  WifiOff,
+  TrendingUp,
+  TrendingDown,
+  Minus
 } from "lucide-react";
 import {
   LineChart,
@@ -20,173 +23,307 @@ import {
   YAxis,
   CartesianGrid,
   ResponsiveContainer,
-  BarChart,
-  Bar
+  ReferenceLine
 } from "recharts";
+import { liveModelApi, LiveModel, LivePrediction } from "@/lib/api/endpoints";
 
-interface MLPrediction {
-  value: number;
-  timestamp: number;
-  confidence: number;
-}
+// WebSocket URL for live updates
+const WS_URL = import.meta.env.VITE_WS_URL || 'wss://agenticresearch.info/ws/live';
 
-interface ModelPerformance {
-  accuracy: number;
-  precision: number;
-  recall: number;
-  lastRetrainTime: number;
-  nextRetrainTime: number;
-  featuresCount: number;
+interface PredictionChartData {
+  time: string;
+  prediction: number;
+  longThreshold: number;
+  shortThreshold: number;
 }
 
 export function MLModelMonitor() {
-  const [currentPrediction, setCurrentPrediction] = useState<MLPrediction>({
-    value: 0.73,
-    timestamp: Date.now(),
-    confidence: 0.89
+  const [wsConnected, setWsConnected] = useState(false);
+  const [latestPrediction, setLatestPrediction] = useState<LivePrediction | null>(null);
+  const [predictionHistory, setPredictionHistory] = useState<PredictionChartData[]>([]);
+
+  // Fetch models
+  const { data: modelsData, isLoading: modelsLoading, refetch: refetchModels } = useQuery({
+    queryKey: ['liveModels'],
+    queryFn: async () => {
+      const response = await liveModelApi.getModels();
+      if (response.success && response.data) {
+        return response.data;
+      }
+      throw new Error(response.error?.message || 'Failed to fetch models');
+    },
+    refetchInterval: 30000, // Refetch every 30s
   });
 
-  const [predictionHistory, setPredictionHistory] = useState<number[]>([
-    0.45, 0.52, 0.61, 0.58, 0.67, 0.71, 0.69, 0.74, 0.78, 0.73
-  ]);
+  const activeModel = modelsData?.models?.[0];
 
-  const [thresholds] = useState({
-    long: 0.65,
-    short: -0.65,
-    mode: "OptimalROC"
+  // Fetch predictions for active model
+  const { data: predictionsData, refetch: refetchPredictions } = useQuery({
+    queryKey: ['livePredictions', activeModel?.model_id],
+    queryFn: async () => {
+      if (!activeModel?.model_id) return null;
+      const response = await liveModelApi.getPredictions(activeModel.model_id, 50);
+      if (response.success && response.data) {
+        return response.data;
+      }
+      throw new Error(response.error?.message || 'Failed to fetch predictions');
+    },
+    enabled: !!activeModel?.model_id,
+    refetchInterval: 60000, // Refetch every minute
   });
 
-  const [modelPerformance] = useState<ModelPerformance>({
-    accuracy: 74.2,
-    precision: 71.8,
-    recall: 76.5,
-    lastRetrainTime: Date.now() - 4 * 60 * 60 * 1000, // 4 hours ago
-    nextRetrainTime: Date.now() + 20 * 60 * 60 * 1000, // 20 hours from now
-    featuresCount: 47
-  });
-
-  const [featureImportance] = useState([
-    { name: "RSI_14", importance: 0.23 },
-    { name: "MACD_Signal", importance: 0.18 },
-    { name: "Volume_SMA", importance: 0.15 },
-    { name: "Bollinger_Position", importance: 0.12 },
-    { name: "ATR_Normalized", importance: 0.11 },
-    { name: "Price_Momentum", importance: 0.10 },
-    { name: "Volatility_Ratio", importance: 0.08 },
-    { name: "Order_Flow", importance: 0.03 }
-  ]);
-
-  // Simulate real-time prediction updates
+  // Update prediction history when data changes
   useEffect(() => {
-    const interval = setInterval(() => {
-      const newValue = Math.max(-1, Math.min(1, currentPrediction.value + (Math.random() - 0.5) * 0.2));
-      const newConfidence = Math.max(0.5, Math.min(1, 0.8 + (Math.random() - 0.5) * 0.3));
-      
-      setCurrentPrediction({
-        value: newValue,
-        timestamp: Date.now(),
-        confidence: newConfidence
-      });
+    if (predictionsData?.predictions) {
+      const chartData = predictionsData.predictions
+        .slice()
+        .reverse()
+        .map((p) => ({
+          time: new Date(p.ts_ms).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+          prediction: p.prediction,
+          longThreshold: p.long_threshold,
+          shortThreshold: p.short_threshold,
+        }));
+      setPredictionHistory(chartData);
 
-      setPredictionHistory(prev => [...prev.slice(1), newValue]);
-    }, 3000);
+      if (predictionsData.predictions.length > 0) {
+        setLatestPrediction(predictionsData.predictions[0]);
+      }
+    }
+  }, [predictionsData]);
 
-    return () => clearInterval(interval);
-  }, [currentPrediction.value]);
+  // WebSocket connection for real-time updates
+  useEffect(() => {
+    if (!activeModel?.stream_id) return;
 
-  const getPredictionSignal = (value: number) => {
-    if (value >= thresholds.long) return { signal: "LONG", color: "text-trading-long", bgColor: "bg-trading-long/10" };
-    if (value <= thresholds.short) return { signal: "SHORT", color: "text-trading-short", bgColor: "bg-trading-short/10" };
-    return { signal: "NEUTRAL", color: "text-trading-neutral", bgColor: "bg-muted" };
-  };
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: NodeJS.Timeout;
 
-  const signal = getPredictionSignal(currentPrediction.value);
-  
-  const formatTimeUntilRetrain = () => {
-    const timeUntil = modelPerformance.nextRetrainTime - Date.now();
+    const connect = () => {
+      ws = new WebSocket(WS_URL);
+
+      ws.onopen = () => {
+        setWsConnected(true);
+        // Subscribe to specific stream
+        ws?.send(JSON.stringify({ subscribe: [activeModel.stream_id] }));
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          if (data.type === 'prediction' && data.modelId === activeModel.model_id) {
+            const newPrediction: LivePrediction = {
+              ts_ms: data.barEndTs,
+              prediction: data.prediction,
+              long_threshold: data.longThreshold,
+              short_threshold: data.shortThreshold,
+              feature_hash: '',
+              model_id: data.modelId,
+              matched: false,
+            };
+
+            setLatestPrediction(newPrediction);
+
+            setPredictionHistory(prev => {
+              const newEntry = {
+                time: new Date(data.barEndTs).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                prediction: data.prediction,
+                longThreshold: data.longThreshold,
+                shortThreshold: data.shortThreshold,
+              };
+              return [...prev.slice(-49), newEntry];
+            });
+          }
+        } catch (e) {
+          console.error('WebSocket message parse error:', e);
+        }
+      };
+
+      ws.onclose = () => {
+        setWsConnected(false);
+        // Reconnect after 5 seconds
+        reconnectTimeout = setTimeout(connect, 5000);
+      };
+
+      ws.onerror = () => {
+        ws?.close();
+      };
+    };
+
+    connect();
+
+    return () => {
+      clearTimeout(reconnectTimeout);
+      ws?.close();
+    };
+  }, [activeModel?.stream_id, activeModel?.model_id]);
+
+  const getSignal = useCallback((prediction: number, longThreshold: number, shortThreshold: number) => {
+    if (prediction >= longThreshold) return { signal: 'LONG', color: 'text-green-500', icon: TrendingUp };
+    if (prediction <= shortThreshold) return { signal: 'SHORT', color: 'text-red-500', icon: TrendingDown };
+    return { signal: 'NEUTRAL', color: 'text-gray-500', icon: Minus };
+  }, []);
+
+  const formatTimeUntilRetrain = useCallback((nextRetrainMs: number) => {
+    const timeUntil = nextRetrainMs - Date.now();
+    if (timeUntil <= 0) return 'Imminent';
     const hours = Math.floor(timeUntil / (1000 * 60 * 60));
     const minutes = Math.floor((timeUntil % (1000 * 60 * 60)) / (1000 * 60));
     return `${hours}h ${minutes}m`;
-  };
+  }, []);
 
-  // Generate line chart data
-  const predictionChartData = predictionHistory.map((value, index) => ({
-    time: index + 1,
-    prediction: value
-  }));
+  if (modelsLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!activeModel) {
+    return (
+      <Card className="trading-card">
+        <CardContent className="flex flex-col items-center justify-center h-64 gap-4">
+          <Brain className="h-12 w-12 text-muted-foreground" />
+          <p className="text-muted-foreground">No active models</p>
+          <Button onClick={() => refetchModels()} variant="outline" size="sm">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const currentSignal = latestPrediction
+    ? getSignal(latestPrediction.prediction, latestPrediction.long_threshold, latestPrediction.short_threshold)
+    : { signal: 'N/A', color: 'text-gray-500', icon: Minus };
+
+  const SignalIcon = currentSignal.icon;
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold">ML Model Monitor</h1>
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-profit rounded-full animate-pulse"></div>
-          <span className="text-sm text-muted-foreground">System Online</span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            {wsConnected ? (
+              <><Wifi className="h-4 w-4 text-green-500" /><span className="text-sm text-green-500">Live</span></>
+            ) : (
+              <><WifiOff className="h-4 w-4 text-red-500" /><span className="text-sm text-red-500">Disconnected</span></>
+            )}
+          </div>
+          <Button onClick={() => { refetchModels(); refetchPredictions(); }} variant="outline" size="sm">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
+      {/* Model Info Banner */}
+      <Card className="trading-card bg-gradient-to-r from-primary/5 to-primary/10">
+        <CardContent className="py-4">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <p className="text-sm text-muted-foreground">Model ID</p>
+              <p className="font-mono text-sm">{activeModel.model_id.slice(0, 8)}...</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Stream</p>
+              <p className="font-semibold">{activeModel.stream_id}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Features</p>
+              <p className="font-semibold">{activeModel.feature_count}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Horizon</p>
+              <p className="font-semibold">{activeModel.target_horizon_bars} bars</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Trained</p>
+              <p className="font-semibold">{new Date(activeModel.trained_at_ms).toLocaleString()}</p>
+            </div>
+            <Badge variant={activeModel.active ? "default" : "secondary"}>
+              {activeModel.status}
+            </Badge>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Top Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Current Prediction */}
         <Card className="trading-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Current Prediction</CardTitle>
-            <Target className="h-4 w-4 text-profit" />
+            <CardTitle className="text-sm font-medium text-muted-foreground">Latest Prediction</CardTitle>
+            <SignalIcon className={`h-5 w-5 ${currentSignal.color}`} />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-profit">
-              {currentPrediction.value.toFixed(3)}
+            <div className={`text-3xl font-bold ${currentSignal.color}`}>
+              {latestPrediction ? latestPrediction.prediction.toFixed(4) : 'N/A'}
             </div>
-            <div className="flex items-center justify-between mt-2">
-              <span className="text-xs text-muted-foreground">Long Threshold</span>
-              <Badge variant="outline" className="text-profit border-profit text-xs">
-                +{thresholds.long.toFixed(2)}
-              </Badge>
-            </div>
-            <div className="flex items-center justify-between mt-1">
-              <span className="text-xs text-muted-foreground">Short Threshold</span>
-              <Badge variant="outline" className="text-loss border-loss text-xs">
-                {thresholds.short.toFixed(2)}
-              </Badge>
-            </div>
+            <Badge className={`mt-2 ${currentSignal.color}`} variant="outline">
+              {currentSignal.signal}
+            </Badge>
+            {latestPrediction && (
+              <p className="text-xs text-muted-foreground mt-2">
+                {new Date(latestPrediction.ts_ms).toLocaleString()}
+              </p>
+            )}
           </CardContent>
         </Card>
 
+        {/* Thresholds */}
         <Card className="trading-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Model Accuracy</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Thresholds</CardTitle>
             <Target className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">
-              {modelPerformance.accuracy.toFixed(2)}%
-            </div>
-            <div className="w-full bg-muted rounded-full h-2 mt-2">
-              <div 
-                className="bg-warning h-2 rounded-full transition-all duration-500" 
-                style={{ width: `${modelPerformance.accuracy}%` }}
-              ></div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Long</span>
+                <Badge variant="outline" className="text-green-500 border-green-500">
+                  {activeModel.long_threshold.toFixed(4)}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Short</span>
+                <Badge variant="outline" className="text-red-500 border-red-500">
+                  {activeModel.short_threshold.toFixed(4)}
+                </Badge>
+              </div>
             </div>
           </CardContent>
         </Card>
 
+        {/* Metrics */}
         <Card className="trading-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Signal Strength</CardTitle>
-            <Zap className="h-4 w-4 text-accent" />
+            <CardTitle className="text-sm font-medium text-muted-foreground">Performance</CardTitle>
+            <Activity className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">
-              {(currentPrediction.confidence * 100).toFixed(0)}%
-            </div>
-            <div className="w-full bg-muted rounded-full h-2 mt-2">
-              <div 
-                className="bg-accent h-2 rounded-full transition-all duration-500" 
-                style={{ width: `${currentPrediction.confidence * 100}%` }}
-              ></div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">MAE</span>
+                <span className="font-mono">{activeModel.mae.toFixed(6)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">R²</span>
+                <span className="font-mono">{activeModel.r2.toFixed(4)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Samples</span>
+                <span className="font-mono">{activeModel.sample_count}</span>
+              </div>
             </div>
           </CardContent>
         </Card>
 
+        {/* Next Retrain */}
         <Card className="trading-card">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Next Retrain</CardTitle>
@@ -194,10 +331,10 @@ export function MLModelMonitor() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">
-              {formatTimeUntilRetrain()}
+              {formatTimeUntilRetrain(activeModel.next_retrain_ms)}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Last: {new Date(modelPerformance.lastRetrainTime).toLocaleString().split(',')[1].trim()}
+            <p className="text-xs text-muted-foreground mt-2">
+              {new Date(activeModel.next_retrain_ms).toLocaleString()}
             </p>
           </CardContent>
         </Card>
@@ -207,143 +344,99 @@ export function MLModelMonitor() {
       <Card className="trading-card">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <BarChart3 className="h-5 w-5" />
-            Prediction History
+            <Zap className="h-5 w-5" />
+            Prediction History ({predictionHistory.length} samples)
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={predictionChartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground) / 0.2)" />
-              <XAxis 
-                dataKey="time" 
-                axisLine={false}
-                tickLine={false}
-                tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
-              />
-              <YAxis 
-                domain={[-1, 1]}
-                axisLine={false}
-                tickLine={false}
-                tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
-              />
-              {/* Threshold lines */}
-              <Line 
-                type="monotone" 
-                dataKey={() => thresholds.short} 
-                stroke="hsl(var(--loss))" 
-                strokeDasharray="5 5" 
-                dot={false}
-                strokeWidth={1}
-              />
-              <Line 
-                type="monotone" 
-                dataKey={() => thresholds.long} 
-                stroke="hsl(var(--profit))" 
-                strokeDasharray="5 5" 
-                dot={false}
-                strokeWidth={1}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="prediction" 
-                stroke="hsl(var(--primary))" 
-                strokeWidth={2}
-                dot={{ r: 3, fill: 'hsl(var(--primary))' }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-      {/* Bottom Section: Feature Importance & Model Status */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Feature Importance */}
-        <Card className="trading-card">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="h-5 w-5" />
-              Feature Importance
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart 
-                data={featureImportance} 
-                layout="horizontal"
-                margin={{ top: 5, right: 30, left: 80, bottom: 5 }}
-              >
+          {predictionHistory.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={predictionHistory}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted-foreground) / 0.2)" />
-                <XAxis 
-                  type="number" 
-                  domain={[0, 0.25]}
+                <XAxis
+                  dataKey="time"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
                   axisLine={false}
                   tickLine={false}
                   tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+                  domain={['auto', 'auto']}
                 />
-                <YAxis 
-                  type="category" 
-                  dataKey="name"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
-                  width={75}
+                {/* Threshold reference lines */}
+                {predictionHistory.length > 0 && (
+                  <>
+                    <ReferenceLine
+                      y={predictionHistory[0].longThreshold}
+                      stroke="hsl(var(--profit))"
+                      strokeDasharray="5 5"
+                      label={{ value: 'Long', fill: 'hsl(var(--profit))', fontSize: 10 }}
+                    />
+                    <ReferenceLine
+                      y={predictionHistory[0].shortThreshold}
+                      stroke="hsl(var(--loss))"
+                      strokeDasharray="5 5"
+                      label={{ value: 'Short', fill: 'hsl(var(--loss))', fontSize: 10 }}
+                    />
+                  </>
+                )}
+                <Line
+                  type="monotone"
+                  dataKey="prediction"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                  dot={{ r: 2, fill: 'hsl(var(--primary))' }}
+                  activeDot={{ r: 4 }}
                 />
-                <Bar 
-                  dataKey="importance" 
-                  fill="hsl(var(--primary))"
-                  radius={[0, 2, 2, 0]}
-                />
-              </BarChart>
+              </LineChart>
             </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        {/* Model Status */}
-        <Card className="trading-card">
-          <CardHeader>
-            <CardTitle>Model Status</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Threshold Mode</span>
-                <Badge variant="secondary">OptimalROC</Badge>
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Model Type</span>
-                <Badge variant="secondary">XGBoost</Badge>
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Training Data</span>
-                <span className="text-sm">Last 10,000 samples</span>
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Feature Count</span>
-                <span className="text-sm">{modelPerformance.featuresCount}</span>
-              </div>
+          ) : (
+            <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+              No prediction data available yet
             </div>
+          )}
+        </CardContent>
+      </Card>
 
-            <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-              <div className="p-4 rounded-lg border border-profit/20 bg-profit/5">
-                <div className="text-2xl font-bold text-profit text-center">
-                  46
-                </div>
-                <p className="text-xs text-muted-foreground text-center mt-1">Long Signals</p>
-              </div>
-              <div className="p-4 rounded-lg border border-loss/20 bg-loss/5">
-                <div className="text-2xl font-bold text-loss text-center">
-                  27
-                </div>
-                <p className="text-xs text-muted-foreground text-center mt-1">Short Signals</p>
-              </div>
+      {/* XGBoost Config */}
+      <Card className="trading-card">
+        <CardHeader>
+          <CardTitle>Model Configuration</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Objective</p>
+              <p className="font-mono text-sm">{activeModel.xgb_objective}</p>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Max Depth</p>
+              <p className="font-mono text-sm">{activeModel.xgb_max_depth}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Learning Rate</p>
+              <p className="font-mono text-sm">{activeModel.xgb_eta}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Rounds</p>
+              <p className="font-mono text-sm">{activeModel.xgb_n_rounds}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Train Size</p>
+              <p className="font-mono text-sm">{activeModel.train_size} bars</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Feature Hash</p>
+              <p className="font-mono text-sm truncate" title={activeModel.feature_hash}>
+                {activeModel.feature_hash.slice(0, 8)}...
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

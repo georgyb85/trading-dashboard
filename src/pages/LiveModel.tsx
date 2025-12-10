@@ -17,6 +17,10 @@ import {
   useDeactivateModel,
   useDeleteModel,
   useUpdateThresholds,
+  useAttachExecutor,
+  useUpdateExecutor,
+  useDetachExecutor,
+  useUndeployModel,
 } from '@/hooks/useKrakenLive';
 import type { XGBoostTrainResult } from '@/lib/types/xgboost';
 import {
@@ -32,6 +36,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { krakenClient } from '@/lib/kraken/client';
 import { Input } from '@/components/ui/input';
 import { useMarketDataContext } from '@/contexts/MarketDataContext';
+import { ExecutorConfigModal } from '@/components/ExecutorConfigModal';
+import type { LiveModelSummary, ExecutorConfig } from '@/lib/kraken/types';
 
 const LiveModelPage = () => {
   const { cachedRuns } = useRunsContext();
@@ -46,6 +52,15 @@ const LiveModelPage = () => {
   const deleteModel = useDeleteModel();
   const updateThresholds = useUpdateThresholds();
   const { predictions: livePredictions, targets: liveTargets, maturedTargets } = useMarketDataContext();
+
+  // Executor management state
+  const [executorModalOpen, setExecutorModalOpen] = useState(false);
+  const [executorModalMode, setExecutorModalMode] = useState<'attach' | 'update'>('attach');
+  const [executorTargetModel, setExecutorTargetModel] = useState<LiveModelSummary | null>(null);
+  const attachExecutor = useAttachExecutor();
+  const updateExecutor = useUpdateExecutor();
+  const detachExecutor = useDetachExecutor();
+  const undeployModel = useUndeployModel();
 
   // Map of matured target values from /ws/live WebSocket events (legacy target_matured events)
   const maturedTargetsByStreamTs = useMemo(() => {
@@ -330,6 +345,7 @@ const LiveModelPage = () => {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Status</TableHead>
+                      <TableHead>Executor</TableHead>
                       <TableHead>Model</TableHead>
                       <TableHead>Dataset</TableHead>
                       <TableHead>Trained</TableHead>
@@ -345,6 +361,17 @@ const LiveModelPage = () => {
                             {model.status}
                           </Badge>
                         </TableCell>
+                        <TableCell>
+                          {model.has_executor ? (
+                            <Badge variant={model.executor_enabled ? 'default' : 'outline'} className={model.executor_enabled ? 'bg-green-600' : ''}>
+                              {model.executor_enabled ? 'Trading' : 'Paused'}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-muted-foreground">
+                              Predict Only
+                            </Badge>
+                          )}
+                        </TableCell>
                         <TableCell className="font-mono text-xs">{model.model_id.slice(0, 10)}…</TableCell>
                         <TableCell className="font-mono text-xs">{model.dataset_id}</TableCell>
                         <TableCell className="font-mono text-xs">
@@ -353,7 +380,7 @@ const LiveModelPage = () => {
                         <TableCell className="font-mono text-xs">
                           {model.next_retrain_ms ? new Date(model.next_retrain_ms).toLocaleString() : '—'}
                         </TableCell>
-                        <TableCell className="text-right space-x-2">
+                        <TableCell className="text-right space-x-1">
                           <Button size="sm" variant="ghost" onClick={() => setSelectedModelId(model.model_id)}>
                             View
                           </Button>
@@ -376,14 +403,48 @@ const LiveModelPage = () => {
                               Activate
                             </Button>
                           )}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => retrainModel.mutate(model.model_id)}
-                            disabled={retrainModel.isPending}
-                          >
-                            Retrain
-                          </Button>
+                          {/* Executor Management */}
+                          {model.has_executor ? (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setExecutorTargetModel(model);
+                                  setExecutorModalMode('update');
+                                  setExecutorModalOpen(true);
+                                }}
+                              >
+                                Config
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-orange-600"
+                                onClick={() => {
+                                  if (window.confirm(`Detach executor from model ${model.model_id.slice(0, 8)}…? Open positions will continue to be managed.`)) {
+                                    detachExecutor.mutate(model.model_id);
+                                  }
+                                }}
+                                disabled={detachExecutor.isPending}
+                              >
+                                Detach
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-green-600"
+                              onClick={() => {
+                                setExecutorTargetModel(model);
+                                setExecutorModalMode('attach');
+                                setExecutorModalOpen(true);
+                              }}
+                            >
+                              Attach Executor
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="ghost"
@@ -981,6 +1042,41 @@ const LiveModelPage = () => {
         onSubmit={handleGoLive}
         run={selectedRun}
         isSubmitting={goLiveMutation.isPending}
+      />
+
+      <ExecutorConfigModal
+        open={executorModalOpen}
+        onClose={() => {
+          setExecutorModalOpen(false);
+          setExecutorTargetModel(null);
+        }}
+        onSubmit={(config: ExecutorConfig) => {
+          if (!executorTargetModel) return;
+          if (executorModalMode === 'attach') {
+            attachExecutor.mutate(
+              { modelId: executorTargetModel.model_id, config },
+              {
+                onSuccess: () => {
+                  setExecutorModalOpen(false);
+                  setExecutorTargetModel(null);
+                },
+              }
+            );
+          } else {
+            updateExecutor.mutate(
+              { modelId: executorTargetModel.model_id, config },
+              {
+                onSuccess: () => {
+                  setExecutorModalOpen(false);
+                  setExecutorTargetModel(null);
+                },
+              }
+            );
+          }
+        }}
+        model={executorTargetModel}
+        isSubmitting={attachExecutor.isPending || updateExecutor.isPending}
+        mode={executorModalMode}
       />
 
       {runList.length === 0 && (

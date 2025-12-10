@@ -26,6 +26,7 @@ export interface GoLiveResponse {
 export interface LiveModelSummary {
   model_id: string;
   run_id: string;
+  stream_id?: string;
   dataset_id: string;
   status: 'active' | 'inactive';
   version: number;
@@ -37,6 +38,10 @@ export interface LiveModelSummary {
   feature_hash?: string;
   indicator_hash?: string;
   target_horizon_bars?: number;
+
+  // Executor status (Model-Executor Decoupling)
+  has_executor?: boolean;
+  executor_enabled?: boolean;
 
   // Training config (ACTUAL values from training, -1 = legacy/not set)
   train_size?: number;
@@ -61,6 +66,27 @@ export interface LiveModelSummary {
   xgb_quantile_alpha?: number;  // Used only when objective is "reg:quantileerror"
   xgb_lambda?: number;          // L2 regularization
   xgb_min_child_weight?: number; // Minimum sum of instance weight in child
+}
+
+// Executor configuration for Model-Executor Decoupling
+export interface ExecutorConfig {
+  stream_id: string;
+  symbol: string;
+  exchange: 'kraken' | 'binance';
+  long_threshold: number;
+  short_threshold: number;
+  position_size_pct: number;
+  stop_loss_atr_mult: number;
+  take_profit_atr_mult: number;
+  stop_loss_pct: number;
+  take_profit_pct: number;
+  max_bars_held: number;
+  stop_loss_cooldown_bars: number;
+  max_positions: number;
+  max_equity_pct: number;
+  max_position_notional: number;
+  target_horizon_bars?: number;
+  enabled?: boolean;
 }
 
 export interface LiveModelDetail extends LiveModelSummary {

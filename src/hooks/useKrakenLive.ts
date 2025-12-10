@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { krakenClient } from '@/lib/kraken/client';
-import type { GoLiveRequest } from '@/lib/kraken/types';
+import type { GoLiveRequest, ExecutorConfig } from '@/lib/kraken/types';
 import { toast } from './use-toast';
 
 export const useGoLive = () => {
@@ -17,6 +17,9 @@ export const useGoLive = () => {
       toast({ title: 'Go Live started', description: `Model ${data.model_id || data.run_id} is live` });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
+      // Also invalidate metrics and predictions to flush stale data from previous model
+      queryClient.invalidateQueries({ queryKey: ['kraken', 'metrics'] });
+      queryClient.invalidateQueries({ queryKey: ['kraken', 'predictions'] });
     },
     onError: (err: any) => {
       const message = err instanceof Error ? err.message : 'Go Live failed';
@@ -178,5 +181,114 @@ export const useAvailableFeatures = (timeframe?: string) => {
       return resp.data;
     },
     retry: false,
+  });
+};
+
+// Model-Executor Decoupling Hooks
+
+export const useDeployModel = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { runId: string; streamId?: string }) => {
+      const resp = await krakenClient.deployModel(params.runId, params.streamId);
+      if (!resp.success || !resp.data) {
+        throw new Error(resp.error || 'Deploy failed');
+      }
+      return resp.data;
+    },
+    onSuccess: (data) => {
+      toast({ title: 'Model deployed', description: `Model ${data.model_id} deployed in ${data.mode} mode` });
+      queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
+      queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
+    },
+    onError: (err: any) => {
+      const message = err instanceof Error ? err.message : 'Deploy failed';
+      toast({ title: 'Deploy failed', description: message, variant: 'destructive' });
+    },
+  });
+};
+
+export const useAttachExecutor = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { modelId: string; config: ExecutorConfig }) => {
+      const resp = await krakenClient.attachExecutor(params.modelId, params.config);
+      if (!resp.success || !resp.data) {
+        throw new Error(resp.error || 'Attach executor failed');
+      }
+      return resp.data;
+    },
+    onSuccess: (_, params) => {
+      toast({ title: 'Executor attached', description: `Executor attached to model ${params.modelId.slice(0, 8)}…` });
+      queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
+    },
+    onError: (err: any) => {
+      const message = err instanceof Error ? err.message : 'Attach executor failed';
+      toast({ title: 'Attach executor failed', description: message, variant: 'destructive' });
+    },
+  });
+};
+
+export const useUpdateExecutor = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (params: { modelId: string; config: ExecutorConfig }) => {
+      const resp = await krakenClient.updateExecutor(params.modelId, params.config);
+      if (!resp.success || !resp.data) {
+        throw new Error(resp.error || 'Update executor failed');
+      }
+      return resp.data;
+    },
+    onSuccess: (_, params) => {
+      toast({ title: 'Executor updated', description: `Executor config updated for model ${params.modelId.slice(0, 8)}…` });
+      queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
+    },
+    onError: (err: any) => {
+      const message = err instanceof Error ? err.message : 'Update executor failed';
+      toast({ title: 'Update executor failed', description: message, variant: 'destructive' });
+    },
+  });
+};
+
+export const useDetachExecutor = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (modelId: string) => {
+      const resp = await krakenClient.detachExecutor(modelId);
+      if (!resp.success || !resp.data) {
+        throw new Error(resp.error || 'Detach executor failed');
+      }
+      return resp.data;
+    },
+    onSuccess: (_, modelId) => {
+      toast({ title: 'Executor detached', description: `Executor removed from model ${modelId.slice(0, 8)}…` });
+      queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
+    },
+    onError: (err: any) => {
+      const message = err instanceof Error ? err.message : 'Detach executor failed';
+      toast({ title: 'Detach executor failed', description: message, variant: 'destructive' });
+    },
+  });
+};
+
+export const useUndeployModel = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (modelId: string) => {
+      const resp = await krakenClient.undeployModel(modelId);
+      if (!resp.success || !resp.data) {
+        throw new Error(resp.error || 'Undeploy failed');
+      }
+      return resp.data;
+    },
+    onSuccess: (_, modelId) => {
+      toast({ title: 'Model undeployed', description: `Model ${modelId.slice(0, 8)}… removed` });
+      queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
+      queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
+    },
+    onError: (err: any) => {
+      const message = err instanceof Error ? err.message : 'Undeploy failed';
+      toast({ title: 'Undeploy failed', description: message, variant: 'destructive' });
+    },
   });
 };
