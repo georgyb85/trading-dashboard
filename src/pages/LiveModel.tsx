@@ -1,9 +1,6 @@
-import { ActiveModelCard } from '@/apps/walkforward/components/ActiveModelCard';
 import { FoldResults } from '@/apps/walkforward/components/FoldResults';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { GoLiveModal } from '@/apps/walkforward/components/GoLiveModal';
 import { useRunsContext } from '@/contexts/RunsContext';
@@ -13,31 +10,996 @@ import {
   useActiveModel,
   useLiveModels,
   useActivateModel,
-  useRetrainModel,
   useDeactivateModel,
   useDeleteModel,
   useUpdateThresholds,
   useAttachExecutor,
   useUpdateExecutor,
   useDetachExecutor,
-  useUndeployModel,
 } from '@/hooks/useKrakenLive';
 import type { XGBoostTrainResult } from '@/lib/types/xgboost';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Activity, BarChart3, Settings, Info, RefreshCw, Loader2 } from 'lucide-react';
+import {
+  Activity,
+  BarChart3,
+  Settings,
+  RefreshCw,
+  Loader2,
+  ChevronDown,
+  ChevronRight,
+  Zap,
+  Clock,
+  Target,
+  TrendingUp,
+  Play,
+  Pause,
+  Trash2,
+  Link,
+  Unlink,
+  Eye,
+  Cpu,
+  Layers,
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
+  Check,
+  X,
+  Rocket,
+} from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { krakenClient } from '@/lib/kraken/client';
 import { Input } from '@/components/ui/input';
 import { useMarketDataContext } from '@/contexts/MarketDataContext';
 import { ExecutorConfigModal } from '@/components/ExecutorConfigModal';
 import type { LiveModelSummary, ExecutorConfig } from '@/lib/kraken/types';
+import { cn } from '@/lib/utils';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODEL CARD COMPONENT - Refined trading terminal aesthetic
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface ModelCardProps {
+  model: LiveModelSummary;
+  isSelected: boolean;
+  isActive: boolean;
+  onSelect: () => void;
+  onActivate: () => void;
+  onDeactivate: () => void;
+  onDelete: () => void;
+  onAttachExecutor: () => void;
+  onConfigExecutor: () => void;
+  onDetachExecutor: () => void;
+  isPending: boolean;
+}
+
+// Calculate estimated next retrain based on training frequency patterns
+const getNextRetrainEstimate = (trainedAtMs: number | undefined, retrainIntervalHours = 24): { label: string; isOverdue: boolean } => {
+  if (!trainedAtMs) return { label: 'Unknown', isOverdue: false };
+  const nextRetrain = trainedAtMs + retrainIntervalHours * 60 * 60 * 1000;
+  const now = Date.now();
+  const diff = nextRetrain - now;
+
+  if (diff < 0) {
+    const hoursOverdue = Math.floor(Math.abs(diff) / (1000 * 60 * 60));
+    return { label: `${hoursOverdue}h overdue`, isOverdue: true };
+  }
+
+  const hoursUntil = Math.floor(diff / (1000 * 60 * 60));
+  const minsUntil = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+  if (hoursUntil > 0) {
+    return { label: `${hoursUntil}h ${minsUntil}m`, isOverdue: false };
+  }
+  return { label: `${minsUntil}m`, isOverdue: false };
+};
+
+const ModelCard = ({
+  model,
+  isSelected,
+  isActive,
+  onSelect,
+  onActivate,
+  onDeactivate,
+  onDelete,
+  onAttachExecutor,
+  onConfigExecutor,
+  onDetachExecutor,
+  isPending,
+}: ModelCardProps) => {
+  const executorStatus = model.has_executor
+    ? model.executor_enabled
+      ? { color: 'text-emerald-400', bg: 'bg-emerald-500/15', border: 'border-emerald-500/40', label: 'LIVE TRADING', icon: Zap, glow: 'shadow-emerald-500/20' }
+      : { color: 'text-amber-400', bg: 'bg-amber-500/15', border: 'border-amber-500/40', label: 'PAUSED', icon: Pause, glow: '' }
+    : { color: 'text-slate-400', bg: 'bg-slate-500/10', border: 'border-slate-500/30', label: 'PREDICT ONLY', icon: Eye, glow: '' };
+
+  const ExecutorIcon = executorStatus.icon;
+  const nextRetrain = getNextRetrainEstimate(model.trained_at_ms);
+
+  return (
+    <div
+      onClick={onSelect}
+      className={cn(
+        'relative group cursor-pointer transition-all duration-300 ease-out',
+        'rounded-xl border-2 bg-gradient-to-br from-card via-card to-card/80',
+        'p-4 min-w-0',
+        model.status === 'active'
+          ? 'border-emerald-500/50 shadow-lg shadow-emerald-500/10'
+          : 'border-border/40 hover:border-border/60',
+        isSelected
+          ? 'ring-2 ring-primary/70 ring-offset-2 ring-offset-background scale-[1.02]'
+          : 'hover:scale-[1.01] hover:shadow-xl hover:shadow-black/20'
+      )}
+    >
+      {/* Header: Model ID + Status Badge */}
+      <div className="flex items-start justify-between gap-3 mb-4 pt-1">
+        <div className="flex items-center gap-2.5 min-w-0">
+          {model.status === 'active' && (
+            <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+            </span>
+          )}
+          <div className="min-w-0">
+            <span className="font-mono text-sm font-bold tracking-wide block truncate">
+              {model.model_id.slice(0, 10).toUpperCase()}
+            </span>
+            <span className="text-[10px] text-muted-foreground font-medium tracking-wide truncate block">
+              {model.dataset_id}
+            </span>
+          </div>
+        </div>
+
+        <div className={cn(
+          'flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-bold tracking-wider flex-shrink-0',
+          'border transition-all',
+          executorStatus.bg, executorStatus.color, executorStatus.border,
+          executorStatus.glow && `shadow-lg ${executorStatus.glow}`
+        )}>
+          <ExecutorIcon className="h-3 w-3" />
+          <span>{executorStatus.label}</span>
+        </div>
+      </div>
+
+      {/* Training Info Grid */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        {/* Trained At */}
+        <div className="p-2.5 rounded-lg bg-muted/50 border border-border/30">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Clock className="h-3 w-3 text-muted-foreground" />
+            <span className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold">Trained</span>
+          </div>
+          <div className="font-mono text-xs font-medium">
+            {model.trained_at_ms
+              ? new Date(model.trained_at_ms).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })
+              : '—'}
+          </div>
+        </div>
+
+        {/* Next Retrain */}
+        <div className={cn(
+          'p-2.5 rounded-lg border',
+          nextRetrain.isOverdue
+            ? 'bg-red-500/10 border-red-500/30'
+            : 'bg-muted/50 border-border/30'
+        )}>
+          <div className="flex items-center gap-1.5 mb-1">
+            <RefreshCw className={cn('h-3 w-3', nextRetrain.isOverdue ? 'text-red-400' : 'text-muted-foreground')} />
+            <span className={cn(
+              'text-[9px] uppercase tracking-widest font-semibold',
+              nextRetrain.isOverdue ? 'text-red-400' : 'text-muted-foreground'
+            )}>Retrain In</span>
+          </div>
+          <div className={cn(
+            'font-mono text-xs font-medium',
+            nextRetrain.isOverdue ? 'text-red-400' : ''
+          )}>
+            {nextRetrain.label}
+          </div>
+        </div>
+      </div>
+
+      {/* Action Row */}
+      <div className="flex items-center gap-2 pt-3 border-t border-border/30">
+        {/* Activate/Deactivate Toggle */}
+        {model.status === 'active' ? (
+          <button
+            className={cn(
+              'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all',
+              'bg-amber-500/10 text-amber-400 border border-amber-500/30',
+              'hover:bg-amber-500/20 hover:border-amber-500/50',
+              'disabled:opacity-50 disabled:cursor-not-allowed'
+            )}
+            onClick={(e) => { e.stopPropagation(); onDeactivate(); }}
+            disabled={isPending}
+            title="Deactivate Model"
+          >
+            <Pause className="h-3.5 w-3.5" />
+            <span>Pause</span>
+          </button>
+        ) : (
+          <button
+            className={cn(
+              'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all',
+              'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30',
+              'hover:bg-emerald-500/20 hover:border-emerald-500/50',
+              'disabled:opacity-50 disabled:cursor-not-allowed'
+            )}
+            onClick={(e) => { e.stopPropagation(); onActivate(); }}
+            disabled={isPending}
+            title="Activate Model"
+          >
+            <Play className="h-3.5 w-3.5" />
+            <span>Activate</span>
+          </button>
+        )}
+
+        {/* Executor Button - PROMINENT */}
+        {model.has_executor ? (
+          <button
+            className={cn(
+              'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-all flex-1 justify-center',
+              'bg-primary/10 text-primary border border-primary/30',
+              'hover:bg-primary/20 hover:border-primary/50'
+            )}
+            onClick={(e) => { e.stopPropagation(); onConfigExecutor(); }}
+            title="Configure Executor"
+          >
+            <Settings className="h-3.5 w-3.5" />
+            <span>Configure</span>
+          </button>
+        ) : (
+          <button
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all flex-1 justify-center',
+              'bg-gradient-to-r from-primary to-primary/80 text-primary-foreground',
+              'hover:from-primary/90 hover:to-primary/70 hover:shadow-lg hover:shadow-primary/25',
+              'border border-primary/50'
+            )}
+            onClick={(e) => { e.stopPropagation(); onAttachExecutor(); }}
+            title="Attach Executor for Live Trading"
+          >
+            <Zap className="h-3.5 w-3.5" />
+            <span>Attach Executor</span>
+          </button>
+        )}
+
+        {/* Delete - subtle */}
+        <button
+          className={cn(
+            'p-1.5 rounded-md transition-all',
+            'text-muted-foreground hover:text-red-400',
+            'hover:bg-red-500/10 border border-transparent hover:border-red-500/30'
+          )}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (window.confirm(`Delete model ${model.model_id.slice(0, 8)}…?`)) onDelete();
+          }}
+          title="Delete Model"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COLLAPSIBLE SECTION COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface CollapsibleSectionProps {
+  title: string;
+  icon: React.ElementType;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+  badge?: React.ReactNode;
+  actions?: React.ReactNode;
+}
+
+const CollapsibleSection = ({ title, icon: Icon, defaultOpen = true, children, badge, actions }: CollapsibleSectionProps) => {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <div className="border border-border/50 rounded-xl bg-card/50 backdrop-blur-sm overflow-hidden">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/[0.02] transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-primary/10">
+            <Icon className="h-4 w-4 text-primary" />
+          </div>
+          <span className="font-semibold tracking-tight">{title}</span>
+          {badge}
+        </div>
+        <div className="flex items-center gap-2">
+          {actions && <div onClick={(e) => e.stopPropagation()}>{actions}</div>}
+          {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+        </div>
+      </button>
+      <div className={cn('transition-all duration-300 ease-in-out', isOpen ? 'max-h-[3000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden')}>
+        <div className="px-5 pb-5 pt-1">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STAT CARD COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+interface StatCardProps {
+  label: string;
+  value: string | number;
+  subValue?: string;
+  trend?: 'up' | 'down' | 'neutral';
+  colorClass?: string;
+}
+
+const StatCard = ({ label, value, subValue, trend, colorClass }: StatCardProps) => {
+  const TrendIcon = trend === 'up' ? ArrowUpRight : trend === 'down' ? ArrowDownRight : Minus;
+  const trendColor = trend === 'up' ? 'text-emerald-400' : trend === 'down' ? 'text-red-400' : 'text-muted-foreground';
+
+  return (
+    <div className="rounded-lg border border-border/50 p-3">
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 font-medium">{label}</div>
+      <div className={cn('text-xl font-mono font-bold tracking-tight', colorClass || 'text-foreground')}>
+        {value}
+      </div>
+      {(subValue || trend) && (
+        <div className="flex items-center gap-1 mt-0.5">
+          {trend && <TrendIcon className={cn('h-3 w-3', trendColor)} />}
+          {subValue && <span className="text-[10px] text-muted-foreground">{subValue}</span>}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MODEL DETAIL PANEL - Tabbed interface for selected model
+// ═══════════════════════════════════════════════════════════════════════════════
+
+type DetailTab = 'performance' | 'predictions' | 'config';
+
+interface ModelDetailPanelProps {
+  model: LiveModelSummary;
+  metricsQuery: any;
+  metricsError: string | null;
+  trainResult: any;
+  combinedPredictions: any[];
+  horizonBars: number;
+  targetColumnName: string | null;
+  extractedTargetsByKey: Map<string, number>;
+  maturedTargetsByStreamTs: Map<string, number>;
+  longThresholdInput: string;
+  shortThresholdInput: string;
+  setLongThresholdInput: (v: string) => void;
+  setShortThresholdInput: (v: string) => void;
+  updateThresholds: any;
+  metricsModelId: string | null;
+  onClose: () => void;
+}
+
+const ModelDetailPanel = ({
+  model,
+  metricsQuery,
+  metricsError,
+  trainResult,
+  combinedPredictions,
+  horizonBars,
+  targetColumnName,
+  extractedTargetsByKey,
+  maturedTargetsByStreamTs,
+  longThresholdInput,
+  shortThresholdInput,
+  setLongThresholdInput,
+  setShortThresholdInput,
+  updateThresholds,
+  metricsModelId,
+  onClose,
+}: ModelDetailPanelProps) => {
+  const [activeTab, setActiveTab] = useState<DetailTab>('performance');
+  const [signalType, setSignalType] = useState<'optimal' | 'percentile' | 'zero'>('optimal');
+
+  const tabs: { id: DetailTab; label: string; icon: React.ElementType }[] = [
+    { id: 'performance', label: 'Performance', icon: TrendingUp },
+    { id: 'predictions', label: 'Predictions', icon: Activity },
+    { id: 'config', label: 'Configuration', icon: Settings },
+  ];
+
+  const nextRetrain = getNextRetrainEstimate(model.trained_at_ms);
+
+  return (
+    <div className="border-t border-border/50 bg-gradient-to-b from-card/50 to-background">
+      {/* Panel Header */}
+      <div className="border-b border-border/30 bg-card/80 backdrop-blur-sm sticky top-0 z-10">
+        <div className="px-6 py-4">
+          <div className="flex items-center justify-between">
+            {/* Model Identity */}
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
+                {model.status === 'active' && (
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500" />
+                  </span>
+                )}
+                <div>
+                  <h2 className="font-mono text-lg font-bold tracking-wide">
+                    {model.model_id.slice(0, 12).toUpperCase()}
+                  </h2>
+                  <p className="text-xs text-muted-foreground">{model.dataset_id}</p>
+                </div>
+              </div>
+
+              {/* Quick Stats */}
+              <div className="hidden md:flex items-center gap-4 pl-4 border-l border-border/30">
+                <div className="text-center">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Trained</div>
+                  <div className="font-mono text-xs font-medium">
+                    {model.trained_at_ms
+                      ? new Date(model.trained_at_ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                      : '—'}
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className={cn('text-[10px] uppercase tracking-wider', nextRetrain.isOverdue ? 'text-red-400' : 'text-muted-foreground')}>
+                    Retrain In
+                  </div>
+                  <div className={cn('font-mono text-xs font-medium', nextRetrain.isOverdue ? 'text-red-400' : '')}>
+                    {nextRetrain.label}
+                  </div>
+                </div>
+                {model.has_executor && (
+                  <Badge variant={model.executor_enabled ? 'default' : 'secondary'} className="text-xs">
+                    {model.executor_enabled ? 'Trading Active' : 'Executor Paused'}
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => metricsQuery.refetch()}
+                disabled={metricsQuery.isFetching}
+              >
+                {metricsQuery.isFetching ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                <span className="ml-2 hidden sm:inline">Refresh</span>
+              </Button>
+              <Button variant="ghost" size="sm" onClick={onClose}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex items-center gap-1 mt-4 -mb-4">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    'flex items-center gap-2 px-5 py-3 text-sm font-medium rounded-t-lg transition-all whitespace-nowrap',
+                    'border-b-2 -mb-[2px]',
+                    activeTab === tab.id
+                      ? 'bg-background border-primary text-foreground'
+                      : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      <div className="p-6">
+        {/* PERFORMANCE TAB - Merged Overview + Charts */}
+        {activeTab === 'performance' && (
+          <div className="space-y-6">
+            {/* Live Metrics */}
+            {metricsError ? (
+              <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive">
+                {metricsError}
+              </div>
+            ) : metricsQuery.data?.live_metrics ? (
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-primary" />
+                  Live Metrics
+                  {metricsQuery.data.live_metrics.sample_count && (
+                    <Badge variant="secondary" className="ml-2 text-xs font-mono">
+                      {metricsQuery.data.live_metrics.sample_count} samples
+                    </Badge>
+                  )}
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                  <StatCard
+                    label="Directional Accuracy"
+                    value={metricsQuery.data.live_metrics.directional_accuracy != null
+                      ? `${(metricsQuery.data.live_metrics.directional_accuracy * 100).toFixed(1)}%`
+                      : 'N/A'}
+                    colorClass={metricsQuery.data.live_metrics.directional_accuracy > 0.5 ? 'text-emerald-400' : 'text-red-400'}
+                  />
+                  <StatCard
+                    label="ROC AUC"
+                    value={metricsQuery.data.live_metrics.roc_auc != null && metricsQuery.data.live_metrics.roc_auc >= 0
+                      ? metricsQuery.data.live_metrics.roc_auc.toFixed(3)
+                      : 'N/A'}
+                    subValue="Mann-Whitney"
+                    colorClass="text-primary"
+                  />
+                  <StatCard label="MAE" value={metricsQuery.data.live_metrics.mae != null ? metricsQuery.data.live_metrics.mae.toFixed(4) : 'N/A'} />
+                  <StatCard label="R²" value={metricsQuery.data.live_metrics.r2 != null ? metricsQuery.data.live_metrics.r2.toFixed(4) : 'N/A'} />
+                  <StatCard label="True Positives" value={metricsQuery.data.live_metrics.true_positives ?? 0} colorClass="text-emerald-400" />
+                  <StatCard label="False Positives" value={metricsQuery.data.live_metrics.false_positives ?? 0} colorClass="text-red-400" />
+                </div>
+
+                {/* Confusion Matrix */}
+                <div className="grid grid-cols-4 gap-2 pt-4">
+                  <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 text-center">
+                    <div className="text-xl font-mono font-bold text-emerald-400">{metricsQuery.data.live_metrics.true_positives ?? 0}</div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">True Pos</div>
+                  </div>
+                  <div className="p-3 rounded-lg border border-red-500/30 bg-red-500/5 text-center">
+                    <div className="text-xl font-mono font-bold text-red-400">{metricsQuery.data.live_metrics.false_positives ?? 0}</div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">False Pos</div>
+                  </div>
+                  <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 text-center">
+                    <div className="text-xl font-mono font-bold text-emerald-400">{metricsQuery.data.live_metrics.true_negatives ?? 0}</div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">True Neg</div>
+                  </div>
+                  <div className="p-3 rounded-lg border border-red-500/30 bg-red-500/5 text-center">
+                    <div className="text-xl font-mono font-bold text-red-400">{metricsQuery.data.live_metrics.false_negatives ?? 0}</div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">False Neg</div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground border border-dashed border-border/50 rounded-lg">
+                <BarChart3 className="h-8 w-8 mb-2 opacity-50" />
+                <p className="font-medium">No live metrics available yet</p>
+                <p className="text-xs mt-1">Metrics appear after predictions mature</p>
+              </div>
+            )}
+
+            {/* Trading Thresholds */}
+            <div className="pt-4 border-t border-border/30">
+              <h3 className="text-sm font-semibold flex items-center gap-2 mb-4">
+                <Target className="h-4 w-4 text-primary" />
+                Trading Thresholds
+              </h3>
+              <div className="grid md:grid-cols-3 gap-4 items-end">
+                <div className="space-y-2">
+                  <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Long Threshold</label>
+                  <div className="relative">
+                    <ArrowUpRight className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={longThresholdInput}
+                      onChange={(e) => setLongThresholdInput(e.target.value)}
+                      className="pl-10 font-mono bg-emerald-500/5 border-emerald-500/30 focus:border-emerald-500"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Short Threshold</label>
+                  <div className="relative">
+                    <ArrowDownRight className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500" />
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={shortThresholdInput}
+                      onChange={(e) => setShortThresholdInput(e.target.value)}
+                      className="pl-10 font-mono bg-red-500/5 border-red-500/30 focus:border-red-500"
+                    />
+                  </div>
+                </div>
+                <Button
+                  onClick={() => {
+                    const longVal = parseFloat(longThresholdInput);
+                    const shortVal = parseFloat(shortThresholdInput);
+                    if (Number.isNaN(longVal) || Number.isNaN(shortVal)) {
+                      toast({ title: 'Invalid thresholds', description: 'Enter numeric values', variant: 'destructive' });
+                      return;
+                    }
+                    updateThresholds.mutate({ modelId: metricsModelId!, longThreshold: longVal, shortThreshold: shortVal });
+                  }}
+                  disabled={updateThresholds.isPending || !metricsModelId}
+                  className="h-10"
+                >
+                  {updateThresholds.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
+                  Apply Thresholds
+                </Button>
+              </div>
+            </div>
+
+            {/* Charts - FoldResults */}
+            <div className="pt-4 border-t border-border/30">
+              <h3 className="text-sm font-semibold flex items-center gap-2 mb-4">
+                <TrendingUp className="h-4 w-4 text-primary" />
+                Visualizations
+              </h3>
+              {trainResult ? (
+                <FoldResults result={trainResult} isLoading={metricsQuery.isFetching} error={metricsError} />
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground border border-dashed border-border/50 rounded-lg">
+                  <TrendingUp className="h-8 w-8 mb-2 opacity-50" />
+                  <p className="font-medium">No visualization data available</p>
+                  <p className="text-xs mt-1">Charts appear after model deployment</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* PREDICTIONS TAB */}
+        {activeTab === 'predictions' && (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Activity className="h-4 w-4 text-primary" />
+                Recent Predictions
+                {horizonBars > 0 && (
+                  <span className="text-xs text-muted-foreground font-normal">({horizonBars} bar horizon)</span>
+                )}
+              </h3>
+              <div className="flex items-center gap-3">
+                {/* Signal Type Selector */}
+                <div className="flex items-center gap-1 p-0.5 rounded-lg bg-muted/50 border border-border/50">
+                  <button
+                    onClick={() => setSignalType('optimal')}
+                    className={cn(
+                      'px-3 py-1.5 text-xs font-medium rounded-md transition-all',
+                      signalType === 'optimal'
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    Optimal ROC
+                  </button>
+                  <button
+                    onClick={() => setSignalType('percentile')}
+                    className={cn(
+                      'px-3 py-1.5 text-xs font-medium rounded-md transition-all',
+                      signalType === 'percentile'
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    Percentile
+                  </button>
+                  <button
+                    onClick={() => setSignalType('zero')}
+                    className={cn(
+                      'px-3 py-1.5 text-xs font-medium rounded-md transition-all',
+                      signalType === 'zero'
+                        ? 'bg-primary text-primary-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    Zero Cross
+                  </button>
+                </div>
+                <Badge variant="outline" className="font-mono text-xs">
+                  {combinedPredictions.length} predictions
+                </Badge>
+              </div>
+            </div>
+            {combinedPredictions.length > 0 ? (
+              <div className="overflow-x-auto rounded-lg border border-border/50">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-border/50 bg-muted/30">
+                      <TableHead className="text-xs font-semibold uppercase tracking-wider">Time</TableHead>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wider">Prediction</TableHead>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wider">Actual</TableHead>
+                      <TableHead className="text-xs font-semibold uppercase tracking-wider">Signal</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {combinedPredictions.slice(0, 25).map((p) => {
+                      const actual =
+                        p.actual ??
+                        (targetColumnName ? extractedTargetsByKey.get(`${p.streamId}:${targetColumnName}:${p.ts}`) : undefined) ??
+                        maturedTargetsByStreamTs.get(`${p.streamId}:${p.ts}`) ??
+                        null;
+
+                      // Get thresholds from trainResult based on signal type
+                      const thresholds = trainResult?.thresholds;
+                      let signal: 'LONG' | 'SHORT' | null = null;
+
+                      if (signalType === 'zero') {
+                        // Zero-crossover: >0 = LONG, <0 = SHORT
+                        if (p.prediction > 0) signal = 'LONG';
+                        else if (p.prediction < 0) signal = 'SHORT';
+                      } else if (signalType === 'percentile') {
+                        // Percentile: use P95/P5 thresholds
+                        const longTh = thresholds?.long_percentile_95;
+                        const shortTh = thresholds?.short_percentile_05;
+                        if (longTh !== undefined && p.prediction > longTh) signal = 'LONG';
+                        else if (shortTh !== undefined && p.prediction < shortTh) signal = 'SHORT';
+                      } else {
+                        // Optimal ROC: use optimal thresholds (fallback to prediction thresholds)
+                        const longTh = thresholds?.long_optimal ?? p.longThreshold;
+                        const shortTh = thresholds?.short_optimal ?? p.shortThreshold;
+                        if (longTh !== undefined && p.prediction > longTh) signal = 'LONG';
+                        else if (shortTh !== undefined && p.prediction < shortTh) signal = 'SHORT';
+                      }
+
+                      return (
+                        <TableRow key={`${p.modelId}-${p.ts}`} className="border-border/30">
+                          <TableCell className="font-mono text-xs">
+                            {new Date(p.ts).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs font-medium">
+                            {Math.abs(p.prediction) < 0.01 ? p.prediction.toExponential(2) : p.prediction.toFixed(4)}
+                          </TableCell>
+                          <TableCell className={cn('font-mono text-xs font-medium', actual != null ? (actual > 0 ? 'text-emerald-400' : 'text-red-400') : 'text-muted-foreground')}>
+                            {actual != null ? actual.toFixed(4) : '—'}
+                          </TableCell>
+                          <TableCell>
+                            {signal ? (
+                              <Badge className={cn('text-[10px] font-bold', signal === 'LONG' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-red-500/20 text-red-400 border-red-500/30')}>
+                                {signal === 'LONG' ? <ArrowUpRight className="h-3 w-3 mr-1" /> : <ArrowDownRight className="h-3 w-3 mr-1" />}
+                                {signal}
+                              </Badge>
+                            ) : <span className="text-muted-foreground text-xs">—</span>}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground border border-dashed border-border/50 rounded-lg">
+                <Activity className="h-10 w-10 mb-3 opacity-50" />
+                <p>No predictions yet</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* CONFIG TAB */}
+        {activeTab === 'config' && (
+          <div className="space-y-6">
+            {/* Target & Features - Combined */}
+            {trainResult && (
+              <div className="p-4 rounded-lg border border-border/50 bg-card/50">
+                <h3 className="text-sm font-semibold flex items-center gap-2 mb-4">
+                  <Target className="h-4 w-4 text-primary" />
+                  Target & Features
+                </h3>
+                <div className="grid md:grid-cols-3 gap-4 mb-4">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Target Column</div>
+                    <div className="font-mono text-sm font-medium text-primary">
+                      {trainResult.target_column ?? 'N/A'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Horizon</div>
+                    <div className="font-mono text-sm font-medium">
+                      {model.target_horizon_bars ?? 'N/A'} bars
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Features / Samples</div>
+                    <div className="font-mono text-sm font-medium">
+                      {trainResult.feature_columns?.length ?? 0} / {trainResult.train_samples ?? 0}
+                    </div>
+                  </div>
+                </div>
+                {trainResult.feature_columns && trainResult.feature_columns.length > 0 && (
+                  <>
+                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Feature Columns</div>
+                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                      {trainResult.feature_columns.map((feature: string, idx: number) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-0.5 rounded bg-muted/50 border border-border/30 text-xs font-mono"
+                        >
+                          {feature}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Training & XGBoost Config */}
+            {model.train_size && model.train_size > 0 ? (
+              <div className="grid md:grid-cols-3 gap-4">
+                {/* Training Window */}
+                <div className="p-4 rounded-lg border border-border/50 bg-card/50">
+                  <h4 className="text-sm font-semibold flex items-center gap-2 mb-3">
+                    <Layers className="h-4 w-4 text-primary" />
+                    Training Window
+                  </h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between py-1.5 border-b border-border/30">
+                      <span className="text-muted-foreground">Train Size</span>
+                      <span className="font-mono font-medium">{model.train_size} bars</span>
+                    </div>
+                    <div className="flex justify-between py-1.5 border-b border-border/30">
+                      <span className="text-muted-foreground">Train/Val Gap</span>
+                      <span className="font-mono font-medium">{model.train_test_gap} bars</span>
+                    </div>
+                    <div className="flex justify-between py-1.5 border-b border-border/30">
+                      <span className="text-muted-foreground">Val Split Ratio</span>
+                      <span className="font-mono font-medium">{(model.val_split_ratio ?? 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between py-1.5">
+                      <span className="text-muted-foreground">Target Horizon</span>
+                      <span className="font-mono font-medium">{model.target_horizon_bars ?? 'N/A'} bars</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Data Range */}
+                <div className="p-4 rounded-lg border border-border/50 bg-card/50">
+                  <h4 className="text-sm font-semibold flex items-center gap-2 mb-3">
+                    <Clock className="h-4 w-4 text-primary" />
+                    Data Range
+                  </h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between py-1.5 border-b border-border/30">
+                      <span className="text-muted-foreground">Train Start</span>
+                      <span className="font-mono text-xs">{model.train_start_ts ? new Date(model.train_start_ts).toLocaleDateString() : 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between py-1.5 border-b border-border/30">
+                      <span className="text-muted-foreground">Train End</span>
+                      <span className="font-mono text-xs">{model.train_end_ts ? new Date(model.train_end_ts).toLocaleDateString() : 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between py-1.5 border-b border-border/30">
+                      <span className="text-muted-foreground">Val Start</span>
+                      <span className="font-mono text-xs">{model.val_start_ts ? new Date(model.val_start_ts).toLocaleDateString() : 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between py-1.5">
+                      <span className="text-muted-foreground">Val End</span>
+                      <span className="font-mono text-xs">{model.val_end_ts ? new Date(model.val_end_ts).toLocaleDateString() : 'N/A'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* XGBoost Config */}
+                <div className="p-4 rounded-lg border border-border/50 bg-card/50">
+                  <h4 className="text-sm font-semibold flex items-center gap-2 mb-3">
+                    <Cpu className="h-4 w-4 text-primary" />
+                    XGBoost Hyperparameters
+                  </h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between py-1.5 border-b border-border/30">
+                      <span className="text-muted-foreground">Objective</span>
+                      <span className="font-mono text-xs">{model.xgb_objective ?? 'N/A'}</span>
+                    </div>
+                    {model.xgb_objective === 'reg:quantileerror' && (
+                      <div className="flex justify-between py-1.5 border-b border-border/30">
+                        <span className="text-muted-foreground">Quantile Alpha</span>
+                        <span className="font-mono">{model.xgb_quantile_alpha?.toFixed(2) ?? 'N/A'}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between py-1.5 border-b border-border/30">
+                      <span className="text-muted-foreground">Max Depth</span>
+                      <span className="font-mono">{model.xgb_max_depth ?? 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between py-1.5 border-b border-border/30">
+                      <span className="text-muted-foreground">Learning Rate (η)</span>
+                      <span className="font-mono">{model.xgb_eta?.toFixed(4) ?? 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between py-1.5 border-b border-border/30">
+                      <span className="text-muted-foreground">Num Rounds</span>
+                      <span className="font-mono">{model.xgb_n_rounds ?? 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between py-1.5 border-b border-border/30">
+                      <span className="text-muted-foreground">Subsample</span>
+                      <span className="font-mono">{model.xgb_subsample?.toFixed(2) ?? 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between py-1.5 border-b border-border/30">
+                      <span className="text-muted-foreground">Colsample Bytree</span>
+                      <span className="font-mono">{model.xgb_colsample_bytree?.toFixed(2) ?? 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between py-1.5 border-b border-border/30">
+                      <span className="text-muted-foreground">Lambda (L2)</span>
+                      <span className="font-mono">{model.xgb_lambda?.toFixed(4) ?? 'N/A'}</span>
+                    </div>
+                    <div className="flex justify-between py-1.5">
+                      <span className="text-muted-foreground">Min Child Weight</span>
+                      <span className="font-mono">{model.xgb_min_child_weight ?? 'N/A'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : !trainResult ? (
+              <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm">
+                Legacy model - training configuration not tracked. Re-deploy via "Deploy Model" to see parameters.
+              </div>
+            ) : null}
+
+            {/* Training Result Stats */}
+            {trainResult && (
+              <div className="grid md:grid-cols-4 gap-4">
+                <div className="p-3 rounded-lg border border-border/50 bg-card/50 text-center">
+                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Best Iteration</div>
+                  <div className="font-mono text-lg font-bold">{trainResult.best_iteration ?? 'N/A'}</div>
+                </div>
+                <div className="p-3 rounded-lg border border-border/50 bg-card/50 text-center">
+                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Best Score</div>
+                  <div className="font-mono text-lg font-bold">{trainResult.best_score?.toFixed(6) ?? 'N/A'}</div>
+                </div>
+                <div className="p-3 rounded-lg border border-border/50 bg-card/50 text-center">
+                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Val Samples</div>
+                  <div className="font-mono text-lg font-bold">{trainResult.val_samples ?? trainResult.validation_samples ?? 'N/A'}</div>
+                </div>
+                <div className="p-3 rounded-lg border border-border/50 bg-card/50 text-center">
+                  <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Model Size</div>
+                  <div className="font-mono text-lg font-bold">
+                    {trainResult.model_size_bytes ? `${(trainResult.model_size_bytes / 1024).toFixed(0)} KB` : 'N/A'}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Thresholds from Training */}
+            {trainResult?.thresholds && (
+              <div className="p-4 rounded-lg border border-border/50 bg-card/50">
+                <h4 className="text-sm font-semibold flex items-center gap-2 mb-3">
+                  <Target className="h-4 w-4 text-primary" />
+                  Trained Thresholds
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Long Optimal</div>
+                    <div className="font-mono text-sm text-emerald-400">{trainResult.thresholds.long_optimal?.toFixed(6) ?? 'N/A'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Short Optimal</div>
+                    <div className="font-mono text-sm text-red-400">{trainResult.thresholds.short_optimal?.toFixed(6) ?? 'N/A'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Long P95</div>
+                    <div className="font-mono text-sm">{trainResult.thresholds.long_percentile_95?.toFixed(6) ?? 'N/A'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Short P5</div>
+                    <div className="font-mono text-sm">{trainResult.thresholds.short_percentile_05?.toFixed(6) ?? 'N/A'}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MAIN LIVE MODEL PAGE COMPONENT
+// ═══════════════════════════════════════════════════════════════════════════════
 
 const LiveModelPage = () => {
   const { cachedRuns } = useRunsContext();
@@ -47,7 +1009,6 @@ const LiveModelPage = () => {
   const { data: activeModel, isLoading: activeModelLoading, isError: activeModelError } = useActiveModel();
   const { data: liveModels = [], isLoading: liveModelsLoading } = useLiveModels();
   const activateModel = useActivateModel();
-  const retrainModel = useRetrainModel();
   const deactivateModel = useDeactivateModel();
   const deleteModel = useDeleteModel();
   const updateThresholds = useUpdateThresholds();
@@ -60,7 +1021,9 @@ const LiveModelPage = () => {
   const attachExecutor = useAttachExecutor();
   const updateExecutor = useUpdateExecutor();
   const detachExecutor = useDetachExecutor();
-  const undeployModel = useUndeployModel();
+
+  // Model cards horizontal scroll
+  const modelCardsRef = useRef<HTMLDivElement>(null);
 
   // Map of matured target values from /ws/live WebSocket events (legacy target_matured events)
   const maturedTargetsByStreamTs = useMemo(() => {
@@ -72,17 +1035,14 @@ const LiveModelPage = () => {
   }, [liveTargets]);
 
   // Map of extracted targets from indicator snapshots
-  // Key: streamId:targetName:predictionTs -> value
-  // This is the primary source of real-time target updates
-  // Target name is included in key because different models may use different targets
   const extractedTargetsByKey = useMemo(() => {
     const map = new Map<string, number>();
     maturedTargets.forEach((t) => {
-      // Key includes targetName for multi-model/multi-target support
       map.set(`${t.streamId}:${t.targetName}:${t.predictionTs}`, t.value);
     });
     return map;
   }, [maturedTargets]);
+
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [longThresholdInput, setLongThresholdInput] = useState<string>('');
   const [shortThresholdInput, setShortThresholdInput] = useState<string>('');
@@ -115,6 +1075,8 @@ const LiveModelPage = () => {
   }, [activeModel?.long_threshold, activeModel?.short_threshold]);
 
   const metricsModelId = selectedModelId || activeModel?.model_id || null;
+  const selectedModel = liveModels.find((m) => m.model_id === selectedModelId);
+
   const metricsQuery = useQuery({
     queryKey: ['kraken', 'metrics', metricsModelId],
     enabled: !!metricsModelId,
@@ -127,6 +1089,7 @@ const LiveModelPage = () => {
     },
     staleTime: 30_000,
   });
+
   const predictionsQuery = useQuery<{ ts_ms: number; prediction: number; long_threshold: number; short_threshold: number; feature_hash?: string; model_id?: string; actual?: number; matched?: boolean }[]>({
     queryKey: ['kraken', 'predictions', metricsModelId],
     enabled: !!metricsModelId,
@@ -154,13 +1117,10 @@ const LiveModelPage = () => {
     || (activeModel?.train_result as XGBoostTrainResult | undefined)
     || null;
   const horizonBars = metricsQuery.data?.target_horizon_bars ?? activeModel?.target_horizon_bars ?? 0;
-  // Target column name - known from model training metadata, used for looking up actual values
   const targetColumnName = baseTrainResult?.target_column ?? null;
   const metricsError = metricsQuery.error instanceof Error ? metricsQuery.error.message : null;
 
   const combinedPredictions = useMemo(() => {
-    // Use a Map to deduplicate by timestamp - historical (REST) predictions take priority
-    // since they come from the backend's prediction buffer with proper transform and actual values
     const predMap = new Map<number, {
       modelId: string;
       streamId: string;
@@ -168,10 +1128,9 @@ const LiveModelPage = () => {
       prediction: number;
       longThreshold: number;
       shortThreshold: number;
-      actual?: number;  // Calculated from OHLCV by backend for matured predictions
+      actual?: number;
     }>();
 
-    // Add historical predictions first (these are authoritative, include actual values from API)
     predictionsQuery.data
       ?.filter((p) => !metricsModelId || p.model_id === metricsModelId)
       .forEach((p) => {
@@ -182,11 +1141,10 @@ const LiveModelPage = () => {
           prediction: p.prediction,
           longThreshold: p.long_threshold,
           shortThreshold: p.short_threshold,
-          actual: p.actual,  // Backend calculates this from OHLCV: close[T+horizon] - close[T]
+          actual: p.actual,
         });
       });
 
-    // Add live predictions only if not already present (avoid overwriting historical)
     livePredictions
       .filter((p) => !metricsModelId || p.modelId === metricsModelId)
       .forEach((p) => {
@@ -198,13 +1156,10 @@ const LiveModelPage = () => {
             prediction: p.prediction,
             longThreshold: p.longThreshold,
             shortThreshold: p.shortThreshold,
-            // No actual for live predictions - they're too recent to have matured
           });
         }
       });
 
-    // Fill in actuals from extracted targets for predictions that don't have API actuals
-    // Uses explicit target column name from model training metadata (no guessing)
     if (targetColumnName) {
       for (const [ts, pred] of predMap) {
         if (pred.actual === undefined) {
@@ -221,821 +1176,188 @@ const LiveModelPage = () => {
       .slice(0, 50);
   }, [activeModel?.stream_id, extractedTargetsByKey, livePredictions, metricsModelId, predictionsQuery.data, targetColumnName]);
 
-  // Build trainResult with live predictions as "test" data for FoldResults visualization
-  // Only include predictions that have matured actuals
   const trainResult = useMemo(() => {
     if (!baseTrainResult) return null;
-
-    // Extract predictions with actuals from combinedPredictions (these are live predictions)
     const liveWithActuals = combinedPredictions.filter((p) => p.actual !== undefined);
+    if (liveWithActuals.length === 0) return baseTrainResult;
 
-    if (liveWithActuals.length === 0) {
-      // No live actuals yet, return base result (will show "awaiting predictions")
-      return baseTrainResult;
-    }
-
-    // Populate test arrays from live data
     const testPredictions = liveWithActuals.map((p) => p.prediction);
     const testActuals = liveWithActuals.map((p) => p.actual as number);
     const testTimestamps = liveWithActuals.map((p) => p.ts);
 
     return {
       ...baseTrainResult,
-      predictions: {
-        ...baseTrainResult.predictions,
-        test: testPredictions,
-      },
-      actuals: {
-        ...baseTrainResult.actuals,
-        test: testActuals,
-      },
-      timestamps: {
-        ...baseTrainResult.timestamps,
-        test: testTimestamps,
-      },
+      predictions: { ...baseTrainResult.predictions, test: testPredictions },
+      actuals: { ...baseTrainResult.actuals, test: testActuals },
+      timestamps: { ...baseTrainResult.timestamps, test: testTimestamps },
     };
   }, [baseTrainResult, combinedPredictions]);
 
+  // Count stats
+  const activeModelsCount = liveModels.filter(m => m.status === 'active').length;
+  const tradingModelsCount = liveModels.filter(m => m.has_executor && m.executor_enabled).length;
+
   return (
-    <div className="p-6 space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Activity className="h-6 w-6 text-primary" />
-          <div>
-            <h1 className="text-2xl font-semibold">Live Model</h1>
-            <p className="text-sm text-muted-foreground">Activate and monitor the current live trading model</p>
+    <div className="min-h-screen">
+      {/* ═══════════════════════════════════════════════════════════════════════════════ */}
+      {/* HEADER */}
+      {/* ═══════════════════════════════════════════════════════════════════════════════ */}
+      <div className="border-b border-border/50">
+        <div className="px-6 py-6">
+          {/* Top Row: Title + Go Live */}
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-3">
+              <Activity className="h-5 w-5 text-primary" />
+              <div>
+                <h1 className="text-xl font-semibold">Live Models</h1>
+                <p className="text-xs text-muted-foreground">
+                  Deploy and monitor production ML models
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {/* Quick Stats */}
+              <div className="hidden md:flex items-center gap-3 mr-2 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                  <span className="font-mono text-emerald-400">{activeModelsCount}</span>
+                  <span className="text-muted-foreground">active</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Zap className="h-3 w-3 text-primary" />
+                  <span className="font-mono text-primary">{tradingModelsCount}</span>
+                  <span className="text-muted-foreground">trading</span>
+                </div>
+              </div>
+
+              {/* Run Selector + Go Live */}
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedRunId}
+                  onChange={(e) => setSelectedRunId(e.target.value)}
+                  disabled={runList.length === 0}
+                  className="h-9 px-3 rounded-md bg-muted border border-border text-sm font-mono focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+                >
+                  {runList.length === 0 ? (
+                    <option>Load run in Walkforward</option>
+                  ) : (
+                    runList.map((run) => (
+                      <option key={run.run_id} value={run.run_id}>
+                        {run.run_id.slice(0, 8)}… ({run.dataset_id})
+                      </option>
+                    ))
+                  )}
+                </select>
+                <Button
+                  onClick={() => setModalOpen(true)}
+                  disabled={!selectedRun}
+                  size="sm"
+                  className="h-9"
+                >
+                  <Rocket className="h-3.5 w-3.5 mr-1.5" />
+                  Deploy
+                </Button>
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          {hasActiveModel && (
-            <Badge variant="default" className="bg-green-600">
-              Model Active
-            </Badge>
-          )}
-          <Select
-            value={selectedRunId}
-            onValueChange={(value) => setSelectedRunId(value)}
-            disabled={runList.length === 0}
-          >
-            <SelectTrigger className="w-[240px]">
-              <SelectValue placeholder={runList.length === 0 ? 'Load a run in Walkforward' : 'Select run'} />
-            </SelectTrigger>
-            <SelectContent>
-              {runList.map((run) => (
-                <SelectItem key={run.run_id} value={run.run_id}>
-                  {run.run_id.slice(0, 8)}… ({run.dataset_id})
-                </SelectItem>
+
+          {/* MODEL CARDS - Responsive Grid */}
+          {liveModelsLoading ? (
+            <div className="flex items-center justify-center gap-3 py-12">
+              <div className="relative">
+                <div className="h-10 w-10 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+                <Cpu className="absolute inset-0 m-auto h-4 w-4 text-primary" />
+              </div>
+              <span className="text-sm text-muted-foreground font-medium">Loading models...</span>
+            </div>
+          ) : liveModels.length === 0 ? (
+            <div className="py-12 text-center">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-muted/50 border border-border/50 mb-4">
+                <Rocket className="h-7 w-7 text-muted-foreground" />
+              </div>
+              <h3 className="text-base font-semibold mb-1">No models deployed</h3>
+              <p className="text-sm text-muted-foreground">
+                Select a run from the dropdown and click Deploy to get started.
+              </p>
+            </div>
+          ) : (
+            <div
+              ref={modelCardsRef}
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+            >
+              {liveModels.map((model) => (
+                <ModelCard
+                  key={model.model_id}
+                  model={model}
+                  isSelected={selectedModelId === model.model_id}
+                  isActive={model.status === 'active'}
+                  onSelect={() => setSelectedModelId(model.model_id)}
+                  onActivate={() => activateModel.mutate(model.model_id)}
+                  onDeactivate={() => deactivateModel.mutate(model.model_id)}
+                  onDelete={() => deleteModel.mutate(model.model_id)}
+                  onAttachExecutor={() => {
+                    setExecutorTargetModel(model);
+                    setExecutorModalMode('attach');
+                    setExecutorModalOpen(true);
+                  }}
+                  onConfigExecutor={() => {
+                    setExecutorTargetModel(model);
+                    setExecutorModalMode('update');
+                    setExecutorModalOpen(true);
+                  }}
+                  onDetachExecutor={() => {
+                    if (window.confirm(`Detach executor from ${model.model_id.slice(0, 8)}…?`)) {
+                      detachExecutor.mutate(model.model_id);
+                    }
+                  }}
+                  isPending={activateModel.isPending || deactivateModel.isPending || deleteModel.isPending}
+                />
               ))}
-            </SelectContent>
-          </Select>
-          <Button onClick={() => setModalOpen(true)} disabled={!selectedRun}>
-            Go Live
-          </Button>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Tabs for different views */}
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList>
-          <TabsTrigger value="overview" className="flex items-center gap-2">
-            <Info className="h-4 w-4" />
-            Overview
-          </TabsTrigger>
-          <TabsTrigger value="performance" className="flex items-center gap-2">
-            <BarChart3 className="h-4 w-4" />
-            Model Performance
-          </TabsTrigger>
-          <TabsTrigger value="config" className="flex items-center gap-2">
-            <Settings className="h-4 w-4" />
-            Configuration
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Overview Tab */}
-        <TabsContent value="overview" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <ActiveModelCard />
-            <Card>
-              <CardHeader>
-                <CardTitle>Quick Start</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground space-y-2">
-                <p>1. Load a run in <strong>Walkforward Pilot</strong> first - it will appear in the selector above.</p>
-                <p>2. Select the run and click <strong>Go Live</strong>.</p>
-                <p>3. The system validates that the run's features are available in the live indicator buffer.</p>
-                <p>4. Refresh metrics to see how the model performs on today's data.</p>
-              </CardContent>
-            </Card>
+      {/* ═══════════════════════════════════════════════════════════════════════════════ */}
+      {/* MODEL DETAIL PANEL - Tabbed interface for selected model */}
+      {/* ═══════════════════════════════════════════════════════════════════════════════ */}
+      {selectedModelId && selectedModel ? (
+        <ModelDetailPanel
+          model={selectedModel}
+          metricsQuery={metricsQuery}
+          metricsError={metricsError}
+          trainResult={trainResult}
+          combinedPredictions={combinedPredictions}
+          horizonBars={horizonBars}
+          targetColumnName={targetColumnName}
+          extractedTargetsByKey={extractedTargetsByKey}
+          maturedTargetsByStreamTs={maturedTargetsByStreamTs}
+          longThresholdInput={longThresholdInput}
+          shortThresholdInput={shortThresholdInput}
+          setLongThresholdInput={setLongThresholdInput}
+          setShortThresholdInput={setShortThresholdInput}
+          updateThresholds={updateThresholds}
+          metricsModelId={metricsModelId}
+          onClose={() => setSelectedModelId(null)}
+        />
+      ) : liveModels.length > 0 ? (
+        <div className="p-6">
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="p-4 rounded-2xl bg-muted/50 mb-4">
+              <Eye className="h-10 w-10 text-muted-foreground" />
+            </div>
+            <h3 className="text-lg font-semibold mb-1">Select a model to view details</h3>
+            <p className="text-sm text-muted-foreground">
+              Click on any model card above to see its performance metrics and configuration
+            </p>
           </div>
+        </div>
+      ) : null}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Live Models</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {liveModelsLoading ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading models…
-                </div>
-              ) : liveModels.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No live models yet. Use Go Live to train the first one.</p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Executor</TableHead>
-                      <TableHead>Model</TableHead>
-                      <TableHead>Dataset</TableHead>
-                      <TableHead>Trained</TableHead>
-                      <TableHead>Next Retrain</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {liveModels.map((model) => (
-                      <TableRow key={model.model_id}>
-                        <TableCell>
-                          <Badge variant={model.status === 'active' ? 'default' : 'secondary'}>
-                            {model.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {model.has_executor ? (
-                            <Badge variant={model.executor_enabled ? 'default' : 'outline'} className={model.executor_enabled ? 'bg-green-600' : ''}>
-                              {model.executor_enabled ? 'Trading' : 'Paused'}
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-muted-foreground">
-                              Predict Only
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">{model.model_id.slice(0, 10)}…</TableCell>
-                        <TableCell className="font-mono text-xs">{model.dataset_id}</TableCell>
-                        <TableCell className="font-mono text-xs">
-                          {model.trained_at_ms ? new Date(model.trained_at_ms).toLocaleString() : '—'}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">
-                          {model.next_retrain_ms ? new Date(model.next_retrain_ms).toLocaleString() : '—'}
-                        </TableCell>
-                        <TableCell className="text-right space-x-1">
-                          <Button size="sm" variant="ghost" onClick={() => setSelectedModelId(model.model_id)}>
-                            View
-                          </Button>
-                          {model.status === 'active' ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => deactivateModel.mutate(model.model_id)}
-                              disabled={deactivateModel.isPending}
-                            >
-                              Deactivate
-                            </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => activateModel.mutate(model.model_id)}
-                              disabled={activateModel.isPending}
-                            >
-                              Activate
-                            </Button>
-                          )}
-                          {/* Executor Management */}
-                          {model.has_executor ? (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setExecutorTargetModel(model);
-                                  setExecutorModalMode('update');
-                                  setExecutorModalOpen(true);
-                                }}
-                              >
-                                Config
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-orange-600"
-                                onClick={() => {
-                                  if (window.confirm(`Detach executor from model ${model.model_id.slice(0, 8)}…? Open positions will continue to be managed.`)) {
-                                    detachExecutor.mutate(model.model_id);
-                                  }
-                                }}
-                                disabled={detachExecutor.isPending}
-                              >
-                                Detach
-                              </Button>
-                            </>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-green-600"
-                              onClick={() => {
-                                setExecutorTargetModel(model);
-                                setExecutorModalMode('attach');
-                                setExecutorModalOpen(true);
-                              }}
-                            >
-                              Attach Executor
-                            </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-destructive"
-                            onClick={() => {
-                              if (window.confirm(`Delete model ${model.model_id}?`)) {
-                                deleteModel.mutate(model.model_id);
-                              }
-                            }}
-                            disabled={deleteModel.isPending}
-                          >
-                            Delete
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Show basic metrics if we have an active model */}
-          {hasActiveModel && (
-            <div className="grid gap-4 md:grid-cols-4">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-xs text-muted-foreground">Long Threshold</div>
-                  <div className="text-xl font-mono font-semibold text-green-600">
-                    {activeModel.long_threshold?.toFixed(4) ?? 'N/A'}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-xs text-muted-foreground">Short Threshold</div>
-                  <div className="text-xl font-mono font-semibold text-red-600">
-                    {activeModel.short_threshold?.toFixed(4) ?? 'N/A'}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-xs text-muted-foreground">Best Score</div>
-                  <div className="text-xl font-mono font-semibold">
-                    {activeModel.best_score?.toExponential(4) ?? 'N/A'}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-xs text-muted-foreground">Trained At</div>
-                  <div className="text-sm font-mono">
-                    {activeModel.trained_at_ms ? new Date(activeModel.trained_at_ms).toLocaleString() : 'N/A'}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
-
-          {!hasActiveModel && !activeModelLoading && (
-            <Card>
-              <CardContent className="p-8 text-center text-muted-foreground">
-                <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No active model deployed yet.</p>
-                <p className="text-sm mt-2">Select a run and click "Go Live" to deploy a model.</p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        {/* Model Performance Tab - Uses FoldResults for rich visualizations */}
-        <TabsContent value="performance" className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-semibold">Live Performance</h3>
-              <p className="text-sm text-muted-foreground">
-                Evaluate model predictions against actual outcomes using the latest trained model
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Select
-                value={metricsModelId ?? undefined}
-                onValueChange={(value) => setSelectedModelId(value)}
-                disabled={liveModels.length === 0}
-              >
-                <SelectTrigger className="w-[220px]">
-                  <SelectValue placeholder="Select model" />
-                </SelectTrigger>
-                <SelectContent>
-                  {liveModels.map((m) => (
-                    <SelectItem key={m.model_id} value={m.model_id}>
-                      {m.model_id.slice(0, 8)}… ({m.status})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            <Button
-              onClick={() => metricsQuery.refetch()}
-              disabled={!metricsModelId || metricsQuery.isFetching}
-              variant="outline"
-            >
-              {metricsQuery.isFetching ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Refreshing…
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Refresh Metrics
-                </>
-              )}
-            </Button>
-            </div>
-          </div>
-
-          {metricsError && (
-            <Card className="border-destructive">
-              <CardContent className="p-4 text-destructive">
-                {metricsError}
-              </CardContent>
-            </Card>
-          )}
-
-          {metricsModelId && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Adjust Live Thresholds</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-3 md:grid-cols-3 items-end">
-                <div className="space-y-2">
-                  <div className="text-xs text-muted-foreground">Long Threshold</div>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={longThresholdInput}
-                    onChange={(e) => setLongThresholdInput(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <div className="text-xs text-muted-foreground">Short Threshold</div>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={shortThresholdInput}
-                    onChange={(e) => setShortThresholdInput(e.target.value)}
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={() => {
-                      const longVal = parseFloat(longThresholdInput);
-                      const shortVal = parseFloat(shortThresholdInput);
-                      if (Number.isNaN(longVal) || Number.isNaN(shortVal)) {
-                        toast({ title: 'Invalid thresholds', description: 'Enter numeric values', variant: 'destructive' });
-                        return;
-                      }
-                      updateThresholds.mutate({ modelId: metricsModelId, longThreshold: longVal, shortThreshold: shortVal });
-                    }}
-                    disabled={updateThresholds.isPending}
-                  >
-                    {updateThresholds.isPending ? 'Applying…' : 'Apply to Live Model'}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Backend Live Metrics - from recompute-from-scratch calculation */}
-          {metricsQuery.data?.live_metrics && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5" />
-                  Live Performance Metrics (Backend)
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Sample Count</p>
-                    <p className="text-lg font-semibold">{metricsQuery.data.live_metrics.sample_count ?? 0}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Directional Accuracy</p>
-                    <p className="text-lg font-semibold text-primary">
-                      {metricsQuery.data.live_metrics.directional_accuracy != null
-                        ? ((metricsQuery.data.live_metrics.directional_accuracy * 100).toFixed(1) + '%')
-                        : 'N/A'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">ROC AUC (Mann-Whitney)</p>
-                    <p className="text-lg font-semibold text-primary">
-                      {metricsQuery.data.live_metrics.roc_auc != null &&
-                       typeof metricsQuery.data.live_metrics.roc_auc === 'number' &&
-                       metricsQuery.data.live_metrics.roc_auc >= 0
-                        ? metricsQuery.data.live_metrics.roc_auc.toFixed(3)
-                        : 'N/A (need 5+ per class)'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">MAE</p>
-                    <p className="text-lg font-semibold">
-                      {metricsQuery.data.live_metrics.mae != null
-                        ? metricsQuery.data.live_metrics.mae.toFixed(2)
-                        : 'N/A'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">MSE</p>
-                    <p className="text-lg font-semibold">
-                      {metricsQuery.data.live_metrics.mse != null
-                        ? metricsQuery.data.live_metrics.mse.toFixed(2)
-                        : 'N/A'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">R²</p>
-                    <p className="text-lg font-semibold">
-                      {metricsQuery.data.live_metrics.r2 != null
-                        ? metricsQuery.data.live_metrics.r2.toFixed(4)
-                        : 'N/A'}
-                    </p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t">
-                  <div>
-                    <p className="text-xs text-muted-foreground">True Positives</p>
-                    <p className="text-lg font-mono text-green-600">{metricsQuery.data.live_metrics.true_positives ?? 0}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">False Positives</p>
-                    <p className="text-lg font-mono text-red-600">{metricsQuery.data.live_metrics.false_positives ?? 0}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">True Negatives</p>
-                    <p className="text-lg font-mono text-green-600">{metricsQuery.data.live_metrics.true_negatives ?? 0}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">False Negatives</p>
-                    <p className="text-lg font-mono text-red-600">{metricsQuery.data.live_metrics.false_negatives ?? 0}</p>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground mt-3">
-                  Metrics recomputed from scratch on each indicator event. ROC AUC uses Mann-Whitney U (requires 5+ samples per class).
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          {trainResult ? (
-            <FoldResults
-              result={trainResult}
-              isLoading={metricsQuery.isFetching}
-              error={metricsError}
-            />
-          ) : (
-            <Card>
-              <CardContent className="p-8 text-center text-muted-foreground">
-                <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>No performance data loaded yet.</p>
-                <p className="text-sm mt-2">
-                  Select a model and refresh metrics to evaluate the latest live performance.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Recent Predictions</CardTitle>
-                {metricsModelId && (
-                  <Badge variant="outline" className="font-mono text-xs">
-                    {metricsModelId.slice(0, 10)}…
-                  </Badge>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="text-sm">
-              {horizonBars > 0 && (
-                <div className="text-xs text-muted-foreground mb-2">
-                  Target horizon: {horizonBars} bars. Actuals shown only for predictions older than this.
-                </div>
-              )}
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Model</TableHead>
-                    <TableHead>Timestamp</TableHead>
-                    <TableHead>Prediction</TableHead>
-                    <TableHead>Actual</TableHead>
-                    <TableHead>Trigger</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {combinedPredictions.map((p) => {
-                    // Display actual timestamp - no rounding/faking
-                    const barStartDisplay = new Date(p.ts);
-                    // Lookup actual value using explicit target column name (no guessing)
-                    // Priority: API actual > extracted targets (by targetName) > legacy matured events
-                    const actual =
-                      p.actual ??
-                      (targetColumnName ? extractedTargetsByKey.get(`${p.streamId}:${targetColumnName}:${p.ts}`) : undefined) ??
-                      maturedTargetsByStreamTs.get(`${p.streamId}:${p.ts}`) ??
-                      null;
-                    let trigger: string | null = null;
-                    if (p.longThreshold !== undefined && p.prediction > p.longThreshold) {
-                      trigger = 'LONG';
-                    } else if (p.shortThreshold !== undefined && p.prediction < p.shortThreshold) {
-                      trigger = 'SHORT';
-                    }
-                    const isActiveModel = liveModels.find((m) => m.model_id === p.modelId)?.status === 'active';
-                    return (
-                      <TableRow key={`${p.modelId}-${p.ts}`}>
-                        <TableCell className="font-mono text-xs">
-                          <div className="flex items-center gap-1">
-                            {isActiveModel && <span className="w-2 h-2 rounded-full bg-green-500" title="Active" />}
-                            {p.modelId.slice(0, 8)}…
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">{barStartDisplay.toLocaleString()}</TableCell>
-                        <TableCell className="font-mono text-xs">{Math.abs(p.prediction) < 0.01 ? p.prediction.toExponential(2) : p.prediction.toFixed(4)}</TableCell>
-                        <TableCell className="font-mono text-xs">{actual != null ? actual.toFixed(2) : '—'}</TableCell>
-                        <TableCell>
-                          {trigger ? (
-                            <Badge variant={trigger === 'LONG' ? 'default' : 'destructive'}>{trigger}</Badge>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Configuration Tab */}
-        <TabsContent value="config" className="space-y-4">
-          {/* Deployed Model Configuration Section */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-semibold">Deployed Model Configuration</h3>
-              <p className="text-sm text-muted-foreground">
-                View training parameters for deployed models
-              </p>
-            </div>
-            <Select
-              value={selectedModelId ?? undefined}
-              onValueChange={(value) => setSelectedModelId(value)}
-              disabled={liveModels.length === 0}
-            >
-              <SelectTrigger className="w-[280px]">
-                <SelectValue placeholder={liveModels.length === 0 ? 'No deployed models' : 'Select deployed model'} />
-              </SelectTrigger>
-              <SelectContent>
-                {liveModels.map((m) => (
-                  <SelectItem key={m.model_id} value={m.model_id}>
-                    {m.model_id.slice(0, 8)}… ({m.dataset_id}) {m.status === 'active' && '✓'}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Training Configuration for selected deployed model */}
-          {(() => {
-            const selectedModel = liveModels.find((m) => m.model_id === selectedModelId);
-            if (!selectedModel) {
-              return (
-                <Card>
-                  <CardContent className="p-8 text-center text-muted-foreground">
-                    <Settings className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>Select a deployed model to view its training configuration.</p>
-                  </CardContent>
-                </Card>
-              );
-            }
-
-            const hasTrainingConfig = selectedModel.train_size && selectedModel.train_size > 0;
-
-            if (!hasTrainingConfig) {
-              return (
-                <Card className="border-yellow-500/50 bg-yellow-500/5">
-                  <CardContent className="p-4">
-                    <p className="text-sm text-yellow-600 dark:text-yellow-400">
-                      ⚠️ Legacy model - training configuration not tracked. Re-deploy via "Go Live" to see actual training parameters.
-                    </p>
-                  </CardContent>
-                </Card>
-              );
-            }
-
-            return (
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-base">Training Configuration</CardTitle>
-                      <p className="text-xs text-muted-foreground">
-                        Actual parameters used during model training
-                      </p>
-                    </div>
-                    <Badge variant={selectedModel.status === 'active' ? 'default' : 'secondary'}>
-                      {selectedModel.status}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid gap-4 md:grid-cols-3">
-                    {/* Training Window */}
-                    <div className="space-y-2">
-                      <h4 className="text-sm font-semibold">Training Window</h4>
-                      <div className="space-y-1 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Train Size</span>
-                          <span className="font-mono">{selectedModel.train_size} bars</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Train/Val Gap</span>
-                          <span className="font-mono">{selectedModel.train_test_gap} bars</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Val Split Ratio</span>
-                          <span className="font-mono">{(selectedModel.val_split_ratio ?? 0).toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Target Horizon</span>
-                          <span className="font-mono">{selectedModel.target_horizon_bars ?? 'N/A'} bars</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Training Timestamps */}
-                    <div className="space-y-2">
-                      <h4 className="text-sm font-semibold">Training Data Range</h4>
-                      <div className="space-y-1 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Train Start</span>
-                          <span className="font-mono text-xs">
-                            {selectedModel.train_start_ts ? new Date(selectedModel.train_start_ts).toLocaleString() : 'N/A'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Train End</span>
-                          <span className="font-mono text-xs">
-                            {selectedModel.train_end_ts ? new Date(selectedModel.train_end_ts).toLocaleString() : 'N/A'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Val Start</span>
-                          <span className="font-mono text-xs">
-                            {selectedModel.val_start_ts ? new Date(selectedModel.val_start_ts).toLocaleString() : 'N/A'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Val End</span>
-                          <span className="font-mono text-xs">
-                            {selectedModel.val_end_ts ? new Date(selectedModel.val_end_ts).toLocaleString() : 'N/A'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* XGBoost Config */}
-                    <div className="space-y-2">
-                      <h4 className="text-sm font-semibold">XGBoost Hyperparameters</h4>
-                      <div className="space-y-1 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Objective</span>
-                          <span className="font-mono">{selectedModel.xgb_objective ?? 'N/A'}</span>
-                        </div>
-                        {selectedModel.xgb_objective === 'reg:quantileerror' && (
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Quantile Alpha</span>
-                            <span className="font-mono">{selectedModel.xgb_quantile_alpha?.toFixed(2) ?? 'N/A'}</span>
-                          </div>
-                        )}
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Max Depth</span>
-                          <span className="font-mono">{selectedModel.xgb_max_depth ?? 'N/A'}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Learning Rate</span>
-                          <span className="font-mono">{selectedModel.xgb_eta?.toFixed(4) ?? 'N/A'}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Subsample</span>
-                          <span className="font-mono">{selectedModel.xgb_subsample?.toFixed(2) ?? 'N/A'}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Num Rounds</span>
-                          <span className="font-mono">{selectedModel.xgb_n_rounds ?? 'N/A'}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })()}
-
-          {/* Run to Deploy Section */}
-          <div className="pt-4 border-t">
-            <h3 className="text-lg font-semibold mb-4">Run to Deploy</h3>
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Selected Run Details</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  {selectedRun ? (
-                    <>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Run ID</span>
-                        <span className="font-mono text-xs">{selectedRun.run_id}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Dataset</span>
-                        <span className="font-mono text-xs">{selectedRun.dataset_id}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Target</span>
-                        <span className="font-mono text-xs">{String(selectedRun.target_column)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Features</span>
-                        <span className="font-mono text-xs">
-                          {Array.isArray(selectedRun.feature_columns)
-                            ? `${selectedRun.feature_columns.length} features`
-                            : 'N/A'}
-                        </span>
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-muted-foreground">No run selected</p>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>API Endpoints</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm font-mono">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Go Live</span>
-                    <span className="text-xs">POST /api/live/go</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Active Model</span>
-                    <span className="text-xs">GET /api/live/active_model</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Models</span>
-                    <span className="text-xs">GET /api/live/models</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Metrics</span>
-                    <span className="text-xs">GET /api/live/models/:id/metrics</span>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-
-          {/* Feature list if run is selected */}
-          {selectedRun && Array.isArray(selectedRun.feature_columns) && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Feature Columns</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {selectedRun.feature_columns.map((feature, idx) => (
-                    <Badge key={idx} variant="secondary" className="font-mono text-xs">
-                      {feature}
-                    </Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-      </Tabs>
-
+      {/* ═══════════════════════════════════════════════════════════════════════════════ */}
+      {/* MODALS */}
+      {/* ═══════════════════════════════════════════════════════════════════════════════ */}
       <GoLiveModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -1055,22 +1377,12 @@ const LiveModelPage = () => {
           if (executorModalMode === 'attach') {
             attachExecutor.mutate(
               { modelId: executorTargetModel.model_id, config },
-              {
-                onSuccess: () => {
-                  setExecutorModalOpen(false);
-                  setExecutorTargetModel(null);
-                },
-              }
+              { onSuccess: () => { setExecutorModalOpen(false); setExecutorTargetModel(null); } }
             );
           } else {
             updateExecutor.mutate(
               { modelId: executorTargetModel.model_id, config },
-              {
-                onSuccess: () => {
-                  setExecutorModalOpen(false);
-                  setExecutorTargetModel(null);
-                },
-              }
+              { onSuccess: () => { setExecutorModalOpen(false); setExecutorTargetModel(null); } }
             );
           }
         }}
@@ -1078,12 +1390,6 @@ const LiveModelPage = () => {
         isSubmitting={attachExecutor.isPending || updateExecutor.isPending}
         mode={executorModalMode}
       />
-
-      {runList.length === 0 && (
-        <div className="text-sm text-muted-foreground text-center p-4">
-          No runs cached yet. Load a saved run from the Walkforward Pilot to enable Go Live.
-        </div>
-      )}
     </div>
   );
 };
