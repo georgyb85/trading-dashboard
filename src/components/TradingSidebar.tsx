@@ -17,6 +17,7 @@ import {
   LineChart,
   LayoutDashboard,
   HeartPulse,
+  ScrollText,
 } from "lucide-react";
 
 const navigationItems = [
@@ -87,7 +88,7 @@ const navigationItems = [
     description: "Performance reports"
   },
   {
-    title: "Market Data",
+    title: "Indicators",
     url: "/market-data",
     icon: LineChart,
     description: "Indicators & data export"
@@ -116,6 +117,12 @@ const navigationItems = [
     icon: Brain,
     description: "Activate and monitor live model"
   },
+  {
+    title: "Audit & Logs",
+    url: "/audit-logs",
+    icon: ScrollText,
+    description: "Operational events for debugging"
+  },
 ];
 
 export function TradingSidebar() {
@@ -124,7 +131,8 @@ export function TradingSidebar() {
 
   const isActive = (path: string) => {
     if (path === "/") return currentPath === "/";
-    return currentPath.startsWith(path);
+    // Ensure exact segment match to prevent /market matching /market-data
+    return currentPath === path || currentPath.startsWith(path + "/");
   };
 
   return (

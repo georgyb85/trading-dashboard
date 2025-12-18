@@ -1,203 +1,374 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useMemo } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ClipboardList, WifiOff, Loader2, TrendingUp, TrendingDown, X, History, ChevronDown, ChevronRight, Clock } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Wifi,
+  WifiOff,
+  Loader2,
+  TrendingUp,
+  TrendingDown,
+  X,
+  Send,
+  CheckCircle2,
+  XCircle,
+  CircleDot,
+  FileDown,
+  Eye,
+} from "lucide-react";
 import { useAccountState } from "@/hooks/useAccountState";
-import { useMemo, useState } from "react";
-import { OrderEntry } from "@/types/account";
+import { useStatusStream } from "@/hooks/useStatusStream";
+
+// Order status type
+type OrderStatus = "Filled" | "Open" | "Rejected" | "Cancelled";
+
+// Order interface
+interface Order {
+  id: string;
+  status: OrderStatus;
+  clientOrderId: string;
+  exchange: string;
+  symbol: string;
+  side: "Buy" | "Sell";
+  type: "Limit" | "Market" | "Stop";
+  quantity: string;
+  price: string | null;
+  time: string;
+}
+
+// Mock data for non-Kraken exchanges
+const mockOrders: Order[] = [
+  {
+    id: "m1",
+    status: "Filled",
+    clientOrderId: "clOrdId_123abc",
+    exchange: "Binance",
+    symbol: "BTC-USD",
+    side: "Buy",
+    type: "Limit",
+    quantity: "1.5 BTC",
+    price: "$60,000.00",
+    time: "2023-10-27 14:30:45.123",
+  },
+  {
+    id: "m2",
+    status: "Open",
+    clientOrderId: "clOrdId_456def",
+    exchange: "Coinbase",
+    symbol: "ETH-USD",
+    side: "Sell",
+    type: "Limit",
+    quantity: "10 ETH",
+    price: "$4,100.00",
+    time: "2023-10-27 14:29:10.567",
+  },
+  {
+    id: "m3",
+    status: "Open",
+    clientOrderId: "clOrdId_456def",
+    exchange: "Coinbase",
+    symbol: "ETH-USD",
+    side: "Buy",
+    type: "Limit",
+    quantity: "10 ETH",
+    price: "$4,100.00",
+    time: "2023-10-27 14:29:10.567",
+  },
+  {
+    id: "m4",
+    status: "Rejected",
+    clientOrderId: "clOrdId_456def",
+    exchange: "Kraken",
+    symbol: "SOL-USDT",
+    side: "Buy",
+    type: "Market",
+    quantity: "50 SOL",
+    price: "Market",
+    time: "2023-10-27 14:29:10.523",
+  },
+  {
+    id: "m5",
+    status: "Cancelled",
+    clientOrderId: "clOrdId_123abc",
+    exchange: "Binance",
+    symbol: "BTC-USD",
+    side: "Buy",
+    type: "Stop",
+    quantity: "1.5 SOL",
+    price: "$60,000.00",
+    time: "2023-10-27 14:30:45.123",
+  },
+  {
+    id: "m6",
+    status: "Open",
+    clientOrderId: "clOrdId_456def",
+    exchange: "Coinbase",
+    symbol: "ETH-USD",
+    side: "Sell",
+    type: "Limit",
+    quantity: "10 ETH",
+    price: "$4,100.00",
+    time: "2023-10-27 14:29:10.567",
+  },
+  {
+    id: "m7",
+    status: "Open",
+    clientOrderId: "clOrdId_456def",
+    exchange: "Coinbase",
+    symbol: "ETH-USD",
+    side: "Sell",
+    type: "Limit",
+    quantity: "10 ETH",
+    price: "$4,100.00",
+    time: "2023-10-27 14:29:10.567",
+  },
+  {
+    id: "m8",
+    status: "Rejected",
+    clientOrderId: "clOrdId_456def",
+    exchange: "Kraken",
+    symbol: "SOL-USDT",
+    side: "Sell",
+    type: "Stop",
+    quantity: "50 SOL",
+    price: "Market",
+    time: "2023-10-27 14:29:10.588",
+  },
+  {
+    id: "m9",
+    status: "Cancelled",
+    clientOrderId: "clOrdId_456def",
+    exchange: "Kraken",
+    symbol: "SOL-USDT",
+    side: "Buy",
+    type: "Market",
+    quantity: "50 SOL",
+    price: "$60,000.00",
+    time: "2023-10-27 14:29:10.567",
+  },
+];
+
+// Single stage node component
+function StageNode({
+  label,
+  color,
+  children
+}: {
+  label: string;
+  color: string;
+  children: React.ReactNode;
+}) {
+  const colorClasses: Record<string, string> = {
+    cyan: "bg-cyan-500/20 border-cyan-500 text-cyan-500",
+    red: "bg-red-400/20 border-red-400 text-red-400",
+    green: "bg-green-500/20 border-green-500 text-green-500",
+    yellow: "bg-yellow-500/20 border-yellow-500 text-yellow-500",
+    destructive: "bg-red-500/20 border-red-500 text-red-500",
+  };
+
+  return (
+    <div className="flex flex-col items-center flex-shrink-0">
+      <span className="text-xs text-muted-foreground mb-2">{label}</span>
+      <div className={`w-12 h-12 rounded-full flex items-center justify-center border-2 ${colorClasses[color]}`}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// Arrow connector with timing label
+function ArrowConnector({ timing, color }: { timing?: string; color: string }) {
+  const colorClasses: Record<string, string> = {
+    cyan: "text-cyan-500",
+    red: "text-red-400",
+    green: "text-green-500",
+    yellow: "text-yellow-500",
+  };
+
+  return (
+    <div className="flex flex-col items-center flex-shrink-0 -mx-1">
+      <div className="h-5" /> {/* Spacer to align with labels */}
+      <div className="flex items-center h-12">
+        <svg width="80" height="24" viewBox="0 0 80 24" className={colorClasses[color]}>
+          <defs>
+            <marker id={`arrow-${color}`} markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+              <path d="M0,0 L8,4 L0,8 Z" fill="currentColor" />
+            </marker>
+          </defs>
+          <line x1="0" y1="12" x2="72" y2="12" stroke="currentColor" strokeWidth="2" markerEnd={`url(#arrow-${color})`} />
+        </svg>
+      </div>
+      {timing && (
+        <span className={`text-[10px] mt-1 whitespace-nowrap ${colorClasses[color]}`}>{timing}</span>
+      )}
+    </div>
+  );
+}
+
+// Order Flow Visualization Component
+function OrderFlowVisualization() {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <h3 className="text-sm font-medium text-muted-foreground mb-1">Order Flow Visualization</h3>
+        <p className="text-xs text-muted-foreground mb-4">
+          Order #12345678 - BTC-USD - Buy - Limit - 1.5 BTC @ $60,000
+        </p>
+
+        <div className="flex items-start justify-center">
+          <StageNode label="Intent" color="cyan">
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" />
+            </svg>
+          </StageNode>
+
+          <ArrowConnector timing="intent_to_sent_ms: 15ms" color="cyan" />
+
+          <StageNode label="Sent" color="red">
+            <Send className="w-5 h-5" />
+          </StageNode>
+
+          <ArrowConnector timing="sent_to_ack_ms: 45ms" color="red" />
+
+          <StageNode label="Ack" color="green">
+            <CheckCircle2 className="w-5 h-5" />
+          </StageNode>
+
+          <ArrowConnector timing="ack_to_fill_ms: 120ms" color="green" />
+
+          <StageNode label="Fill" color="yellow">
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 3v18h18" />
+              <path d="M7 14l4-6 4 5 5-7" />
+            </svg>
+          </StageNode>
+
+          <ArrowConnector color="yellow" />
+
+          <StageNode label="Fill/Reject" color="destructive">
+            <XCircle className="w-5 h-5" />
+          </StageNode>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Status indicator component
+function StatusIndicator({ status }: { status: OrderStatus }) {
+  const config = {
+    Filled: { color: "bg-green-500", text: "text-green-500" },
+    Open: { color: "bg-yellow-500", text: "text-yellow-500" },
+    Rejected: { color: "bg-red-500", text: "text-red-500" },
+    Cancelled: { color: "bg-gray-500", text: "text-gray-500" },
+  };
+
+  const { color, text } = config[status];
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className={`w-2 h-2 rounded-full ${color}`} />
+      <span className={`text-sm ${text}`}>{status}</span>
+    </div>
+  );
+}
 
 export function OrdersTable() {
   const { orders, recentFinalOrders, connected, error } = useAccountState();
-  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
+  const { connected: wsConnected } = useStatusStream();
 
-  const toggleOrderExpanded = (orderId: string) => {
-    setExpandedOrders(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(orderId)) {
-        newSet.delete(orderId);
-      } else {
-        newSet.add(orderId);
-      }
-      return newSet;
+  // Filter state
+  const [modelFilter, setModelFilter] = useState("All");
+  const [exchangeFilter, setExchangeFilter] = useState("All");
+  const [stateFilter, setStateFilter] = useState("All");
+  const [timeWindow, setTimeWindow] = useState("Last Hour");
+
+  // Convert real Kraken orders to unified format
+  const krakenOrders: Order[] = useMemo(() => {
+    const allKrakenOrders = [...orders, ...recentFinalOrders];
+    return allKrakenOrders.map((order) => {
+      const statusUpper = order.status.toUpperCase();
+      let status: OrderStatus = "Open";
+      if (statusUpper === "FILLED") status = "Filled";
+      else if (statusUpper === "CANCELED" || statusUpper === "CANCELLED" || statusUpper === "EXPIRED")
+        status = "Cancelled";
+      else if (statusUpper === "REJECTED" || statusUpper === "FAILED") status = "Rejected";
+      else if (
+        statusUpper === "NEW" ||
+        statusUpper === "PENDING_NEW" ||
+        statusUpper === "PARTIALLY_FILLED"
+      )
+        status = "Open";
+
+      const formatTime = (ns: number) => {
+        const date = new Date(ns / 1000000);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        const hours = String(date.getHours()).padStart(2, "0");
+        const minutes = String(date.getMinutes()).padStart(2, "0");
+        const seconds = String(date.getSeconds()).padStart(2, "0");
+        const ms = String(date.getMilliseconds()).padStart(3, "0");
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${ms}`;
+      };
+
+      const formatCurrency = (value: string) => {
+        return new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(parseFloat(value));
+      };
+
+      return {
+        id: order.id,
+        status,
+        clientOrderId: order.clientId || `ord_${order.id.slice(0, 8)}`,
+        exchange: "Kraken",
+        symbol: order.symbol,
+        side: order.side === "Buy" ? "Buy" : "Sell",
+        type: (order.type as "Limit" | "Market" | "Stop") || "Limit",
+        quantity: `${parseFloat(order.quantity).toFixed(4)} ${order.symbol.split("/")[0] || ""}`,
+        price: order.price ? formatCurrency(order.price) : "Market",
+        time: formatTime(order.lastUpdateNs),
+      };
     });
-  };
+  }, [orders, recentFinalOrders]);
 
-  // Separate orders by status
-  // Note: WebSocket only sends active orders (PENDING_NEW, NEW, PARTIALLY_FILLED)
-  // Terminal states (FILLED, CANCELED, EXPIRED, REJECTED) are removed via 'final' message type
-  const { openOrders, filledOrders, cancelledOrders } = useMemo(() => {
-    const open: OrderEntry[] = [];
-    const filled: OrderEntry[] = [];
-    const cancelled: OrderEntry[] = [];
+  // Combine real Kraken orders with mock data for other exchanges
+  const allOrders = useMemo(() => {
+    // Filter mock orders to exclude Kraken (we use real data for Kraken)
+    const nonKrakenMockOrders = mockOrders.filter((o) => o.exchange !== "Kraken");
+    // Add mock Kraken orders if we have no real Kraken orders
+    const krakenMockOrders = krakenOrders.length === 0 ? mockOrders.filter((o) => o.exchange === "Kraken") : [];
+    return [...krakenOrders, ...nonKrakenMockOrders, ...krakenMockOrders];
+  }, [krakenOrders]);
 
-    console.log('📊 OrdersTable received', orders.length, 'orders from WebSocket');
-
-    orders.forEach(order => {
-      const status = order.status.toUpperCase();
-
-      // Terminal states - these should not appear in WebSocket feed but handle legacy data
-      if (status === 'FILLED') {
-        filled.push(order);
-      } else if (status === 'CANCELED' || status === 'CANCELLED' || status === 'FAILED' || status === 'EXPIRED' || status === 'REJECTED') {
-        cancelled.push(order);
-      } else {
-        // Active states: PENDING_NEW, NEW, PARTIALLY_FILLED, etc.
-        open.push(order);
-      }
+  // Apply filters
+  const filteredOrders = useMemo(() => {
+    return allOrders.filter((order) => {
+      if (exchangeFilter !== "All" && order.exchange !== exchangeFilter) return false;
+      if (stateFilter !== "All" && order.status !== stateFilter) return false;
+      // Model filter would need model data - skipping for now
+      return true;
     });
+  }, [allOrders, exchangeFilter, stateFilter]);
 
-    console.log('📊 Separated:', open.length, 'open,', filled.length, 'filled,', cancelled.length, 'cancelled');
-    return { openOrders: open, filledOrders: filled, cancelledOrders: cancelled };
-  }, [orders]);
-
-  const formatNumber = (value: string, decimals: number = 4) => {
-    return parseFloat(value).toFixed(decimals);
-  };
-
-  const formatCurrency = (value: string) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    }).format(parseFloat(value));
-  };
-
-  const formatTime = (ns: number) => {
-    const date = new Date(ns / 1000000); // Convert nanoseconds to milliseconds
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      fractionalSecondDigits: 3, // Show milliseconds
-      hour12: false
-    });
-  };
-
-  const formatTimeWithMs = (timestamp: number) => {
-    const date = new Date(timestamp);
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
-    const ms = String(date.getMilliseconds()).padStart(3, '0');
-    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${ms}`;
-  };
-
-  const getStatusBadge = (status: string | undefined) => {
-    if (!status) return <Badge variant="outline" className="text-xs">UNKNOWN</Badge>;
-    const statusUpper = status.toUpperCase();
-    const statusMap: Record<string, { variant: "default" | "secondary" | "destructive" | "outline", color: string }> = {
-      // Legacy status values
-      'CREATED': { variant: 'secondary', color: 'text-primary' },
-      'PENDINGSEND': { variant: 'secondary', color: 'text-warning' },
-      'ACKNOWLEDGED': { variant: 'default', color: 'text-success' },
-      'PARTIALLYFILLED': { variant: 'default', color: 'text-primary' },
-      'FILLED': { variant: 'outline', color: 'text-success' },
-      'CANCELPENDING': { variant: 'secondary', color: 'text-warning' },
-      'CANCELLED': { variant: 'destructive', color: 'text-loss' },
-      'FAILED': { variant: 'destructive', color: 'text-loss' },
-      // New API status values
-      'PENDING_NEW': { variant: 'secondary', color: 'text-warning' },
-      'NEW': { variant: 'default', color: 'text-success' },
-      'PARTIALLY_FILLED': { variant: 'default', color: 'text-primary' },
-      'CANCELED': { variant: 'destructive', color: 'text-loss' },
-      'EXPIRED': { variant: 'destructive', color: 'text-warning' },
-      'REJECTED': { variant: 'destructive', color: 'text-loss' }
-    };
-
-    const style = statusMap[statusUpper] || { variant: 'outline' as const, color: '' };
-
-    return (
-      <Badge variant={style.variant} className="text-xs">
-        {statusUpper.replace('_', ' ')}
-      </Badge>
-    );
-  };
-
-  const renderOrderRow = (order: OrderEntry) => (
-    <TableRow key={order.id} className="hover:bg-secondary/20">
-      <TableCell className="font-medium">{order.symbol}</TableCell>
-      <TableCell>
-        <Badge variant={order.side === 'Buy' ? 'default' : 'secondary'}>
-          {order.side === 'Buy' ? (
-            <><TrendingUp className="w-3 h-3 mr-1" />BUY</>
-          ) : (
-            <><TrendingDown className="w-3 h-3 mr-1" />SELL</>
-          )}
-        </Badge>
-      </TableCell>
-      <TableCell>
-        <Badge variant="outline">{order.type}</Badge>
-      </TableCell>
-      <TableCell className="font-mono">
-        {order.price ? formatCurrency(order.price) : 'Market'}
-      </TableCell>
-      <TableCell className="font-mono">
-        {formatNumber(order.quantity)}
-      </TableCell>
-      <TableCell className="font-mono">
-        {formatNumber(order.filledQuantity)}
-      </TableCell>
-      <TableCell className="font-mono">
-        {order.avgFillPrice ? formatCurrency(order.avgFillPrice) : '-'}
-      </TableCell>
-      <TableCell>
-        {getStatusBadge(order.status)}
-      </TableCell>
-      <TableCell className="text-xs text-muted-foreground">
-        {formatTime(order.lastUpdateNs)}
-      </TableCell>
-      <TableCell>
-        {order.clientId && (
-          <Badge variant="outline" className="text-xs font-mono">
-            {order.clientId}
-          </Badge>
-        )}
-      </TableCell>
-      <TableCell>
-        {(() => {
-          const statusUpper = order.status.toUpperCase();
-          const canCancel = statusUpper === 'NEW' ||
-                           statusUpper === 'PARTIALLY_FILLED' ||
-                           statusUpper === 'ACKNOWLEDGED' ||
-                           statusUpper === 'PARTIALLYFILLED';
-          return canCancel && (
-            <Button
-              size="sm"
-              variant="destructive"
-              className="h-8 w-8 p-0"
-              title="Cancel Order"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          );
-        })()}
-      </TableCell>
-    </TableRow>
-  );
-
-  // Show cached data immediately, display connection status in badge
-  // Only show full loading screen if there's an error and no cached data
-  const hasCachedData = recentFinalOrders.length > 0 || orders.length > 0;
-
-  if (!connected && !hasCachedData && error) {
+  // Loading state
+  if (!connected && !error && orders.length === 0) {
     return (
       <div className="space-y-6">
         <Card>
           <CardContent className="p-12 text-center">
             <div className="space-y-4">
-              <WifiOff className="h-12 w-12 mx-auto text-muted-foreground" />
+              <Loader2 className="h-12 w-12 mx-auto animate-spin text-primary" />
               <div>
-                <h3 className="text-lg font-semibold">Connection Error</h3>
-                <p className="text-sm text-muted-foreground">{error}</p>
+                <h3 className="text-lg font-semibold">Connecting to Account State...</h3>
+                <p className="text-sm text-muted-foreground">Please wait</p>
               </div>
             </div>
           </CardContent>
@@ -208,246 +379,219 @@ export function OrdersTable() {
 
   return (
     <div className="space-y-6">
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold">{openOrders.length}</div>
-            <p className="text-xs text-muted-foreground">Active Orders</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-primary">{recentFinalOrders.length}</div>
-            <p className="text-xs text-muted-foreground">Completed Orders</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2">
-              {!connected && !error ? (
-                <Badge variant="secondary" className="gap-1">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  Connecting...
-                </Badge>
-              ) : (
-                <Badge variant={connected ? "default" : "destructive"}>
-                  {connected ? "Connected" : "Disconnected"}
-                </Badge>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">Account State</p>
-          </CardContent>
-        </Card>
+      {/* Page Header */}
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Orders</h1>
+        <p className="text-muted-foreground">Full order lifecycle visibility.</p>
       </div>
 
-      {/* Tabs for different views */}
-      <Tabs defaultValue="active" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="active">
-            <ClipboardList className="h-4 w-4 mr-2" />
-            Active Orders
-          </TabsTrigger>
-          <TabsTrigger value="completed">
-            <History className="h-4 w-4 mr-2" />
-            Completed Orders
-          </TabsTrigger>
-        </TabsList>
+      {/* Order Flow Visualization */}
+      <OrderFlowVisualization />
 
-        <TabsContent value="active" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ClipboardList className="h-5 w-5" />
-                Active Orders (Real-time)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-lg border border-border bg-card/30 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Symbol</TableHead>
-                        <TableHead>Side</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead>Price</TableHead>
-                        <TableHead>Quantity</TableHead>
-                        <TableHead>Filled</TableHead>
-                        <TableHead>Avg Fill Price</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Last Update</TableHead>
-                        <TableHead>Client ID</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {openOrders.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
-                            No active orders
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        openOrders.map(renderOrderRow)
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
+      {/* Filters & Actions */}
+      <Card>
+        <CardContent className="p-4">
+          <h3 className="text-sm font-medium text-muted-foreground mb-4">Filters & Actions</h3>
+
+          <div className="flex flex-wrap items-end gap-4">
+            {/* Model Filter */}
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground">Model</label>
+              <Select value={modelFilter} onValueChange={setModelFilter}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All</SelectItem>
+                  <SelectItem value="Model A">Model A</SelectItem>
+                  <SelectItem value="Model B">Model B</SelectItem>
+                  <SelectItem value="Model C">Model C</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Exchange Filter */}
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground">Exchange</label>
+              <Select value={exchangeFilter} onValueChange={setExchangeFilter}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All</SelectItem>
+                  <SelectItem value="Binance">Binance</SelectItem>
+                  <SelectItem value="Coinbase">Coinbase</SelectItem>
+                  <SelectItem value="Kraken">Kraken</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* State Filter */}
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground">State</label>
+              <Select value={stateFilter} onValueChange={setStateFilter}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All</SelectItem>
+                  <SelectItem value="Open">Open</SelectItem>
+                  <SelectItem value="Filled">Filled</SelectItem>
+                  <SelectItem value="Cancelled">Cancelled</SelectItem>
+                  <SelectItem value="Rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Time Window */}
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground">Time Window</label>
+              <div className="flex gap-1">
+                {["Last Hour", "Last 24h", "Custom Range"].map((tw) => (
+                  <Button
+                    key={tw}
+                    variant={timeWindow === tw ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setTimeWindow(tw)}
+                    className="text-xs"
+                  >
+                    {tw}
+                  </Button>
+                ))}
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            </div>
 
-        <TabsContent value="completed" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <History className="h-5 w-5" />
-                Completed Orders (Real-time)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-lg border border-border bg-card/30 overflow-hidden">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-12"></TableHead>
-                      <TableHead>Symbol</TableHead>
-                      <TableHead>Side</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Price</TableHead>
-                      <TableHead>Quantity</TableHead>
-                      <TableHead>Filled</TableHead>
-                      <TableHead>Avg Fill Price</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Last Update</TableHead>
-                      <TableHead>Client ID</TableHead>
+            {/* Action Buttons */}
+            <div className="flex gap-2 ml-auto">
+              <Button variant="destructive" size="sm" className="text-xs">
+                Cancel Order (if API provided)
+              </Button>
+              <Button variant="outline" size="sm" className="text-xs">
+                <Eye className="w-3 h-3 mr-1" />
+                View raw exchange ordId mapping
+              </Button>
+              <Button variant="outline" size="sm" className="text-xs">
+                <FileDown className="w-3 h-3 mr-1" />
+                Export CSV
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Orders Table */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="px-4 py-3 border-b">
+            <h3 className="text-sm font-medium">Live Table (WS) + History (REST)</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30">
+                  <TableHead className="text-xs font-medium">Status</TableHead>
+                  <TableHead className="text-xs font-medium">Client Order ID</TableHead>
+                  <TableHead className="text-xs font-medium">Exchange</TableHead>
+                  <TableHead className="text-xs font-medium">Symbol</TableHead>
+                  <TableHead className="text-xs font-medium">Side</TableHead>
+                  <TableHead className="text-xs font-medium">Type</TableHead>
+                  <TableHead className="text-xs font-medium">Quantity</TableHead>
+                  <TableHead className="text-xs font-medium">Price</TableHead>
+                  <TableHead className="text-xs font-medium">Time</TableHead>
+                  <TableHead className="text-xs font-medium">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredOrders.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                      No orders found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredOrders.map((order) => (
+                    <TableRow key={order.id} className="hover:bg-muted/20">
+                      <TableCell>
+                        <StatusIndicator status={order.status} />
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{order.clientOrderId}</TableCell>
+                      <TableCell>{order.exchange}</TableCell>
+                      <TableCell className="font-medium">{order.symbol}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={order.side === "Buy" ? "default" : "secondary"}
+                          className={
+                            order.side === "Buy"
+                              ? "bg-green-500/20 text-green-500 border-green-500/30"
+                              : "bg-red-500/20 text-red-500 border-red-500/30"
+                          }
+                        >
+                          {order.side === "Buy" ? (
+                            <>
+                              <TrendingUp className="w-3 h-3 mr-1" />
+                              Buy
+                            </>
+                          ) : (
+                            <>
+                              <TrendingDown className="w-3 h-3 mr-1" />
+                              Sell
+                            </>
+                          )}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="text-xs">
+                          {order.type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">{order.quantity}</TableCell>
+                      <TableCell className="font-mono text-sm">{order.price}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                        {order.time}
+                      </TableCell>
+                      <TableCell>
+                        {order.status === "Open" && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                            title="Cancel Order"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </TableCell>
                     </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                    {recentFinalOrders.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
-                          No completed orders yet
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      recentFinalOrders.map(order => {
-                        const isExpanded = expandedOrders.has(order.id);
-                        return (
-                          <>
-                            <TableRow
-                              key={order.id}
-                              className="cursor-pointer hover:bg-secondary/20"
-                              onClick={() => toggleOrderExpanded(order.id)}
-                            >
-                              <TableCell>
-                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                  {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                                </Button>
-                              </TableCell>
-                              <TableCell className="font-medium">{order.symbol}</TableCell>
-                              <TableCell>
-                                <Badge variant={order.side === 'Buy' || order.side === 'BUY' ? 'default' : 'secondary'}>
-                                  {(order.side === 'Buy' || order.side === 'BUY') ? (
-                                    <><TrendingUp className="w-3 h-3 mr-1" />BUY</>
-                                  ) : (
-                                    <><TrendingDown className="w-3 h-3 mr-1" />SELL</>
-                                  )}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline">{order.type}</Badge>
-                              </TableCell>
-                              <TableCell className="font-mono">
-                                {order.price ? formatCurrency(order.price) : 'Market'}
-                              </TableCell>
-                              <TableCell className="font-mono">
-                                {formatNumber(order.quantity)}
-                              </TableCell>
-                              <TableCell className="font-mono">
-                                {formatNumber(order.filledQuantity)}
-                              </TableCell>
-                              <TableCell className="font-mono">
-                                {order.avgFillPrice ? formatCurrency(order.avgFillPrice) : '-'}
-                              </TableCell>
-                              <TableCell>
-                                {getStatusBadge(order.status)}
-                              </TableCell>
-                              <TableCell className="text-xs text-muted-foreground">
-                                {formatTime(order.lastUpdateNs)}
-                              </TableCell>
-                              <TableCell>
-                                {order.clientId && (
-                                  <Badge variant="outline" className="text-xs font-mono">
-                                    {order.clientId}
-                                  </Badge>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                            {isExpanded && order.stateHistory && order.stateHistory.length > 0 && (
-                          <TableRow key={`${order.id}-details`}>
-                                <TableCell colSpan={11} className="bg-muted/30 p-6">
-                                  <div className="space-y-4">
-                                    <div className="flex items-center gap-2 text-sm font-semibold">
-                                      <Clock className="h-4 w-4" />
-                                      Order Timeline
-                                    </div>
-                                    <div className="relative pl-8 space-y-4">
-                                      {/* Timeline line */}
-                                      <div className="absolute left-2 top-2 bottom-2 w-0.5 bg-border"></div>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
-                                      {order.stateHistory.map((event, idx) => (
-                                        <div key={idx} className="relative">
-                                          {/* Timeline dot */}
-                                          <div className="absolute left-[-1.75rem] top-1 w-4 h-4 rounded-full bg-primary border-2 border-background"></div>
-
-                                          <div className="bg-background rounded-lg p-4 shadow-sm">
-                                            <div className="flex items-start justify-between gap-4">
-                                              <div className="flex-1">
-                                                <div className="flex items-center gap-2 mb-2">
-                                                  {getStatusBadge(event.status)}
-                                                  <Badge variant="outline" className="text-xs">
-                                                    {event.messageType}
-                                                  </Badge>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-                                                  {event.filledQuantity && (
-                                                    <div>Filled: <span className="font-mono">{formatNumber(event.filledQuantity)}</span></div>
-                                                  )}
-                                                  {event.avgFillPrice && (
-                                                    <div>Avg Price: <span className="font-mono">{formatCurrency(event.avgFillPrice)}</span></div>
-                                                  )}
-                                                </div>
-                                              </div>
-                                              <div className="text-xs text-muted-foreground text-right font-mono">
-                                                <div>{formatTimeWithMs(event.timestamp)}</div>
-                                              </div>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            )}
-                          </>
-                        );
-                      })
-                    )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      {/* Footer */}
+      <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-4">
+        <div>
+          Data Sources: Primary (<span className="text-primary">/account WS</span> +{" "}
+          <span className="text-primary">/api/account/order-history</span>). Enhanced with{" "}
+          <span className="text-primary">/api/live/orders</span>.
+        </div>
+        <div className="flex items-center gap-1.5">
+          WebSocket:
+          {wsConnected || connected ? (
+            <>
+              <Wifi className="h-3 w-3 text-green-500" />{" "}
+              <span className="text-green-500">Connected (Last message: 1s ago)</span>
+            </>
+          ) : (
+            <>
+              <WifiOff className="h-3 w-3 text-red-500" />{" "}
+              <span className="text-red-500">Disconnected</span>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

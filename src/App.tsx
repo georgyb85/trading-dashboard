@@ -29,6 +29,7 @@ import WalkforwardDashboard from "@/apps/walkforward";
 import LiveModelPage from "./pages/LiveModel";
 import LiveOverview from "./pages/LiveOverview";
 import ExecutionHealth from "./pages/ExecutionHealth";
+import AuditLogs from "./pages/AuditLogs";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -74,6 +75,7 @@ const App = () => (
             <Route path="/lfs" element={<LfsDashboard />} />
             <Route path="/walkforward" element={<WalkforwardDashboard />} />
             <Route path="/live-model" element={<LiveModelPage />} />
+            <Route path="/audit-logs" element={<AuditLogs />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
               </Routes>
