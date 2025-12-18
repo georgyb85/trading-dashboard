@@ -543,7 +543,7 @@ const ModelDetailPanel = ({
                     </Badge>
                   )}
                 </h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <StatCard
                     label="Directional Accuracy"
                     value={metricsQuery.data.live_metrics.directional_accuracy != null
@@ -561,28 +561,6 @@ const ModelDetailPanel = ({
                   />
                   <StatCard label="MAE" value={metricsQuery.data.live_metrics.mae != null ? metricsQuery.data.live_metrics.mae.toFixed(4) : 'N/A'} />
                   <StatCard label="R²" value={metricsQuery.data.live_metrics.r2 != null ? metricsQuery.data.live_metrics.r2.toFixed(4) : 'N/A'} />
-                  <StatCard label="True Positives" value={metricsQuery.data.live_metrics.true_positives ?? 0} colorClass="text-emerald-400" />
-                  <StatCard label="False Positives" value={metricsQuery.data.live_metrics.false_positives ?? 0} colorClass="text-red-400" />
-                </div>
-
-                {/* Confusion Matrix */}
-                <div className="grid grid-cols-4 gap-2 pt-4">
-                  <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 text-center">
-                    <div className="text-xl font-mono font-bold text-emerald-400">{metricsQuery.data.live_metrics.true_positives ?? 0}</div>
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">True Pos</div>
-                  </div>
-                  <div className="p-3 rounded-lg border border-red-500/30 bg-red-500/5 text-center">
-                    <div className="text-xl font-mono font-bold text-red-400">{metricsQuery.data.live_metrics.false_positives ?? 0}</div>
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">False Pos</div>
-                  </div>
-                  <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 text-center">
-                    <div className="text-xl font-mono font-bold text-emerald-400">{metricsQuery.data.live_metrics.true_negatives ?? 0}</div>
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">True Neg</div>
-                  </div>
-                  <div className="p-3 rounded-lg border border-red-500/30 bg-red-500/5 text-center">
-                    <div className="text-xl font-mono font-bold text-red-400">{metricsQuery.data.live_metrics.false_negatives ?? 0}</div>
-                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">False Neg</div>
-                  </div>
                 </div>
               </div>
             ) : (
@@ -593,58 +571,6 @@ const ModelDetailPanel = ({
               </div>
             )}
 
-            {/* Trading Thresholds */}
-            <div className="pt-4 border-t border-border/30">
-              <h3 className="text-sm font-semibold flex items-center gap-2 mb-4">
-                <Target className="h-4 w-4 text-primary" />
-                Trading Thresholds
-              </h3>
-              <div className="grid md:grid-cols-3 gap-4 items-end">
-                <div className="space-y-2">
-                  <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Long Threshold</label>
-                  <div className="relative">
-                    <ArrowUpRight className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={longThresholdInput}
-                      onChange={(e) => setLongThresholdInput(e.target.value)}
-                      className="pl-10 font-mono bg-emerald-500/5 border-emerald-500/30 focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Short Threshold</label>
-                  <div className="relative">
-                    <ArrowDownRight className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500" />
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={shortThresholdInput}
-                      onChange={(e) => setShortThresholdInput(e.target.value)}
-                      className="pl-10 font-mono bg-red-500/5 border-red-500/30 focus:border-red-500"
-                    />
-                  </div>
-                </div>
-                <Button
-                  onClick={() => {
-                    const longVal = parseFloat(longThresholdInput);
-                    const shortVal = parseFloat(shortThresholdInput);
-                    if (Number.isNaN(longVal) || Number.isNaN(shortVal)) {
-                      toast({ title: 'Invalid thresholds', description: 'Enter numeric values', variant: 'destructive' });
-                      return;
-                    }
-                    updateThresholds.mutate({ modelId: metricsModelId!, longThreshold: longVal, shortThreshold: shortVal });
-                  }}
-                  disabled={updateThresholds.isPending || !metricsModelId}
-                  className="h-10"
-                >
-                  {updateThresholds.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
-                  Apply Thresholds
-                </Button>
-              </div>
-            </div>
-
             {/* Charts - FoldResults */}
             <div className="pt-4 border-t border-border/30">
               <h3 className="text-sm font-semibold flex items-center gap-2 mb-4">
@@ -652,7 +578,12 @@ const ModelDetailPanel = ({
                 Visualizations
               </h3>
               {trainResult ? (
-                <FoldResults result={trainResult} isLoading={metricsQuery.isFetching} error={metricsError} />
+                <FoldResults
+                  result={trainResult}
+                  isLoading={metricsQuery.isFetching}
+                  error={metricsError}
+                  liveMetrics={metricsQuery.data?.live_metrics}
+                />
               ) : (
                 <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground border border-dashed border-border/50 rounded-lg">
                   <TrendingUp className="h-8 w-8 mb-2 opacity-50" />

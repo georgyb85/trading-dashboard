@@ -37,16 +37,25 @@ import {
   computeTradingSignals,
 } from "@/lib/utils/xgboostMetrics";
 
+interface LiveMetrics {
+  true_positives?: number;
+  false_positives?: number;
+  true_negatives?: number;
+  false_negatives?: number;
+  sample_count?: number;
+}
+
 interface FoldResultsProps {
   result?: XGBoostTrainResult | null;
   isLoading?: boolean;
   error?: string | null;
+  liveMetrics?: LiveMetrics | null;
 }
 
 const numberFormatter = (value: number, digits = 4) =>
   Number.isFinite(value) ? value.toFixed(digits) : "—";
 
-export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
+export const FoldResults = ({ result, isLoading, error, liveMetrics }: FoldResultsProps) => {
   // Dynamic threshold state
   const [longThreshold, setLongThreshold] = useState<number | null>(null);
   const [shortThreshold, setShortThreshold] = useState<number | null>(null);
@@ -291,6 +300,37 @@ export const FoldResults = ({ result, isLoading, error }: FoldResultsProps) => {
                 R² (validation): {numberFormatter(result.validation_metrics?.r2 ?? 0, 3)}
               </div>
             </div>
+            {liveMetrics && (liveMetrics.true_positives !== undefined || liveMetrics.false_positives !== undefined) && (
+              <>
+                <Separator />
+                <div className="space-y-2">
+                  <div className="font-semibold text-xs text-foreground">
+                    Live Confusion Matrix
+                    {liveMetrics.sample_count && (
+                      <span className="font-normal text-muted-foreground ml-1">({liveMetrics.sample_count} samples)</span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <div className="p-2 rounded border border-emerald-500/30 bg-emerald-500/5 text-center">
+                      <div className="text-sm font-mono font-bold text-emerald-400">{liveMetrics.true_positives ?? 0}</div>
+                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground">TP</div>
+                    </div>
+                    <div className="p-2 rounded border border-red-500/30 bg-red-500/5 text-center">
+                      <div className="text-sm font-mono font-bold text-red-400">{liveMetrics.false_positives ?? 0}</div>
+                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground">FP</div>
+                    </div>
+                    <div className="p-2 rounded border border-emerald-500/30 bg-emerald-500/5 text-center">
+                      <div className="text-sm font-mono font-bold text-emerald-400">{liveMetrics.true_negatives ?? 0}</div>
+                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground">TN</div>
+                    </div>
+                    <div className="p-2 rounded border border-red-500/30 bg-red-500/5 text-center">
+                      <div className="text-sm font-mono font-bold text-red-400">{liveMetrics.false_negatives ?? 0}</div>
+                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground">FN</div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
             {result.timings && (
               <>
                 <Separator />
