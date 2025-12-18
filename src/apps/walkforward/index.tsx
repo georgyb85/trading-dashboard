@@ -1056,6 +1056,7 @@ const WalkforwardDashboard = () => {
                 <FoldResults
                   result={testModelResult}
                   isLoading={isTestModelRunning}
+                  loadingMessage="Training on GPU – this usually takes a few seconds…"
                   error={testModelError ?? undefined}
                 />
               ) : (

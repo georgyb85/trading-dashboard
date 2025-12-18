@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Activity, Cpu, Wifi, WifiOff, TrendingUp, Clock, BarChart2 } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { Activity, Cpu, Wifi, WifiOff, TrendingUp, Clock, BarChart2, AlertCircle, Gauge, Hash } from 'lucide-react';
 import { useStatusStream } from '@/hooks/useStatusStream';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { useUsageStream } from '@/hooks/useUsageStream';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, Cell, ReferenceLine } from 'recharts';
 
 const MAX_RATE_HISTORY = 60; // Keep last 60 data points (~1 minute at 1/sec)
 
@@ -15,6 +17,7 @@ interface RateDataPoint {
   total: number;
   trades: number;
   orderbooks: number;
+  errors: number;
 }
 
 function formatLatency(us: number): string {
@@ -25,19 +28,66 @@ function formatLatency(us: number): string {
 
 export default function ExecutionHealth() {
   const { connected, stats, trades, lastPrices, error } = useStatusStream();
+  const { usage, connected: usageConnected } = useUsageStream();
   const [rateHistory, setRateHistory] = useState<RateDataPoint[]>([]);
 
-  // Accumulate rate history on every stats update (capped by MAX_RATE_HISTORY)
+  // Prefer usage stream message rates (more accurate from kraken-trader)
+  const messageRates = useMemo(() => {
+    if (usage?.message_rates) {
+      return {
+        total: usage.message_rates.total_per_sec,
+        trades: usage.message_rates.trades_per_sec,
+        orderbooks: usage.message_rates.orderbooks_per_sec
+      };
+    }
+    // Fallback to status stream
+    return {
+      total: stats?.message_rates?.total || 0,
+      trades: stats?.message_rates?.trades || 0,
+      orderbooks: stats?.message_rates?.orderbooks || 0
+    };
+  }, [usage?.message_rates, stats?.message_rates]);
+
+  // Calculate total errors from thread statuses
+  const totalErrors = useMemo(() => {
+    if (!stats?.thread_statuses) return 0;
+    return stats.thread_statuses.reduce((sum: number, t: any) => sum + (t.errors || 0), 0);
+  }, [stats?.thread_statuses]);
+
+  // Calculate total message counts
+  const totalMessages = useMemo(() => {
+    if (!stats?.message_counts) return { total: 0, trades: 0 };
+    return {
+      total: stats.message_counts.total || 0,
+      trades: stats.message_counts.trade_messages || stats.message_counts.trades || 0
+    };
+  }, [stats?.message_counts]);
+
+  // Calculate thread health summary
+  const threadSummary = useMemo(() => {
+    if (!stats?.thread_statuses) return { healthy: 0, warning: 0, error: 0, total: 0 };
+    const threads = stats.thread_statuses as any[];
+    return {
+      healthy: threads.filter(t => t.state === 'running' && !t.errors).length,
+      warning: threads.filter(t => t.state === 'running' && t.errors > 0).length,
+      error: threads.filter(t => t.state !== 'running').length,
+      total: threads.length
+    };
+  }, [stats?.thread_statuses]);
+
+  // Accumulate rate history on every usage/stats update (capped by MAX_RATE_HISTORY)
   useEffect(() => {
-    if (!stats?.message_rates) return;
+    // Only add point if we have rate data from either source
+    if (!messageRates.total && !messageRates.trades) return;
 
     const now = Date.now();
     const newPoint: RateDataPoint = {
       timestamp: now,
       time: new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      total: stats.message_rates.total || 0,
-      trades: stats.message_rates.trades || 0,
-      orderbooks: stats.message_rates.orderbooks || 0,
+      total: messageRates.total,
+      trades: messageRates.trades,
+      orderbooks: messageRates.orderbooks,
+      errors: totalErrors,
     };
 
     setRateHistory(prev => {
@@ -45,7 +95,7 @@ export default function ExecutionHealth() {
       // Keep only the last MAX_RATE_HISTORY points
       return updated.slice(-MAX_RATE_HISTORY);
     });
-  }, [stats?.message_rates]);
+  }, [messageRates, totalErrors]);
 
   return (
     <div className="space-y-6">
@@ -54,10 +104,16 @@ export default function ExecutionHealth() {
           <h1 className="text-3xl font-bold tracking-tight">Execution Health</h1>
           <p className="text-muted-foreground">Thread status, message rates, and recent trades</p>
         </div>
-        <Badge variant={connected ? 'default' : 'destructive'} className="gap-1">
-          {connected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-          {connected ? 'Connected' : 'Disconnected'}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant={usageConnected ? 'default' : 'destructive'} className="gap-1">
+            {usageConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+            Usage
+          </Badge>
+          <Badge variant={connected ? 'default' : 'secondary'} className="gap-1">
+            {connected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+            Status
+          </Badge>
+        </div>
       </div>
 
       {error && (
@@ -68,17 +124,20 @@ export default function ExecutionHealth() {
         </Card>
       )}
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      {/* Summary Cards - Row 1: Rates */}
+      <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Messages/sec</CardTitle>
+            <CardTitle className="text-sm font-medium">Messages/sec</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {stats?.message_rates?.total?.toLocaleString() ?? '—'}
+              {messageRates.total?.toLocaleString() ?? '—'}
             </div>
+            <p className="text-xs text-muted-foreground">
+              Total: {totalMessages.total.toLocaleString()}
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -88,22 +147,98 @@ export default function ExecutionHealth() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {stats?.message_rates?.trades?.toLocaleString() ?? '—'}
+              {messageRates.trades?.toLocaleString() ?? '—'}
             </div>
+            <p className="text-xs text-muted-foreground">
+              Total: {totalMessages.trades.toLocaleString()}
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Orderbooks/sec</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
+            <Gauge className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {stats?.message_rates?.orderbooks?.toLocaleString() ?? '—'}
+              {messageRates.orderbooks?.toLocaleString() ?? '—'}
             </div>
+            <p className="text-xs text-muted-foreground">
+              Real-time updates
+            </p>
+          </CardContent>
+        </Card>
+        <Card className={totalErrors > 0 ? 'border-destructive/50' : ''}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Errors</CardTitle>
+            <AlertCircle className={`h-4 w-4 ${totalErrors > 0 ? 'text-destructive' : 'text-muted-foreground'}`} />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${totalErrors > 0 ? 'text-destructive' : ''}`}>
+              {totalErrors.toLocaleString()}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Across all threads
+            </p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Thread Health Overview */}
+      {threadSummary.total > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Cpu className="h-4 w-4" />
+              Thread Health Overview
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <div className="flex h-3 overflow-hidden rounded-full bg-muted">
+                  {threadSummary.healthy > 0 && (
+                    <div
+                      className="bg-green-500 transition-all"
+                      style={{ width: `${(threadSummary.healthy / threadSummary.total) * 100}%` }}
+                    />
+                  )}
+                  {threadSummary.warning > 0 && (
+                    <div
+                      className="bg-yellow-500 transition-all"
+                      style={{ width: `${(threadSummary.warning / threadSummary.total) * 100}%` }}
+                    />
+                  )}
+                  {threadSummary.error > 0 && (
+                    <div
+                      className="bg-destructive transition-all"
+                      style={{ width: `${(threadSummary.error / threadSummary.total) * 100}%` }}
+                    />
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-4 text-sm">
+                <div className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full bg-green-500" />
+                  <span>{threadSummary.healthy} Healthy</span>
+                </div>
+                {threadSummary.warning > 0 && (
+                  <div className="flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-yellow-500" />
+                    <span>{threadSummary.warning} Warning</span>
+                  </div>
+                )}
+                {threadSummary.error > 0 && (
+                  <div className="flex items-center gap-1">
+                    <span className="h-2 w-2 rounded-full bg-destructive" />
+                    <span>{threadSummary.error} Error</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Message Rate Chart */}
       {rateHistory.length > 1 && (
@@ -116,7 +251,7 @@ export default function ExecutionHealth() {
             <CardDescription>Messages per second over time (last {rateHistory.length} samples)</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[200px]">
+            <div className="h-[220px]">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={rateHistory}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
@@ -125,7 +260,14 @@ export default function ExecutionHealth() {
                     tick={{ fontSize: 10 }}
                     interval="preserveStartEnd"
                   />
-                  <YAxis tick={{ fontSize: 10 }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tick={{ fontSize: 10 }}
+                    stroke="hsl(0, 84%, 60%)"
+                    label={{ value: 'Errors', angle: 90, position: 'insideRight', fontSize: 10 }}
+                  />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: 'hsl(var(--card))',
@@ -134,6 +276,7 @@ export default function ExecutionHealth() {
                   />
                   <Legend />
                   <Line
+                    yAxisId="left"
                     type="monotone"
                     dataKey="total"
                     stroke="hsl(var(--primary))"
@@ -142,6 +285,7 @@ export default function ExecutionHealth() {
                     name="Total"
                   />
                   <Line
+                    yAxisId="left"
                     type="monotone"
                     dataKey="trades"
                     stroke="hsl(142, 76%, 36%)"
@@ -150,12 +294,23 @@ export default function ExecutionHealth() {
                     name="Trades"
                   />
                   <Line
+                    yAxisId="left"
                     type="monotone"
                     dataKey="orderbooks"
                     stroke="hsl(217, 91%, 60%)"
                     strokeWidth={1.5}
                     dot={false}
                     name="Orderbooks"
+                  />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="errors"
+                    stroke="hsl(0, 84%, 60%)"
+                    strokeWidth={1.5}
+                    dot={false}
+                    name="Errors"
+                    strokeDasharray="5 5"
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -220,6 +375,83 @@ export default function ExecutionHealth() {
           )}
         </CardContent>
       </Card>
+
+      {/* Thread Latency Visualization */}
+      {stats?.thread_statuses && stats.thread_statuses.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              Thread Latency Distribution
+            </CardTitle>
+            <CardDescription>Average processing latency per thread</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[180px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={stats.thread_statuses
+                    .filter((t: any) => t.avgLatencyUs !== undefined && t.avgLatencyUs > 0)
+                    .map((t: any) => ({
+                      name: t.name?.replace(/_/g, ' ')?.slice(0, 15) || 'Unknown',
+                      latencyMs: t.avgLatencyUs / 1000,
+                      errors: t.errors || 0
+                    }))}
+                  layout="vertical"
+                  margin={{ left: 80, right: 20 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" horizontal={false} />
+                  <XAxis
+                    type="number"
+                    tick={{ fontSize: 10 }}
+                    tickFormatter={(v) => `${v.toFixed(1)}ms`}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    tick={{ fontSize: 10 }}
+                    width={75}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--card))',
+                      border: '1px solid hsl(var(--border))'
+                    }}
+                    formatter={(value: number, name: string) => {
+                      if (name === 'latencyMs') return [`${value.toFixed(2)}ms`, 'Latency'];
+                      return [value, name];
+                    }}
+                  />
+                  <Bar
+                    dataKey="latencyMs"
+                    name="Latency"
+                    radius={[0, 4, 4, 0]}
+                  >
+                    {stats.thread_statuses
+                      .filter((t: any) => t.avgLatencyUs !== undefined && t.avgLatencyUs > 0)
+                      .map((t: any, index: number) => {
+                        const latencyMs = t.avgLatencyUs / 1000;
+                        let fill = 'hsl(142, 76%, 36%)'; // Green
+                        if (latencyMs > 100) fill = 'hsl(0, 84%, 60%)'; // Red
+                        else if (latencyMs > 50) fill = 'hsl(38, 92%, 50%)'; // Orange
+                        else if (latencyMs > 10) fill = 'hsl(48, 96%, 53%)'; // Yellow
+                        return <Cell key={index} fill={fill} />;
+                      })}
+                  </Bar>
+                  <ReferenceLine x={10} stroke="hsl(142, 76%, 36%)" strokeDasharray="3 3" label={{ value: '10ms', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
+                  <ReferenceLine x={50} stroke="hsl(48, 96%, 53%)" strokeDasharray="3 3" label={{ value: '50ms', fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex gap-4 justify-center mt-2 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded bg-green-500" /> &lt;10ms</span>
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded bg-yellow-500" /> 10-50ms</span>
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded bg-orange-500" /> 50-100ms</span>
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded bg-red-500" /> &gt;100ms</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Last Prices */}
       <Card>

@@ -39,8 +39,14 @@ export const useActiveModel = () => {
       return resp.data;
     },
     retry: false,
-    // Refetch every 30s to catch server-side retrains (daily at 00:00 UTC)
-    refetchInterval: 30_000,
+    // Cache for 5 minutes - data is considered fresh during this time
+    staleTime: 5 * 60 * 1000,
+    // Keep in cache for 10 minutes even when unused
+    gcTime: 10 * 60 * 1000,
+    // Refetch every 60s to catch server-side retrains (daily at 00:00 UTC)
+    refetchInterval: 60_000,
+    // Don't refetch when window regains focus if data is fresh
+    refetchOnWindowFocus: false,
   });
 };
 
@@ -55,8 +61,14 @@ export const useLiveModels = () => {
       return resp.data.models;
     },
     retry: false,
-    // Refetch every 30s to catch server-side retrains (daily at 00:00 UTC)
-    refetchInterval: 30_000,
+    // Cache for 5 minutes - data is considered fresh during this time
+    staleTime: 5 * 60 * 1000,
+    // Keep in cache for 10 minutes even when unused
+    gcTime: 10 * 60 * 1000,
+    // Refetch every 60s to catch server-side retrains (daily at 00:00 UTC)
+    refetchInterval: 60_000,
+    // Don't refetch when window regains focus if data is fresh
+    refetchOnWindowFocus: false,
   });
 };
 
@@ -181,6 +193,10 @@ export const useAvailableFeatures = (timeframe?: string) => {
       return resp.data;
     },
     retry: false,
+    // Features rarely change - cache for 10 minutes
+    staleTime: 10 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 };
 

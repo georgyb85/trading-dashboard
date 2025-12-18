@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { toast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -5,10 +6,22 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Activity, Server, Clock, Database, Cpu, HardDrive, Wifi, WifiOff, AlertTriangle, PauseCircle } from 'lucide-react';
+import { Activity, Server, Clock, Database, Cpu, HardDrive, Wifi, WifiOff, AlertTriangle, PauseCircle, Wallet, TrendingUp, ShoppingCart, MonitorSmartphone, BarChart3 } from 'lucide-react';
 import { useHealthData } from '@/hooks/useHealthData';
 import { useUsageStream } from '@/hooks/useUsageStream';
 import { useLiveModels, useDeactivateModel } from '@/hooks/useKrakenLive';
+import { useAccountState } from '@/hooks/useAccountState';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, AreaChart } from 'recharts';
+
+const MAX_USAGE_HISTORY = 60; // Keep last 60 data points
+
+interface UsageDataPoint {
+  timestamp: number;
+  time: string;
+  cpu: number;
+  ram: number;
+  gpu?: number;
+}
 
 function formatUptime(ms: number): string {
   const seconds = Math.floor(ms / 1000);
@@ -33,6 +46,27 @@ export default function LiveOverview() {
   const { usage, systemInfo, connected: usageConnected, error: usageError } = useUsageStream();
   const { data: models } = useLiveModels();
   const deactivateMutation = useDeactivateModel();
+  const { balances, positions, orders, connected: accountConnected } = useAccountState();
+  const [usageHistory, setUsageHistory] = useState<UsageDataPoint[]>([]);
+
+  // Accumulate usage history over time
+  useEffect(() => {
+    if (!usage) return;
+
+    const now = Date.now();
+    const newPoint: UsageDataPoint = {
+      timestamp: now,
+      time: new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      cpu: usage.cpu_percent,
+      ram: usage.ram_percent,
+      gpu: usage.gpu_percent,
+    };
+
+    setUsageHistory(prev => {
+      const updated = [...prev, newPoint];
+      return updated.slice(-MAX_USAGE_HISTORY);
+    });
+  }, [usage]);
 
   // Filter to models with executors (trading-enabled models)
   const tradingModels = models?.filter(m => m.status === 'active' && m.has_executor) ?? [];
@@ -292,6 +326,227 @@ export default function LiveOverview() {
               </Table>
             ) : (
               <p className="text-muted-foreground">No queue data available</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Resource Usage History Chart */}
+      {usageHistory.length > 1 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Resource Usage History
+            </CardTitle>
+            <CardDescription>
+              CPU, RAM{usageHistory.some(p => p.gpu !== undefined) ? ', and GPU' : ''} utilization over time (last {usageHistory.length} samples)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[200px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={usageHistory}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis
+                    dataKey="time"
+                    tick={{ fontSize: 10 }}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10 }}
+                    domain={[0, 100]}
+                    tickFormatter={(v) => `${v}%`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--card))',
+                      border: '1px solid hsl(var(--border))'
+                    }}
+                    formatter={(value: number) => [`${value.toFixed(1)}%`]}
+                  />
+                  <Legend />
+                  <Area
+                    type="monotone"
+                    dataKey="cpu"
+                    stroke="hsl(217, 91%, 60%)"
+                    fill="hsl(217, 91%, 60%)"
+                    fillOpacity={0.2}
+                    strokeWidth={2}
+                    name="CPU"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="ram"
+                    stroke="hsl(142, 76%, 36%)"
+                    fill="hsl(142, 76%, 36%)"
+                    fillOpacity={0.2}
+                    strokeWidth={2}
+                    name="RAM"
+                  />
+                  {usageHistory.some(p => p.gpu !== undefined) && (
+                    <Area
+                      type="monotone"
+                      dataKey="gpu"
+                      stroke="hsl(38, 92%, 50%)"
+                      fill="hsl(38, 92%, 50%)"
+                      fillOpacity={0.2}
+                      strokeWidth={2}
+                      name="GPU"
+                    />
+                  )}
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Account Summary and System Info */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Account Summary */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Wallet className="h-5 w-5" />
+                Account Summary
+              </CardTitle>
+              <CardDescription>Trading account overview</CardDescription>
+            </div>
+            <Badge variant={accountConnected ? 'default' : 'destructive'} className="gap-1">
+              {accountConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+              {accountConnected ? 'Live' : 'Offline'}
+            </Badge>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Total Balance</p>
+                <p className="text-lg font-semibold">
+                  {balances.length > 0 ? (
+                    <>
+                      ${balances.reduce((sum, b) => {
+                        const total = parseFloat(b.total || '0');
+                        return sum + (isNaN(total) ? 0 : total);
+                      }, 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <TrendingUp className="h-3 w-3" />
+                  Positions
+                </p>
+                <p className="text-lg font-semibold">
+                  {positions.length > 0 ? (
+                    <span className={positions.some(p => parseFloat(p.unrealizedPnl || '0') > 0) ? 'text-green-500' : positions.some(p => parseFloat(p.unrealizedPnl || '0') < 0) ? 'text-red-500' : ''}>
+                      {positions.length}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">0</span>
+                  )}
+                </p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <ShoppingCart className="h-3 w-3" />
+                  Active Orders
+                </p>
+                <p className="text-lg font-semibold">
+                  {orders.length > 0 ? (
+                    <span className="text-blue-500">{orders.length}</span>
+                  ) : (
+                    <span className="text-muted-foreground">0</span>
+                  )}
+                </p>
+              </div>
+            </div>
+            {positions.length > 0 && (
+              <div className="mt-4 pt-4 border-t">
+                <p className="text-xs text-muted-foreground mb-2">Open Positions</p>
+                <div className="space-y-2">
+                  {positions.slice(0, 3).map((pos) => {
+                    const pnl = parseFloat(pos.unrealizedPnl || '0');
+                    const pnlPct = parseFloat(pos.unrealizedPnlPct || '0');
+                    return (
+                      <div key={pos.id} className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={pos.side === 'long' ? 'default' : 'destructive'} className="text-xs">
+                            {pos.side?.toUpperCase()}
+                          </Badge>
+                          <span className="font-medium">{pos.symbol}</span>
+                        </div>
+                        <span className={pnl >= 0 ? 'text-green-500' : 'text-red-500'}>
+                          {pnl >= 0 ? '+' : ''}{pnl.toFixed(2)} ({pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%)
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {positions.length > 3 && (
+                    <p className="text-xs text-muted-foreground">+{positions.length - 3} more</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* System Info */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <MonitorSmartphone className="h-5 w-5" />
+              System Info
+            </CardTitle>
+            <CardDescription>Server hardware specifications</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {!systemInfo ? (
+              <div className="space-y-3">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+              </div>
+            ) : (
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Hostname</span>
+                  <span className="font-medium">{systemInfo.hostname}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">CPU</span>
+                  <span className="font-medium truncate ml-4" title={systemInfo.cpu_model}>
+                    {systemInfo.cpu_model?.split('@')[0]?.trim() || systemInfo.cpu_model}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">CPU Cores</span>
+                  <span className="font-medium">{systemInfo.cpu_count}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Total RAM</span>
+                  <span className="font-medium">{(systemInfo.ram_total_mb / 1024).toFixed(1)} GB</span>
+                </div>
+                {systemInfo.gpu_count > 0 && (
+                  <>
+                    <div className="pt-2 border-t">
+                      <span className="text-muted-foreground text-xs">GPUs ({systemInfo.gpu_count})</span>
+                    </div>
+                    {systemInfo.gpus?.map((gpu, idx) => (
+                      <div key={idx} className="flex justify-between pl-2">
+                        <span className="text-muted-foreground truncate" title={gpu.name}>
+                          {gpu.name?.split(' ').slice(0, 3).join(' ')}
+                        </span>
+                        <span className="font-medium">{(gpu.memory_mb / 1024).toFixed(0)} GB</span>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>

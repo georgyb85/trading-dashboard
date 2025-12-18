@@ -581,6 +581,7 @@ const ModelDetailPanel = ({
                 <FoldResults
                   result={trainResult}
                   isLoading={metricsQuery.isFetching}
+                  loadingMessage="Loading model metrics…"
                   error={metricsError}
                   liveMetrics={metricsQuery.data?.live_metrics}
                 />
@@ -1148,7 +1149,10 @@ const LiveModelPage = () => {
       }
       return resp.data;
     },
-    staleTime: 30_000,
+    // Metrics (training results) rarely change - cache for 5 minutes
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const predictionsQuery = useQuery<{ ts_ms: number; prediction: number; long_threshold: number; short_threshold: number; feature_hash?: string; model_id?: string; actual?: number; matched?: boolean }[]>({
@@ -1161,7 +1165,10 @@ const LiveModelPage = () => {
       }
       return resp.data.predictions;
     },
-    staleTime: 30_000,
+    // Predictions history - cache for 2 minutes, new predictions come via WebSocket
+    staleTime: 2 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const handleGoLive = () => {

@@ -48,6 +48,7 @@ interface LiveMetrics {
 interface FoldResultsProps {
   result?: XGBoostTrainResult | null;
   isLoading?: boolean;
+  loadingMessage?: string;
   error?: string | null;
   liveMetrics?: LiveMetrics | null;
 }
@@ -55,7 +56,7 @@ interface FoldResultsProps {
 const numberFormatter = (value: number, digits = 4) =>
   Number.isFinite(value) ? value.toFixed(digits) : "—";
 
-export const FoldResults = ({ result, isLoading, error, liveMetrics }: FoldResultsProps) => {
+export const FoldResults = ({ result, isLoading, loadingMessage, error, liveMetrics }: FoldResultsProps) => {
   // Dynamic threshold state
   const [longThreshold, setLongThreshold] = useState<number | null>(null);
   const [shortThreshold, setShortThreshold] = useState<number | null>(null);
@@ -65,7 +66,7 @@ export const FoldResults = ({ result, isLoading, error, liveMetrics }: FoldResul
       <div className="flex h-full items-center justify-center text-muted-foreground">
         <div className="flex items-center gap-2 text-sm">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Training on GPU – this usually takes a few seconds…
+          {loadingMessage || 'Loading…'}
         </div>
       </div>
     );
