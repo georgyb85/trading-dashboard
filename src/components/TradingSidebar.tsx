@@ -1,13 +1,9 @@
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import {
-  Activity,
-  BarChart3,
   Brain,
   DollarSign,
-  Settings,
   Shield,
-  TrendingUp,
   Wallet,
   ClipboardList,
   Zap,
@@ -34,10 +30,10 @@ const navigationItems = [
     description: "Thread status & message rates"
   },
   {
-    title: "Trading Overview",
-    url: "/trading",
-    icon: TrendingUp,
-    description: "Trading statistics"
+    title: "Live Model",
+    url: "/live-model",
+    icon: Brain,
+    description: "Activate and monitor live model"
   },
   {
     title: "Positions",
@@ -64,28 +60,10 @@ const navigationItems = [
     description: "Real-time prices & trades"
   },
   {
-    title: "ML Model Monitor",
-    url: "/model",
-    icon: Brain,
-    description: "ML predictions"
-  },
-  {
     title: "Risk Management",
     url: "/risk",
     icon: Shield,
     description: "Risk controls"
-  },
-  {
-    title: "Strategy Config",
-    url: "/config",
-    icon: Settings,
-    description: "Trading parameters"
-  },
-  {
-    title: "Analytics",
-    url: "/analytics",
-    icon: BarChart3,
-    description: "Performance reports"
   },
   {
     title: "Indicators",
@@ -110,12 +88,6 @@ const navigationItems = [
     url: "/walkforward",
     icon: Route,
     description: "Cross-validation orchestration"
-  },
-  {
-    title: "Live Model",
-    url: "/live-model",
-    icon: Brain,
-    description: "Activate and monitor live model"
   },
   {
     title: "Audit & Logs",

@@ -47,6 +47,16 @@ import {
   Rocket,
 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  ResponsiveContainer,
+  ReferenceLine,
+  Tooltip,
+} from 'recharts';
 import { krakenClient } from '@/lib/kraken/client';
 import { Input } from '@/components/ui/input';
 import { useMarketDataContext } from '@/contexts/MarketDataContext';
@@ -656,11 +666,12 @@ const ModelDetailPanel = ({
 
         {/* PREDICTIONS TAB */}
         {activeTab === 'predictions' && (
-          <div>
-            <div className="flex items-center justify-between mb-4">
+          <div className="space-y-6">
+            {/* Header with Signal Type Selector */}
+            <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold flex items-center gap-2">
                 <Activity className="h-4 w-4 text-primary" />
-                Recent Predictions
+                Prediction History
                 {horizonBars > 0 && (
                   <span className="text-xs text-muted-foreground font-normal">({horizonBars} bar horizon)</span>
                 )}
@@ -707,6 +718,125 @@ const ModelDetailPanel = ({
                 </Badge>
               </div>
             </div>
+
+            {/* Prediction History Chart */}
+            {combinedPredictions.length > 0 && (
+              <div className="p-4 rounded-lg border border-border/50 bg-card/50">
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart
+                    data={combinedPredictions.slice(0, 50).reverse().map((p) => {
+                      const thresholds = trainResult?.thresholds;
+                      let longTh: number | undefined;
+                      let shortTh: number | undefined;
+
+                      if (signalType === 'zero') {
+                        longTh = 0;
+                        shortTh = 0;
+                      } else if (signalType === 'percentile') {
+                        longTh = thresholds?.long_percentile_95;
+                        shortTh = thresholds?.short_percentile_05;
+                      } else {
+                        longTh = thresholds?.long_optimal ?? p.longThreshold;
+                        shortTh = thresholds?.short_optimal ?? p.shortThreshold;
+                      }
+
+                      return {
+                        time: new Date(p.ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                        prediction: p.prediction,
+                        longThreshold: longTh,
+                        shortThreshold: shortTh,
+                      };
+                    })}
+                    margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+                    <XAxis
+                      dataKey="time"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                      tickFormatter={(v) => v.toFixed(4)}
+                      domain={['auto', 'auto']}
+                      width={60}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--card))',
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                      }}
+                      labelStyle={{ color: 'hsl(var(--foreground))' }}
+                      formatter={(value: number) => [value.toFixed(6), 'Prediction']}
+                    />
+                    {/* Threshold reference lines */}
+                    {signalType !== 'zero' && trainResult?.thresholds && (
+                      <>
+                        <ReferenceLine
+                          y={signalType === 'percentile'
+                            ? trainResult.thresholds.long_percentile_95
+                            : trainResult.thresholds.long_optimal}
+                          stroke="hsl(142.1 76.2% 36.3%)"
+                          strokeDasharray="5 5"
+                          strokeWidth={1.5}
+                        />
+                        <ReferenceLine
+                          y={signalType === 'percentile'
+                            ? trainResult.thresholds.short_percentile_05
+                            : trainResult.thresholds.short_optimal}
+                          stroke="hsl(346.8 77.2% 49.8%)"
+                          strokeDasharray="5 5"
+                          strokeWidth={1.5}
+                        />
+                      </>
+                    )}
+                    {signalType === 'zero' && (
+                      <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" strokeWidth={1} />
+                    )}
+                    <Line
+                      type="monotone"
+                      dataKey="prediction"
+                      stroke="hsl(var(--primary))"
+                      strokeWidth={2}
+                      dot={{ r: 2, fill: 'hsl(var(--primary))' }}
+                      activeDot={{ r: 4, fill: 'hsl(var(--primary))' }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+                <div className="flex items-center justify-center gap-6 mt-3 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-0.5 bg-primary rounded" />
+                    <span className="text-muted-foreground">Prediction</span>
+                  </div>
+                  {signalType !== 'zero' && (
+                    <>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-3 h-0.5 bg-emerald-500 rounded" style={{ borderStyle: 'dashed' }} />
+                        <span className="text-muted-foreground">Long Threshold</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-3 h-0.5 bg-red-500 rounded" />
+                        <span className="text-muted-foreground">Short Threshold</span>
+                      </div>
+                    </>
+                  )}
+                  {signalType === 'zero' && (
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-0.5 bg-muted-foreground rounded" />
+                      <span className="text-muted-foreground">Zero Line</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Predictions Table */}
             {combinedPredictions.length > 0 ? (
               <div className="overflow-x-auto rounded-lg border border-border/50">
                 <Table>
