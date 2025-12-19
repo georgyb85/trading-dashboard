@@ -324,13 +324,17 @@ export function OrdersTable() {
         }).format(parseFloat(value));
       };
 
+      // Normalize side - handle various formats: "buy", "Buy", "BUY", "long", "LONG", etc.
+      const sideUpper = (order.side || '').toUpperCase();
+      const isBuy = sideUpper === 'BUY' || sideUpper === 'LONG' || sideUpper === 'B';
+
       return {
         id: order.id,
         status,
         clientOrderId: order.clientId || `ord_${order.id.slice(0, 8)}`,
         exchange: "Kraken",
         symbol: order.symbol,
-        side: order.side === "Buy" ? "Buy" : "Sell",
+        side: isBuy ? "Buy" : "Sell",
         type: (order.type as "Limit" | "Market" | "Stop") || "Limit",
         quantity: `${parseFloat(order.quantity).toFixed(4)} ${order.symbol.split("/")[0] || ""}`,
         price: order.price ? formatCurrency(order.price) : "Market",
