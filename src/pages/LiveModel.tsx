@@ -1,7 +1,7 @@
 import { FoldResults } from '@/apps/walkforward/components/FoldResults';
 import { Button } from '@/components/ui/button';
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { GoLiveModal } from '@/apps/walkforward/components/GoLiveModal';
 import { useRunsContext } from '@/contexts/RunsContext';
 import { toast } from '@/hooks/use-toast';
@@ -169,6 +169,24 @@ const ModelCard = ({
           <ExecutorIcon className="h-3 w-3" />
           <span>{executorStatus.label}</span>
         </div>
+      </div>
+
+      {/* Model Info Row */}
+      <div className="flex items-center gap-2 mb-3 text-[10px] text-muted-foreground">
+        <span className="font-mono bg-muted/50 px-1.5 py-0.5 rounded">v{model.version}</span>
+        {model.feature_hash && (
+          <span className="font-mono bg-muted/50 px-1.5 py-0.5 rounded truncate max-w-[80px]" title={`Feature hash: ${model.feature_hash}`}>
+            #{model.feature_hash.slice(0, 8)}
+          </span>
+        )}
+        {model.target_horizon_bars !== undefined && model.target_horizon_bars > 0 && (
+          <span className="bg-muted/50 px-1.5 py-0.5 rounded">{model.target_horizon_bars}bar</span>
+        )}
+        {model.best_score !== undefined && (
+          <span className="bg-muted/50 px-1.5 py-0.5 rounded" title="Best CV Score">
+            {model.best_score.toFixed(4)}
+          </span>
+        )}
       </div>
 
       {/* Training Info Grid */}
@@ -456,6 +474,22 @@ const ModelDetailPanel = ({
 
               {/* Quick Stats */}
               <div className="hidden md:flex items-center gap-4 pl-4 border-l border-border/30">
+                <div className="text-center">
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Version</div>
+                  <div className="font-mono text-xs font-medium">v{model.version}</div>
+                </div>
+                {model.feature_hash && (
+                  <div className="text-center" title={`Feature hash: ${model.feature_hash}`}>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Hash</div>
+                    <div className="font-mono text-xs font-medium">#{model.feature_hash.slice(0, 8)}</div>
+                  </div>
+                )}
+                {model.target_horizon_bars !== undefined && model.target_horizon_bars > 0 && (
+                  <div className="text-center">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Horizon</div>
+                    <div className="font-mono text-xs font-medium">{model.target_horizon_bars} bars</div>
+                  </div>
+                )}
                 <div className="text-center">
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Trained</div>
                   <div className="font-mono text-xs font-medium">
@@ -1157,6 +1191,8 @@ const LiveModelPage = () => {
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
+    // Keep showing previous data while fetching new data (avoids "no metrics" flash)
+    placeholderData: keepPreviousData,
   });
 
   const predictionsQuery = useQuery<{ ts_ms: number; prediction: number; long_threshold: number; short_threshold: number; feature_hash?: string; model_id?: string; actual?: number; matched?: boolean }[]>({
@@ -1173,6 +1209,8 @@ const LiveModelPage = () => {
     staleTime: 2 * 60 * 1000,
     gcTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
+    // Keep showing previous data while fetching
+    placeholderData: keepPreviousData,
   });
 
   const handleGoLive = () => {
