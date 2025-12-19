@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { toast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -6,23 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Activity, Server, Clock, Database, Cpu, HardDrive, Wifi, WifiOff, AlertTriangle, PauseCircle, Wallet, TrendingUp, ShoppingCart, MonitorSmartphone, BarChart3 } from 'lucide-react';
+import { Activity, Server, Clock, Database, HardDrive, Wifi, WifiOff, AlertTriangle, PauseCircle, Wallet, TrendingUp, ShoppingCart, MonitorSmartphone } from 'lucide-react';
 import { useHealthData } from '@/hooks/useHealthData';
 import { useStatusStream } from '@/hooks/useStatusStream';
 import { useStage1UsageStream } from '@/hooks/useStage1UsageStream';
 import { useLiveModels, useDeactivateModel } from '@/hooks/useKrakenLive';
 import { useAccountState } from '@/hooks/useAccountState';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, AreaChart } from 'recharts';
-
-const MAX_USAGE_HISTORY = 60; // Keep last 60 data points
-
-interface UsageDataPoint {
-  timestamp: number;
-  time: string;
-  cpu: number;
-  ram: number;
-  gpu?: number;
-}
 
 function formatUptime(ms: number): string {
   const seconds = Math.floor(ms / 1000);
@@ -51,25 +39,6 @@ export default function LiveOverview() {
   const { data: models } = useLiveModels();
   const deactivateMutation = useDeactivateModel();
   const { balances, positions, orders, connected: accountConnected } = useAccountState();
-  const [stage1UsageHistory, setStage1UsageHistory] = useState<UsageDataPoint[]>([]);
-
-  // Accumulate Stage1 usage history over time
-  useEffect(() => {
-    if (!stage1Usage) return;
-
-    const now = Date.now();
-    const newPoint: UsageDataPoint = {
-      timestamp: now,
-      time: new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      cpu: stage1Usage.cpu_percent,
-      ram: stage1Usage.ram_percent,
-    };
-
-    setStage1UsageHistory(prev => {
-      const updated = [...prev, newPoint];
-      return updated.slice(-MAX_USAGE_HISTORY);
-    });
-  }, [stage1Usage]);
 
   // Filter to models with executors (trading-enabled models)
   const tradingModels = models?.filter(m => m.status === 'active' && m.has_executor) ?? [];
@@ -211,7 +180,7 @@ export default function LiveOverview() {
               </p>
             ) : krakenStats?.message_rates ? (
               <p className="text-xs text-muted-foreground">
-                {krakenStats.message_rates.total?.toLocaleString() ?? 0} msgs/s
+                {(krakenStats.message_rates.total ?? krakenStats.message_rates.total_per_sec ?? 0).toLocaleString()} msgs/s
               </p>
             ) : null}
           </CardContent>
@@ -238,15 +207,15 @@ export default function LiveOverview() {
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Messages/sec</span>
-                      <span className="font-mono font-medium">{krakenStats.message_rates.total?.toLocaleString() ?? 0}</span>
+                      <span className="font-mono font-medium">{(krakenStats.message_rates.total ?? krakenStats.message_rates.total_per_sec ?? 0).toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Trades/sec</span>
-                      <span className="font-mono font-medium">{krakenStats.message_rates.trades?.toLocaleString() ?? 0}</span>
+                      <span className="font-mono font-medium">{(krakenStats.message_rates.trades ?? krakenStats.message_rates.trades_per_sec ?? 0).toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Orderbooks/sec</span>
-                      <span className="font-mono font-medium">{krakenStats.message_rates.orderbooks?.toLocaleString() ?? 0}</span>
+                      <span className="font-mono font-medium">{(krakenStats.message_rates.orderbooks ?? krakenStats.message_rates.orderbooks_per_sec ?? 0).toLocaleString()}</span>
                     </div>
                   </div>
                 )}
@@ -309,44 +278,8 @@ export default function LiveOverview() {
         </Card>
       </div>
 
-      {/* Resource Gauges and Queue Depths */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Stage1 Resource Gauges */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Cpu className="h-5 w-5" />
-              Stage1 Resources
-            </CardTitle>
-            <CardDescription>Stage1 server resource utilization</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {!stage1Usage ? (
-              <div className="space-y-4">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-full" />
-              </div>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>CPU</span>
-                    <span className="font-medium">{stage1Usage.cpu_percent.toFixed(1)}%</span>
-                  </div>
-                  <Progress value={stage1Usage.cpu_percent} className="h-2" />
-                </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>RAM {stage1Usage.ram_used_mb !== undefined && `(${stage1Usage.ram_used_mb} / ${stage1Usage.ram_total_mb} MB)`}</span>
-                    <span className="font-medium">{stage1Usage.ram_percent.toFixed(1)}%</span>
-                  </div>
-                  <Progress value={stage1Usage.ram_percent} className="h-2" />
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
+      {/* Queue Depths */}
+      <div className="grid gap-4">
         {/* Queue Depths */}
         <Card>
           <CardHeader>
@@ -399,67 +332,7 @@ export default function LiveOverview() {
         </Card>
       </div>
 
-      {/* Stage1 Resource Usage History Chart */}
-      {stage1UsageHistory.length > 1 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              Stage1 Resource History
-            </CardTitle>
-            <CardDescription>
-              CPU and RAM utilization over time (last {stage1UsageHistory.length} samples)
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[200px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={stage1UsageHistory}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis
-                    dataKey="time"
-                    tick={{ fontSize: 10 }}
-                    interval="preserveStartEnd"
-                  />
-                  <YAxis
-                    tick={{ fontSize: 10 }}
-                    domain={[0, 100]}
-                    tickFormatter={(v) => `${v}%`}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      border: '1px solid hsl(var(--border))'
-                    }}
-                    formatter={(value: number) => [`${value.toFixed(1)}%`]}
-                  />
-                  <Legend />
-                  <Area
-                    type="monotone"
-                    dataKey="cpu"
-                    stroke="hsl(217, 91%, 60%)"
-                    fill="hsl(217, 91%, 60%)"
-                    fillOpacity={0.2}
-                    strokeWidth={2}
-                    name="CPU"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="ram"
-                    stroke="hsl(142, 76%, 36%)"
-                    fill="hsl(142, 76%, 36%)"
-                    fillOpacity={0.2}
-                    strokeWidth={2}
-                    name="RAM"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Account Summary and System Info */}
+      {/* Account Summary */}
       <div className="grid gap-4 md:grid-cols-2">
         {/* Account Summary */}
         <Card>
@@ -552,17 +425,17 @@ export default function LiveOverview() {
           </CardContent>
         </Card>
 
-        {/* System Info */}
+        {/* Stage1 System Info */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <MonitorSmartphone className="h-5 w-5" />
-              System Info
+              Stage1 System Info
             </CardTitle>
-            <CardDescription>Server hardware specifications</CardDescription>
+            <CardDescription>Stage1 server hardware specifications</CardDescription>
           </CardHeader>
           <CardContent>
-            {!systemInfo ? (
+            {!stage1SystemInfo ? (
               <div className="space-y-3">
                 <Skeleton className="h-4 w-full" />
                 <Skeleton className="h-4 w-3/4" />
@@ -572,37 +445,22 @@ export default function LiveOverview() {
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Hostname</span>
-                  <span className="font-medium">{systemInfo.hostname}</span>
+                  <span className="font-medium">{stage1SystemInfo.hostname}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">CPU</span>
-                  <span className="font-medium truncate ml-4" title={systemInfo.cpu_model}>
-                    {systemInfo.cpu_model?.split('@')[0]?.trim() || systemInfo.cpu_model}
+                  <span className="font-medium truncate ml-4" title={stage1SystemInfo.cpu_model}>
+                    {stage1SystemInfo.cpu_model?.split('@')[0]?.trim() || stage1SystemInfo.cpu_model}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">CPU Cores</span>
-                  <span className="font-medium">{systemInfo.cpu_count}</span>
+                  <span className="font-medium">{stage1SystemInfo.cpu_count}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Total RAM</span>
-                  <span className="font-medium">{(systemInfo.ram_total_mb / 1024).toFixed(1)} GB</span>
+                  <span className="font-medium">{(stage1SystemInfo.ram_total_mb / 1024).toFixed(1)} GB</span>
                 </div>
-                {systemInfo.gpu_count > 0 && (
-                  <>
-                    <div className="pt-2 border-t">
-                      <span className="text-muted-foreground text-xs">GPUs ({systemInfo.gpu_count})</span>
-                    </div>
-                    {systemInfo.gpus?.map((gpu, idx) => (
-                      <div key={idx} className="flex justify-between pl-2">
-                        <span className="text-muted-foreground truncate" title={gpu.name}>
-                          {gpu.name?.split(' ').slice(0, 3).join(' ')}
-                        </span>
-                        <span className="font-medium">{(gpu.memory_mb / 1024).toFixed(0)} GB</span>
-                      </div>
-                    ))}
-                  </>
-                )}
               </div>
             )}
           </CardContent>

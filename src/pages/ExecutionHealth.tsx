@@ -7,9 +7,10 @@ import { Progress } from '@/components/ui/progress';
 import { Activity, Cpu, Wifi, WifiOff, TrendingUp, Clock, BarChart2, AlertCircle, Gauge, Hash } from 'lucide-react';
 import { useStatusStream } from '@/hooks/useStatusStream';
 import { useStage1UsageStream } from '@/hooks/useStage1UsageStream';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, Cell, ReferenceLine } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, Cell, ReferenceLine, AreaChart, Area } from 'recharts';
 
 const MAX_RATE_HISTORY = 60; // Keep last 60 data points (~1 minute at 1/sec)
+const MAX_USAGE_HISTORY = 60; // Keep last 60 data points for resource usage
 
 interface RateDataPoint {
   timestamp: number;
@@ -20,6 +21,13 @@ interface RateDataPoint {
   errors: number;
 }
 
+interface UsageDataPoint {
+  timestamp: number;
+  time: string;
+  cpu: number;
+  ram: number;
+}
+
 function formatLatency(us: number): string {
   if (us < 1000) return `${us}μs`;
   if (us < 1000000) return `${(us / 1000).toFixed(1)}ms`;
@@ -28,15 +36,18 @@ function formatLatency(us: number): string {
 
 export default function ExecutionHealth() {
   const { connected, stats, trades, lastPrices, error } = useStatusStream();
-  const { usage: stage1Usage, connected: stage1Connected } = useStage1UsageStream();
+  const { usage: stage1Usage, systemInfo: stage1SystemInfo, connected: stage1Connected } = useStage1UsageStream();
   const [rateHistory, setRateHistory] = useState<RateDataPoint[]>([]);
+  const [stage1UsageHistory, setStage1UsageHistory] = useState<UsageDataPoint[]>([]);
 
   // Get message rates from status stream (Kraken trader)
+  // Backend may send keys as 'total' or 'total_per_sec' depending on endpoint
   const messageRates = useMemo(() => {
+    const rates = stats?.message_rates;
     return {
-      total: stats?.message_rates?.total || 0,
-      trades: stats?.message_rates?.trades || 0,
-      orderbooks: stats?.message_rates?.orderbooks || 0
+      total: rates?.total ?? rates?.total_per_sec ?? 0,
+      trades: rates?.trades ?? rates?.trades_per_sec ?? 0,
+      orderbooks: rates?.orderbooks ?? rates?.orderbooks_per_sec ?? 0
     };
   }, [stats?.message_rates]);
 
@@ -88,6 +99,24 @@ export default function ExecutionHealth() {
       return updated.slice(-MAX_RATE_HISTORY);
     });
   }, [messageRates, totalErrors]);
+
+  // Accumulate Stage1 usage history over time
+  useEffect(() => {
+    if (!stage1Usage) return;
+
+    const now = Date.now();
+    const newPoint: UsageDataPoint = {
+      timestamp: now,
+      time: new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      cpu: stage1Usage.cpu_percent,
+      ram: stage1Usage.ram_percent,
+    };
+
+    setStage1UsageHistory(prev => {
+      const updated = [...prev, newPoint];
+      return updated.slice(-MAX_USAGE_HISTORY);
+    });
+  }, [stage1Usage]);
 
   return (
     <div className="space-y-6">
@@ -205,6 +234,98 @@ export default function ExecutionHealth() {
           )}
         </CardContent>
       </Card>
+
+      {/* Stage1 System Info */}
+      {stage1SystemInfo && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Stage1 System Info</CardTitle>
+            <Cpu className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <span className="text-muted-foreground">Hostname</span>
+                <p className="font-medium">{stage1SystemInfo.hostname}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">CPU</span>
+                <p className="font-medium truncate" title={stage1SystemInfo.cpu_model}>
+                  {stage1SystemInfo.cpu_model?.split('@')[0]?.trim() || stage1SystemInfo.cpu_model}
+                </p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Cores</span>
+                <p className="font-medium">{stage1SystemInfo.cpu_count}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">RAM</span>
+                <p className="font-medium">{(stage1SystemInfo.ram_total_mb / 1024).toFixed(1)} GB</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Stage1 Resource Usage History */}
+      {stage1UsageHistory.length > 1 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart2 className="h-5 w-5" />
+              Stage1 Resource History
+            </CardTitle>
+            <CardDescription>
+              CPU and RAM utilization over time (last {stage1UsageHistory.length} samples)
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[200px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={stage1UsageHistory}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis
+                    dataKey="time"
+                    tick={{ fontSize: 10 }}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10 }}
+                    domain={[0, 100]}
+                    tickFormatter={(v) => `${v}%`}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--card))',
+                      border: '1px solid hsl(var(--border))'
+                    }}
+                    formatter={(value: number) => [`${value.toFixed(1)}%`]}
+                  />
+                  <Legend />
+                  <Area
+                    type="monotone"
+                    dataKey="cpu"
+                    stroke="hsl(217, 91%, 60%)"
+                    fill="hsl(217, 91%, 60%)"
+                    fillOpacity={0.2}
+                    strokeWidth={2}
+                    name="CPU"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="ram"
+                    stroke="hsl(142, 76%, 36%)"
+                    fill="hsl(142, 76%, 36%)"
+                    fillOpacity={0.2}
+                    strokeWidth={2}
+                    name="RAM"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Thread Health Overview */}
       {threadSummary.total > 0 && (
