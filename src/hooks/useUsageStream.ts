@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { config } from '@/lib/config';
 import type { UsageUpdate, SystemInfo, UsageMessage } from '@/lib/kraken/types';
 
 const MAX_RECONNECT_DELAY = 30_000; // Max 30s between retries
@@ -40,7 +39,9 @@ export const useUsageStream = (): UseUsageStreamResult => {
       return;
     }
 
-    const wsUrl = `${config.krakenWsBaseUrl}/usage`;
+    // Use proxied path for Kraken trader (nginx/caddy forwards /api/usage to Kraken trader)
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/api/usage`;
     let ws: WebSocket;
     try {
       ws = new WebSocket(wsUrl);
