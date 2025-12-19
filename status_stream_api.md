@@ -1,100 +1,70 @@
 # Status Stream WebSocket API
 
-The `StatusStream` controller exposes a WebSocket endpoint that broadcasts live telemetry coming from the Bybit standalone harness and the main application. Clients subscribe to the `status` topic to receive:
+The StatusStream controller in the Kraken trader broadcasts live execution telemetry over WebSocket. It is a broadcast-only stream: clients do not send messages. A snapshot is sent on connect, followed by periodic updates (about once per second).
 
-- Periodic statistics snapshots (message rates, thread status, latest prices).
-- Trade tick summaries for every Bybit trade message.
-- OHLCV candle updates for 1m bars aggregated by the realtime OHLCV provider.
+## Endpoints
 
-## Endpoint
+Direct (Kraken trader):
+- ws://<kraken-host>:<port>/ws/status
+- ws://<kraken-host>:<port>/status (legacy alias)
 
-```
-ws://<host>:<port>/ws/status
-```
+Proxied through Stage1 nginx:
+- wss://agenticresearch.info/api/status-ws
 
-Use the same host and port as the Drogon HTTP server.
+## Client Behavior
 
-## Client Commands
+No subscription message is required. Any client payloads are ignored.
 
-All client commands are UTF-8 JSON objects. At present only subscription is supported.
+## Message Types
 
-### Subscribe to Status Topic
+All messages include:
+- `topic: "status"`
+- `type: "snapshot"` or `type: "update"`
 
-```
-{"action":"subscribe","topic":"status"}
-```
+### Snapshot
 
-Successful subscription causes the server to send an immediate snapshot response (see below), followed by streaming updates as they occur.
-
-## Server Messages
-
-Every outbound message includes `topic:"status"` and `type` to differentiate payload shapes.
-
-### Snapshot (`type":"snapshot"`)
-
-Sent once after a client subscribes. Contains the most recent stats, trades, and candles known to the server.
+Sent immediately after connection.
 
 ```json
 {
   "topic": "status",
   "type": "snapshot",
   "stats": { ... },
-  "trades": [ { ... } ],
-  "ohlcv": [ { ... } ]
+  "trades": [ ... ]
 }
 ```
 
-Any section may be omitted when no cached data exists.
+### Update
 
-### Stats Update (`type":"stats"`)
+Broadcast periodically.
 
-Broadcast every second with the latest counters and thread information. Important fields:
-
-- `timestamp`: ISO-8601 UTC string.
-- `text`: Console-formatted version of the update (matches stdout).
-- `last_prices`: Map of symbol to last known Bybit price.
-- `message_counts`: Totals processed so far.
-- `message_rates`: Rates per second computed over the last interval.
-- `thread_statuses`: Array of per-thread metrics from `ThreadRegistry`.
-
-### Trade Update (`type":"trade"`)
-
-Sent for each individual Bybit trade message.
-
-- `symbol`: Bybit symbol (e.g. `BTCUSDT`).
-- `side`: `Buy` or `Sell`.
-- `price`, `volume`: Parsed numeric values from the trade tick.
-- `timestamp`: Milliseconds since epoch.
-- `timestamp_iso`: ISO-8601 UTC string.
-- `message_counts.trade_messages`: Number of trades processed up to that point.
-
-### OHLCV Update (`type":"ohlcv"`)
-
-Emitted whenever the realtime OHLCV provider publishes a 1m candle.
-
-- `exchange`: Always `bybit` in the standalone harness.
-- `symbol`: Upper-case symbol plus `USDT`.
-- `timeframe`: Currently `1m`.
-- `timestamp`: Candle close time in milliseconds since epoch.
-- `open`, `high`, `low`, `close`, `volume`, `trades`, `vwap`: Candle metrics.
-- `timestamp_iso`: ISO-8601 UTC string.
-- `text`: Console-formatted string matching stdout.
-
-## Example Session
-
-Using `wscat` (npm package):
-
-```bash
-wscat -c ws://127.0.0.1:8848/ws/status
-> {"action":"subscribe","topic":"status"}
+```json
+{
+  "topic": "status",
+  "type": "update",
+  "stats": { ... },
+  "trades": [ ... ]
+}
 ```
 
-Alternatively, with `websocat`:
+`stats` fields:
+- `timestamp`: ISO-8601 UTC string
+- `text`: console-formatted line
+- `lastPrices`: array of `{ "symbol": "BTCUSD", "price": 12345.67 }`
+- `counts`: `{ "tradeMessages": 123, "orderbookMessages": 456 }`
+- `rates`: `{ "totalPerSec": 100, "tradesPerSec": 40, "orderbooksPerSec": 60 }`
+- `threads`: array of `{ "name": "...", "state": "running", "processed": 123, "errors": 0, "avgLatencyUs": 900 }`
+- `ringBuffers`: object keyed by buffer name with `{ "unconsumed": 0, "utilization": 0.12, "max12h": 120 }`
+
+`trades` fields:
+- `exchange`, `symbol`, `base`, `side`, `price`, `volume`
+- `timestamp` (epoch milliseconds)
+- `timestampIso` (ISO-8601 UTC string)
+
+## Example
 
 ```bash
-websocat ws://127.0.0.1:8848/ws/status
-{"action":"subscribe","topic":"status"}
+websocat wss://agenticresearch.info/api/status-ws
 ```
 
-Both tools will print the incoming JSON stream once the subscription message is sent.
-
+The server will start streaming immediately.

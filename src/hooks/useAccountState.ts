@@ -12,6 +12,8 @@ import {
   OrderHistory
 } from '@/types/account';
 import { saveToCache, loadFromCache, CACHE_KEYS } from '@/utils/cache';
+import { config } from '@/lib/config';
+import { joinUrl } from '@/lib/url';
 
 interface UseAccountStateOptions {
   autoConnect?: boolean;
@@ -59,7 +61,7 @@ export function useAccountState(options: UseAccountStateOptions = {}) {
     setLoadingHistory(true);
     try {
       console.log('📜 Fetching order history from API...');
-      const response = await fetch('/api/account/order-history');
+      const response = await fetch(joinUrl(config.krakenRestBaseUrl, '/api/account/order-history'));
 
       if (!response.ok) {
         throw new Error(`Failed to fetch order history: ${response.statusText}`);
@@ -152,8 +154,7 @@ export function useAccountState(options: UseAccountStateOptions = {}) {
       return;
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/api/account-ws`;
+    const wsUrl = joinUrl(config.krakenWsBaseUrl, '/api/account-ws');
 
     console.log('Connecting to Account State WebSocket:', wsUrl);
     const ws = new WebSocket(wsUrl);

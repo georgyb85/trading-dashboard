@@ -6,6 +6,8 @@ import {
   TradeData,
   StatsData
 } from '@/types/status';
+import { config } from '@/lib/config';
+import { joinUrl } from '@/lib/url';
 
 // Helper to convert array format [{symbol, price}] to Record<string, number>
 function convertLastPrices(prices: any): Record<string, number> {
@@ -28,6 +30,73 @@ function convertLastPrices(prices: any): Record<string, number> {
   }
 
   return {};
+}
+
+function pickNumber(source: Record<string, any> | undefined, keys: string[]): number | undefined {
+  if (!source) return undefined;
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function normalizeMessageRates(rates: Record<string, any> | undefined): Record<string, number> | undefined {
+  if (!rates) return undefined;
+
+  const total = pickNumber(rates, ['total', 'total_per_sec', 'totalPerSec']);
+  const trades = pickNumber(rates, ['trades', 'trades_per_sec', 'tradesPerSec', 'trade_messages', 'tradeMessages']);
+  const orderbooks = pickNumber(rates, ['orderbooks', 'orderbooks_per_sec', 'orderbooksPerSec', 'orderbook_messages', 'orderbookMessages']);
+
+  const normalized: Record<string, number> = {};
+  if (total !== undefined) {
+    normalized.total = total;
+    normalized.total_per_sec = total;
+    normalized.totalPerSec = total;
+  }
+  if (trades !== undefined) {
+    normalized.trades = trades;
+    normalized.trades_per_sec = trades;
+    normalized.tradesPerSec = trades;
+    normalized.trade_messages = trades;
+    normalized.tradeMessages = trades;
+  }
+  if (orderbooks !== undefined) {
+    normalized.orderbooks = orderbooks;
+    normalized.orderbooks_per_sec = orderbooks;
+    normalized.orderbooksPerSec = orderbooks;
+    normalized.orderbook_messages = orderbooks;
+    normalized.orderbookMessages = orderbooks;
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function normalizeMessageCounts(counts: Record<string, any> | undefined): Record<string, number> | undefined {
+  if (!counts) return undefined;
+
+  const trades = pickNumber(counts, ['trade_messages', 'tradeMessages', 'trades']);
+  const orderbooks = pickNumber(counts, ['orderbook_messages', 'orderbookMessages', 'orderbooks']);
+  const total = pickNumber(counts, ['total']) ?? ((trades ?? 0) + (orderbooks ?? 0));
+
+  const normalized: Record<string, number> = {};
+  if (total !== undefined) {
+    normalized.total = total;
+  }
+  if (trades !== undefined) {
+    normalized.trade_messages = trades;
+    normalized.tradeMessages = trades;
+    normalized.trades = trades;
+  }
+  if (orderbooks !== undefined) {
+    normalized.orderbook_messages = orderbooks;
+    normalized.orderbookMessages = orderbooks;
+    normalized.orderbooks = orderbooks;
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
 }
 
 interface UseStatusStreamOptions {
@@ -67,8 +136,8 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
         timestamp: s.timestamp,
         text: s.text,
         last_prices: s.lastPrices || s.last_prices,
-        message_counts: s.counts || s.message_counts,
-        message_rates: s.rates || s.message_rates,
+        message_counts: normalizeMessageCounts(s.counts || s.message_counts),
+        message_rates: normalizeMessageRates(s.rates || s.message_rates),
         thread_statuses: s.threads || s.thread_statuses
       };
       setStats(statsData);
@@ -97,8 +166,8 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
       timestamp: message.timestamp,
       text: message.text,
       last_prices: message.last_prices,
-      message_counts: message.message_counts,
-      message_rates: message.message_rates,
+      message_counts: normalizeMessageCounts(message.message_counts),
+      message_rates: normalizeMessageRates(message.message_rates),
       thread_statuses: message.thread_statuses
     };
     setStats(statsData);
@@ -122,8 +191,8 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
         timestamp: s.timestamp,
         text: s.text,
         last_prices: s.lastPrices || s.last_prices,
-        message_counts: s.counts || s.message_counts,
-        message_rates: s.rates || s.message_rates,
+        message_counts: normalizeMessageCounts(s.counts || s.message_counts),
+        message_rates: normalizeMessageRates(s.rates || s.message_rates),
         thread_statuses: s.threads || s.thread_statuses
       };
       setStats(statsData);
@@ -165,7 +234,7 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
       volume: message.volume,
       timestamp: message.timestamp,
       timestamp_iso: message.timestamp_iso,
-      message_counts: message.message_counts
+      message_counts: normalizeMessageCounts(message.message_counts)
     };
 
     setTrades(prev => {
@@ -187,8 +256,7 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
       return;
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/api/status-ws`;
+    const wsUrl = joinUrl(config.krakenWsBaseUrl, '/api/status-ws');
 
     console.log('[StatusStream] Connecting to:', wsUrl);
     const ws = new WebSocket(wsUrl);
@@ -198,12 +266,6 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
       console.log('[StatusStream] Connected');
       setConnected(true);
       setError(null);
-
-      // Subscribe to status topic
-      ws.send(JSON.stringify({
-        action: 'subscribe',
-        topic: 'status'
-      }));
 
       // Start sending pings every 15 seconds to keep connection alive
       if (pingIntervalRef.current) {

@@ -2,7 +2,7 @@
 // Based on status_stream_api.md
 // Note: OHLCV data now comes from /ws/live (MarketDataContext), not /ws/status
 
-export type StatusMessageType = 'snapshot' | 'stats' | 'trade';
+export type StatusMessageType = 'snapshot' | 'update' | 'stats' | 'trade';
 
 export interface StatusMessage {
   topic: 'status';
@@ -11,14 +11,21 @@ export interface StatusMessage {
 
 export interface ThreadStatus {
   name: string;
-  status: 'healthy' | 'warning' | 'error';
+  state?: string;
+  processed?: number;
+  errors?: number;
+  avgLatencyUs?: number;
+  status?: 'healthy' | 'warning' | 'error';
   queueSize?: number;
   processingRate?: number;
 }
 
 export interface MessageCounts {
   trade_messages?: number;
+  orderbook_messages?: number;
   total?: number;
+  tradeMessages?: number;
+  orderbookMessages?: number;
   [key: string]: number | undefined;
 }
 
@@ -26,13 +33,20 @@ export interface MessageRates {
   [key: string]: number;
 }
 
+export interface RingBufferStatus {
+  unconsumed: number;
+  utilization: number;
+  max12h: number;
+}
+
 export interface StatsData {
   timestamp: string;
   text?: string;
-  last_prices?: Record<string, number>;
+  last_prices?: Record<string, number> | Array<{ symbol: string; price: number }>;
   message_counts?: MessageCounts;
   message_rates?: MessageRates;
   thread_statuses?: ThreadStatus[];
+  ring_buffers?: Record<string, RingBufferStatus>;
 }
 
 export interface StatusSnapshotMessage extends StatusMessage {

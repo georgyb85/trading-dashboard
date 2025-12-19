@@ -3,10 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Progress } from '@/components/ui/progress';
-import { Activity, Cpu, Wifi, WifiOff, TrendingUp, Clock, BarChart2, AlertCircle, Gauge, Hash } from 'lucide-react';
+import { Activity, Cpu, Wifi, WifiOff, TrendingUp, Clock, BarChart2, AlertCircle, Gauge } from 'lucide-react';
 import { useStatusStream } from '@/hooks/useStatusStream';
-import { useStage1UsageStream } from '@/hooks/useStage1UsageStream';
+import { useUsageStream } from '@/hooks/useUsageStream';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, Cell, ReferenceLine, AreaChart, Area } from 'recharts';
 
 const MAX_RATE_HISTORY = 60; // Keep last 60 data points (~1 minute at 1/sec)
@@ -26,6 +25,7 @@ interface UsageDataPoint {
   time: string;
   cpu: number;
   ram: number;
+  gpu?: number | null;
 }
 
 function formatLatency(us: number): string {
@@ -34,22 +34,32 @@ function formatLatency(us: number): string {
   return `${(us / 1000000).toFixed(2)}s`;
 }
 
+function readRate(rates: Record<string, number> | undefined, keys: string[]): number {
+  if (!rates) return 0;
+  for (const key of keys) {
+    const value = rates[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return 0;
+}
+
 export default function ExecutionHealth() {
   const { connected, stats, trades, lastPrices, error } = useStatusStream();
-  const { usage: stage1Usage, systemInfo: stage1SystemInfo, connected: stage1Connected } = useStage1UsageStream();
+  const { usage: krakenUsage, systemInfo: krakenSystemInfo, connected: krakenUsageConnected, error: krakenUsageError } = useUsageStream();
   const [rateHistory, setRateHistory] = useState<RateDataPoint[]>([]);
-  const [stage1UsageHistory, setStage1UsageHistory] = useState<UsageDataPoint[]>([]);
+  const [krakenUsageHistory, setKrakenUsageHistory] = useState<UsageDataPoint[]>([]);
 
-  // Get message rates from status stream (Kraken trader)
-  // Backend may send keys as 'total' or 'total_per_sec' depending on endpoint
+  // Get message rates from status or usage stream (Kraken trader)
   const messageRates = useMemo(() => {
-    const rates = stats?.message_rates;
+    const rates = (stats?.message_rates ?? krakenUsage?.message_rates) as Record<string, number> | undefined;
     return {
-      total: rates?.total ?? rates?.total_per_sec ?? 0,
-      trades: rates?.trades ?? rates?.trades_per_sec ?? 0,
-      orderbooks: rates?.orderbooks ?? rates?.orderbooks_per_sec ?? 0
+      total: readRate(rates, ['total', 'total_per_sec', 'totalPerSec']),
+      trades: readRate(rates, ['trades', 'trades_per_sec', 'tradesPerSec', 'trade_messages', 'tradeMessages']),
+      orderbooks: readRate(rates, ['orderbooks', 'orderbooks_per_sec', 'orderbooksPerSec', 'orderbook_messages', 'orderbookMessages'])
     };
-  }, [stats?.message_rates]);
+  }, [stats?.message_rates, krakenUsage?.message_rates]);
 
   // Calculate total errors from thread statuses
   const totalErrors = useMemo(() => {
@@ -59,10 +69,13 @@ export default function ExecutionHealth() {
 
   // Calculate total message counts
   const totalMessages = useMemo(() => {
-    if (!stats?.message_counts) return { total: 0, trades: 0 };
+    if (!stats?.message_counts) return { total: 0, trades: 0, orderbooks: 0 };
+    const trades = stats.message_counts.trade_messages ?? stats.message_counts.tradeMessages ?? stats.message_counts.trades ?? 0;
+    const orderbooks = stats.message_counts.orderbook_messages ?? stats.message_counts.orderbookMessages ?? stats.message_counts.orderbooks ?? 0;
     return {
-      total: stats.message_counts.total || 0,
-      trades: stats.message_counts.trade_messages || stats.message_counts.trades || 0
+      total: stats.message_counts.total ?? trades + orderbooks,
+      trades,
+      orderbooks
     };
   }, [stats?.message_counts]);
 
@@ -78,10 +91,12 @@ export default function ExecutionHealth() {
     };
   }, [stats?.thread_statuses]);
 
+  const hasGpuHistory = krakenUsageHistory.some(point => typeof point.gpu === 'number');
+
   // Accumulate rate history on every usage/stats update (capped by MAX_RATE_HISTORY)
   useEffect(() => {
-    // Only add point if we have rate data from either source
-    if (!messageRates.total && !messageRates.trades) return;
+    const rateSource = (stats?.message_rates ?? krakenUsage?.message_rates) as Record<string, number> | undefined;
+    if (!rateSource) return;
 
     const now = Date.now();
     const newPoint: RateDataPoint = {
@@ -98,25 +113,26 @@ export default function ExecutionHealth() {
       // Keep only the last MAX_RATE_HISTORY points
       return updated.slice(-MAX_RATE_HISTORY);
     });
-  }, [messageRates, totalErrors]);
+  }, [messageRates, totalErrors, stats?.message_rates, krakenUsage?.message_rates]);
 
-  // Accumulate Stage1 usage history over time
+  // Accumulate Kraken usage history over time
   useEffect(() => {
-    if (!stage1Usage) return;
+    if (!krakenUsage) return;
 
     const now = Date.now();
     const newPoint: UsageDataPoint = {
       timestamp: now,
       time: new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      cpu: stage1Usage.cpu_percent,
-      ram: stage1Usage.ram_percent,
+      cpu: krakenUsage.cpu_percent,
+      ram: krakenUsage.ram_percent,
+      gpu: typeof krakenUsage.gpu_percent === 'number' ? krakenUsage.gpu_percent : null,
     };
 
-    setStage1UsageHistory(prev => {
+    setKrakenUsageHistory(prev => {
       const updated = [...prev, newPoint];
       return updated.slice(-MAX_USAGE_HISTORY);
     });
-  }, [stage1Usage]);
+  }, [krakenUsage]);
 
   return (
     <div className="space-y-6">
@@ -128,19 +144,24 @@ export default function ExecutionHealth() {
         <div className="flex items-center gap-2">
           <Badge variant={connected ? 'default' : 'destructive'} className="gap-1">
             {connected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-            Kraken
+            Status
           </Badge>
-          <Badge variant={stage1Connected ? 'default' : 'destructive'} className="gap-1">
-            {stage1Connected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-            Stage1
+          <Badge variant={krakenUsageConnected ? 'default' : 'destructive'} className="gap-1">
+            {krakenUsageConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+            Usage
           </Badge>
         </div>
       </div>
 
-      {error && (
+      {(error || krakenUsageError) && (
         <Card className="border-destructive">
-          <CardContent className="pt-6">
-            <p className="text-destructive">{error}</p>
+          <CardContent className="pt-6 space-y-2">
+            {error && (
+              <p className="text-destructive">Status stream: {error}</p>
+            )}
+            {krakenUsageError && (
+              <p className="text-destructive">Usage stream: {krakenUsageError}</p>
+            )}
           </CardContent>
         </Card>
       )}
@@ -185,7 +206,7 @@ export default function ExecutionHealth() {
               {messageRates.orderbooks?.toLocaleString() ?? '—'}
             </div>
             <p className="text-xs text-muted-foreground">
-              Real-time updates
+              Total: {totalMessages.orderbooks.toLocaleString()}
             </p>
           </CardContent>
         </Card>
@@ -205,127 +226,156 @@ export default function ExecutionHealth() {
         </Card>
       </div>
 
-      {/* Stage1 Server Resources */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Stage1 Server Resources</CardTitle>
-          <Cpu className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          {stage1Usage ? (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">CPU</span>
-                  <span className="font-medium">{stage1Usage.cpu_percent.toFixed(1)}%</span>
-                </div>
-                <Progress value={stage1Usage.cpu_percent} className="h-1.5" />
+      <div className="grid gap-4 lg:grid-cols-2">
+        {rateHistory.length > 1 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart2 className="h-5 w-5" />
+                Message Rate History
+              </CardTitle>
+              <CardDescription>Messages per second over time (last {rateHistory.length} samples)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[220px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={rateHistory}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis
+                      dataKey="time"
+                      tick={{ fontSize: 10 }}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
+                    <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                      tick={{ fontSize: 10 }}
+                      stroke="hsl(0, 84%, 60%)"
+                      label={{ value: 'Errors', angle: 90, position: 'insideRight', fontSize: 10 }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--card))',
+                        border: '1px solid hsl(var(--border))'
+                      }}
+                    />
+                    <Legend />
+                    <Line
+                      yAxisId="left"
+                      type="monotone"
+                      dataKey="total"
+                      stroke="hsl(var(--primary))"
+                      strokeWidth={2}
+                      dot={false}
+                      name="Total"
+                    />
+                    <Line
+                      yAxisId="left"
+                      type="monotone"
+                      dataKey="trades"
+                      stroke="hsl(142, 76%, 36%)"
+                      strokeWidth={1.5}
+                      dot={false}
+                      name="Trades"
+                    />
+                    <Line
+                      yAxisId="left"
+                      type="monotone"
+                      dataKey="orderbooks"
+                      stroke="hsl(217, 91%, 60%)"
+                      strokeWidth={1.5}
+                      dot={false}
+                      name="Orderbooks"
+                    />
+                    <Line
+                      yAxisId="right"
+                      type="monotone"
+                      dataKey="errors"
+                      stroke="hsl(0, 84%, 60%)"
+                      strokeWidth={1.5}
+                      dot={false}
+                      name="Errors"
+                      strokeDasharray="5 5"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">RAM</span>
-                  <span className="font-medium">{stage1Usage.ram_percent.toFixed(1)}%</span>
-                </div>
-                <Progress value={stage1Usage.ram_percent} className="h-1.5" />
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Waiting for data...</p>
-          )}
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        )}
 
-      {/* Stage1 System Info */}
-      {stage1SystemInfo && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Stage1 System Info</CardTitle>
-            <Cpu className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div>
-                <span className="text-muted-foreground">Hostname</span>
-                <p className="font-medium">{stage1SystemInfo.hostname}</p>
+        {krakenUsageHistory.length > 1 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart2 className="h-5 w-5" />
+                Kraken Resource History
+              </CardTitle>
+              <CardDescription>
+                CPU, RAM{hasGpuHistory ? ', GPU' : ''} utilization over time (last {krakenUsageHistory.length} samples)
+                {krakenSystemInfo?.hostname ? `, ${krakenSystemInfo.hostname}` : ''}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[220px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={krakenUsageHistory}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis
+                      dataKey="time"
+                      tick={{ fontSize: 10 }}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10 }}
+                      domain={[0, 100]}
+                      tickFormatter={(v) => `${v}%`}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'hsl(var(--card))',
+                        border: '1px solid hsl(var(--border))'
+                      }}
+                      formatter={(value: number) => [`${value.toFixed(1)}%`]}
+                    />
+                    <Legend />
+                    <Area
+                      type="monotone"
+                      dataKey="cpu"
+                      stroke="hsl(217, 91%, 60%)"
+                      fill="hsl(217, 91%, 60%)"
+                      fillOpacity={0.2}
+                      strokeWidth={2}
+                      name="CPU"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="ram"
+                      stroke="hsl(142, 76%, 36%)"
+                      fill="hsl(142, 76%, 36%)"
+                      fillOpacity={0.2}
+                      strokeWidth={2}
+                      name="RAM"
+                    />
+                    {hasGpuHistory && (
+                      <Area
+                        type="monotone"
+                        dataKey="gpu"
+                        stroke="hsl(38, 92%, 50%)"
+                        fill="hsl(38, 92%, 50%)"
+                        fillOpacity={0.2}
+                        strokeWidth={2}
+                        name="GPU"
+                      />
+                    )}
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
-              <div>
-                <span className="text-muted-foreground">CPU</span>
-                <p className="font-medium truncate" title={stage1SystemInfo.cpu_model}>
-                  {stage1SystemInfo.cpu_model?.split('@')[0]?.trim() || stage1SystemInfo.cpu_model}
-                </p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Cores</span>
-                <p className="font-medium">{stage1SystemInfo.cpu_count}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground">RAM</span>
-                <p className="font-medium">{(stage1SystemInfo.ram_total_mb / 1024).toFixed(1)} GB</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Stage1 Resource Usage History */}
-      {stage1UsageHistory.length > 1 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart2 className="h-5 w-5" />
-              Stage1 Resource History
-            </CardTitle>
-            <CardDescription>
-              CPU and RAM utilization over time (last {stage1UsageHistory.length} samples)
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[200px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={stage1UsageHistory}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis
-                    dataKey="time"
-                    tick={{ fontSize: 10 }}
-                    interval="preserveStartEnd"
-                  />
-                  <YAxis
-                    tick={{ fontSize: 10 }}
-                    domain={[0, 100]}
-                    tickFormatter={(v) => `${v}%`}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      border: '1px solid hsl(var(--border))'
-                    }}
-                    formatter={(value: number) => [`${value.toFixed(1)}%`]}
-                  />
-                  <Legend />
-                  <Area
-                    type="monotone"
-                    dataKey="cpu"
-                    stroke="hsl(217, 91%, 60%)"
-                    fill="hsl(217, 91%, 60%)"
-                    fillOpacity={0.2}
-                    strokeWidth={2}
-                    name="CPU"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="ram"
-                    stroke="hsl(142, 76%, 36%)"
-                    fill="hsl(142, 76%, 36%)"
-                    fillOpacity={0.2}
-                    strokeWidth={2}
-                    name="RAM"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       {/* Thread Health Overview */}
       {threadSummary.total > 0 && (
@@ -378,85 +428,6 @@ export default function ExecutionHealth() {
                   </div>
                 )}
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Message Rate Chart */}
-      {rateHistory.length > 1 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart2 className="h-5 w-5" />
-              Message Rate History
-            </CardTitle>
-            <CardDescription>Messages per second over time (last {rateHistory.length} samples)</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[220px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={rateHistory}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis
-                    dataKey="time"
-                    tick={{ fontSize: 10 }}
-                    interval="preserveStartEnd"
-                  />
-                  <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
-                  <YAxis
-                    yAxisId="right"
-                    orientation="right"
-                    tick={{ fontSize: 10 }}
-                    stroke="hsl(0, 84%, 60%)"
-                    label={{ value: 'Errors', angle: 90, position: 'insideRight', fontSize: 10 }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      border: '1px solid hsl(var(--border))'
-                    }}
-                  />
-                  <Legend />
-                  <Line
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="total"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                    dot={false}
-                    name="Total"
-                  />
-                  <Line
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="trades"
-                    stroke="hsl(142, 76%, 36%)"
-                    strokeWidth={1.5}
-                    dot={false}
-                    name="Trades"
-                  />
-                  <Line
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="orderbooks"
-                    stroke="hsl(217, 91%, 60%)"
-                    strokeWidth={1.5}
-                    dot={false}
-                    name="Orderbooks"
-                  />
-                  <Line
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="errors"
-                    stroke="hsl(0, 84%, 60%)"
-                    strokeWidth={1.5}
-                    dot={false}
-                    name="Errors"
-                    strokeDasharray="5 5"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
             </div>
           </CardContent>
         </Card>
