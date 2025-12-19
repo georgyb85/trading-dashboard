@@ -82,25 +82,26 @@ interface ModelCardProps {
   isPending: boolean;
 }
 
-// Calculate estimated next retrain based on training frequency patterns
-const getNextRetrainEstimate = (trainedAtMs: number | undefined, retrainIntervalHours = 24): { label: string; isOverdue: boolean } => {
-  if (!trainedAtMs) return { label: 'Unknown', isOverdue: false };
-  const nextRetrain = trainedAtMs + retrainIntervalHours * 60 * 60 * 1000;
+// Format next retrain time from API (next UTC midnight)
+const getNextRetrainDisplay = (nextRetrainMs: number | undefined): { label: string; isOverdue: boolean; utcTime: string } => {
+  if (!nextRetrainMs) return { label: 'Unknown', isOverdue: false, utcTime: '' };
+
   const now = Date.now();
-  const diff = nextRetrain - now;
+  const diff = nextRetrainMs - now;
+  const utcTime = new Date(nextRetrainMs).toUTCString().replace(' GMT', ' UTC');
 
   if (diff < 0) {
     const hoursOverdue = Math.floor(Math.abs(diff) / (1000 * 60 * 60));
-    return { label: `${hoursOverdue}h overdue`, isOverdue: true };
+    return { label: `${hoursOverdue}h overdue`, isOverdue: true, utcTime };
   }
 
   const hoursUntil = Math.floor(diff / (1000 * 60 * 60));
   const minsUntil = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
   if (hoursUntil > 0) {
-    return { label: `${hoursUntil}h ${minsUntil}m`, isOverdue: false };
+    return { label: `${hoursUntil}h ${minsUntil}m`, isOverdue: false, utcTime };
   }
-  return { label: `${minsUntil}m`, isOverdue: false };
+  return { label: `${minsUntil}m`, isOverdue: false, utcTime };
 };
 
 const ModelCard = ({
@@ -123,7 +124,7 @@ const ModelCard = ({
     : { color: 'text-slate-400', bg: 'bg-slate-500/10', border: 'border-slate-500/30', label: 'PREDICT ONLY', icon: Eye, glow: '' };
 
   const ExecutorIcon = executorStatus.icon;
-  const nextRetrain = getNextRetrainEstimate(model.trained_at_ms);
+  const nextRetrain = getNextRetrainDisplay(model.next_retrain_ms);
 
   return (
     <div
@@ -191,12 +192,15 @@ const ModelCard = ({
         </div>
 
         {/* Next Retrain */}
-        <div className={cn(
-          'p-2.5 rounded-lg border',
-          nextRetrain.isOverdue
-            ? 'bg-red-500/10 border-red-500/30'
-            : 'bg-muted/50 border-border/30'
-        )}>
+        <div
+          className={cn(
+            'p-2.5 rounded-lg border',
+            nextRetrain.isOverdue
+              ? 'bg-red-500/10 border-red-500/30'
+              : 'bg-muted/50 border-border/30'
+          )}
+          title={nextRetrain.utcTime ? `Next retrain: ${nextRetrain.utcTime}` : undefined}
+        >
           <div className="flex items-center gap-1.5 mb-1">
             <RefreshCw className={cn('h-3 w-3', nextRetrain.isOverdue ? 'text-red-400' : 'text-muted-foreground')} />
             <span className={cn(
@@ -425,7 +429,7 @@ const ModelDetailPanel = ({
     { id: 'config', label: 'Configuration', icon: Settings },
   ];
 
-  const nextRetrain = getNextRetrainEstimate(model.trained_at_ms);
+  const nextRetrain = getNextRetrainDisplay(model.next_retrain_ms);
 
   return (
     <div className="border-t border-border/50 bg-gradient-to-b from-card/50 to-background">
@@ -460,7 +464,7 @@ const ModelDetailPanel = ({
                       : '—'}
                   </div>
                 </div>
-                <div className="text-center">
+                <div className="text-center" title={nextRetrain.utcTime ? `Next retrain: ${nextRetrain.utcTime}` : undefined}>
                   <div className={cn('text-[10px] uppercase tracking-wider', nextRetrain.isOverdue ? 'text-red-400' : 'text-muted-foreground')}>
                     Retrain In
                   </div>

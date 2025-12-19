@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Activity, Server, Clock, Database, Cpu, HardDrive, Wifi, WifiOff, AlertTriangle, PauseCircle, Wallet, TrendingUp, ShoppingCart, MonitorSmartphone, BarChart3 } from 'lucide-react';
 import { useHealthData } from '@/hooks/useHealthData';
 import { useUsageStream } from '@/hooks/useUsageStream';
+import { useStage1UsageStream } from '@/hooks/useStage1UsageStream';
 import { useLiveModels, useDeactivateModel } from '@/hooks/useKrakenLive';
 import { useAccountState } from '@/hooks/useAccountState';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Area, AreaChart } from 'recharts';
@@ -44,12 +45,14 @@ function formatTimestamp(ts: number): string {
 export default function LiveOverview() {
   const { data: health, isLoading: healthLoading, error: healthError } = useHealthData();
   const { usage, systemInfo, connected: usageConnected, error: usageError } = useUsageStream();
+  const { usage: stage1Usage, systemInfo: stage1SystemInfo, connected: stage1Connected, error: stage1Error } = useStage1UsageStream();
   const { data: models } = useLiveModels();
   const deactivateMutation = useDeactivateModel();
   const { balances, positions, orders, connected: accountConnected } = useAccountState();
   const [usageHistory, setUsageHistory] = useState<UsageDataPoint[]>([]);
+  const [stage1UsageHistory, setStage1UsageHistory] = useState<UsageDataPoint[]>([]);
 
-  // Accumulate usage history over time
+  // Accumulate Kraken Trader usage history over time
   useEffect(() => {
     if (!usage) return;
 
@@ -67,6 +70,24 @@ export default function LiveOverview() {
       return updated.slice(-MAX_USAGE_HISTORY);
     });
   }, [usage]);
+
+  // Accumulate Stage1 usage history over time
+  useEffect(() => {
+    if (!stage1Usage) return;
+
+    const now = Date.now();
+    const newPoint: UsageDataPoint = {
+      timestamp: now,
+      time: new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      cpu: stage1Usage.cpu_percent,
+      ram: stage1Usage.ram_percent,
+    };
+
+    setStage1UsageHistory(prev => {
+      const updated = [...prev, newPoint];
+      return updated.slice(-MAX_USAGE_HISTORY);
+    });
+  }, [stage1Usage]);
 
   // Filter to models with executors (trading-enabled models)
   const tradingModels = models?.filter(m => m.status === 'active' && m.has_executor) ?? [];
@@ -188,10 +209,10 @@ export default function LiveOverview() {
           </CardContent>
         </Card>
 
-        {/* Connection */}
+        {/* Kraken Connection */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Usage WS</CardTitle>
+            <CardTitle className="text-sm font-medium">Kraken Trader</CardTitle>
             {usageConnected ? (
               <Wifi className="h-4 w-4 text-green-500" />
             ) : (
@@ -199,7 +220,7 @@ export default function LiveOverview() {
             )}
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-lg font-bold">
               {usageConnected ? 'Connected' : 'Disconnected'}
             </div>
             {usageError ? (
@@ -211,6 +232,102 @@ export default function LiveOverview() {
                 {systemInfo.hostname}
               </p>
             ) : null}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Server Connection Status */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card className={usageConnected ? 'border-green-500/30' : 'border-destructive/30'}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Server className="h-4 w-4" />
+              Kraken Trader
+            </CardTitle>
+            <Badge variant={usageConnected ? 'default' : 'destructive'} className="gap-1">
+              {usageConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+              {usageConnected ? 'Live' : 'Offline'}
+            </Badge>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {usage ? (
+              <>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">CPU</span>
+                  <span className="font-medium">{usage.cpu_percent.toFixed(1)}%</span>
+                </div>
+                <Progress value={usage.cpu_percent} className="h-1.5" />
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">RAM</span>
+                  <span className="font-medium">{usage.ram_percent.toFixed(1)}%</span>
+                </div>
+                <Progress value={usage.ram_percent} className="h-1.5" />
+                {usage.gpu_percent !== undefined && (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">GPU</span>
+                      <span className="font-medium">{usage.gpu_percent}%</span>
+                    </div>
+                    <Progress value={usage.gpu_percent} className="h-1.5" />
+                  </>
+                )}
+                {usage.message_rates && (
+                  <div className="pt-2 border-t text-xs space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Msgs/sec</span>
+                      <span className="font-mono">{usage.message_rates.total_per_sec.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Trades/sec</span>
+                      <span className="font-mono">{usage.message_rates.trades_per_sec.toLocaleString()}</span>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Waiting for data...</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className={stage1Connected ? 'border-green-500/30' : 'border-destructive/30'}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Database className="h-4 w-4" />
+              Stage1 Server
+            </CardTitle>
+            <Badge variant={stage1Connected ? 'default' : 'destructive'} className="gap-1">
+              {stage1Connected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+              {stage1Connected ? 'Live' : 'Offline'}
+            </Badge>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {stage1Usage ? (
+              <>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">CPU</span>
+                  <span className="font-medium">{stage1Usage.cpu_percent.toFixed(1)}%</span>
+                </div>
+                <Progress value={stage1Usage.cpu_percent} className="h-1.5" />
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">RAM</span>
+                  <span className="font-medium">{stage1Usage.ram_percent.toFixed(1)}%</span>
+                </div>
+                <Progress value={stage1Usage.ram_percent} className="h-1.5" />
+                {stage1SystemInfo && (
+                  <div className="pt-2 border-t text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Host</span>
+                      <span className="font-mono">{stage1SystemInfo.hostname}</span>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : stage1Error ? (
+              <p className="text-sm text-destructive truncate" title={stage1Error}>{stage1Error}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">Waiting for data...</p>
+            )}
           </CardContent>
         </Card>
       </div>

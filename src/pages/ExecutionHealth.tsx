@@ -7,6 +7,7 @@ import { Progress } from '@/components/ui/progress';
 import { Activity, Cpu, Wifi, WifiOff, TrendingUp, Clock, BarChart2, AlertCircle, Gauge, Hash } from 'lucide-react';
 import { useStatusStream } from '@/hooks/useStatusStream';
 import { useUsageStream } from '@/hooks/useUsageStream';
+import { useStage1UsageStream } from '@/hooks/useStage1UsageStream';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, Cell, ReferenceLine } from 'recharts';
 
 const MAX_RATE_HISTORY = 60; // Keep last 60 data points (~1 minute at 1/sec)
@@ -29,6 +30,7 @@ function formatLatency(us: number): string {
 export default function ExecutionHealth() {
   const { connected, stats, trades, lastPrices, error } = useStatusStream();
   const { usage, connected: usageConnected } = useUsageStream();
+  const { usage: stage1Usage, connected: stage1Connected } = useStage1UsageStream();
   const [rateHistory, setRateHistory] = useState<RateDataPoint[]>([]);
 
   // Prefer usage stream message rates (more accurate from kraken-trader)
@@ -107,7 +109,11 @@ export default function ExecutionHealth() {
         <div className="flex items-center gap-2">
           <Badge variant={usageConnected ? 'default' : 'destructive'} className="gap-1">
             {usageConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-            Usage
+            Kraken
+          </Badge>
+          <Badge variant={stage1Connected ? 'default' : 'destructive'} className="gap-1">
+            {stage1Connected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+            Stage1
           </Badge>
           <Badge variant={connected ? 'default' : 'secondary'} className="gap-1">
             {connected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
@@ -180,6 +186,68 @@ export default function ExecutionHealth() {
             <p className="text-xs text-muted-foreground">
               Across all threads
             </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Server Resources */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Kraken Trader Resources</CardTitle>
+            <Cpu className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            {usage ? (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">CPU</span>
+                  <span className="font-medium">{usage.cpu_percent.toFixed(1)}%</span>
+                </div>
+                <Progress value={usage.cpu_percent} className="h-1.5" />
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">RAM</span>
+                  <span className="font-medium">{usage.ram_percent.toFixed(1)}%</span>
+                </div>
+                <Progress value={usage.ram_percent} className="h-1.5" />
+                {usage.gpu_percent !== undefined && (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">GPU</span>
+                      <span className="font-medium">{usage.gpu_percent}%</span>
+                    </div>
+                    <Progress value={usage.gpu_percent} className="h-1.5" />
+                  </>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Waiting for data...</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Stage1 Server Resources</CardTitle>
+            <Cpu className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            {stage1Usage ? (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">CPU</span>
+                  <span className="font-medium">{stage1Usage.cpu_percent.toFixed(1)}%</span>
+                </div>
+                <Progress value={stage1Usage.cpu_percent} className="h-1.5" />
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">RAM</span>
+                  <span className="font-medium">{stage1Usage.ram_percent.toFixed(1)}%</span>
+                </div>
+                <Progress value={stage1Usage.ram_percent} className="h-1.5" />
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Waiting for data...</p>
+            )}
           </CardContent>
         </Card>
       </div>

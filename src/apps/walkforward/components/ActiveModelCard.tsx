@@ -22,8 +22,10 @@ export const ActiveModelCard = () => {
             <div className="flex justify-between"><span className="text-muted-foreground">Feature Hash</span><span className="font-mono text-xs">{data.feature_hash ?? 'N/A'}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Thresholds</span><span>{data.short_threshold?.toFixed(4) ?? 'N/A'} / {data.long_threshold?.toFixed(4) ?? 'N/A'}</span></div>
             {data.best_score !== undefined && <div className="flex justify-between"><span className="text-muted-foreground">Best Score</span><span>{data.best_score}</span></div>}
-            {data.version !== undefined && <div className="flex justify-between"><span className="text-muted-foreground">Version</span><span className="font-mono text-xs">{data.version}</span></div>}
+            {data.version !== undefined && <div className="flex justify-between"><span className="text-muted-foreground">Version</span><span className="font-mono text-xs">v{data.version}</span></div>}
+            {data.target_horizon_bars !== undefined && <div className="flex justify-between"><span className="text-muted-foreground">Target Horizon</span><span>{data.target_horizon_bars} bars</span></div>}
             <div className="flex justify-between"><span className="text-muted-foreground">Trained</span><span>{data.trained_at_ms ? new Date(data.trained_at_ms).toLocaleString() : 'N/A'}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Next Retrain</span><span>{data.next_retrain_ms ? new Date(data.next_retrain_ms).toUTCString() : 'N/A'}</span></div>
           </>
         )}
         {!isLoading && !isError && (!data || !data.model_id) && (
