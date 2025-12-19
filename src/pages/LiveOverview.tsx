@@ -8,7 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Activity, Server, Clock, Database, Cpu, HardDrive, Wifi, WifiOff, AlertTriangle, PauseCircle, Wallet, TrendingUp, ShoppingCart, MonitorSmartphone, BarChart3 } from 'lucide-react';
 import { useHealthData } from '@/hooks/useHealthData';
-import { useUsageStream } from '@/hooks/useUsageStream';
+import { useStatusStream } from '@/hooks/useStatusStream';
 import { useStage1UsageStream } from '@/hooks/useStage1UsageStream';
 import { useLiveModels, useDeactivateModel } from '@/hooks/useKrakenLive';
 import { useAccountState } from '@/hooks/useAccountState';
@@ -44,32 +44,14 @@ function formatTimestamp(ts: number): string {
 
 export default function LiveOverview() {
   const { data: health, isLoading: healthLoading, error: healthError } = useHealthData();
-  const { usage, systemInfo, connected: usageConnected, error: usageError } = useUsageStream();
+  // Kraken trader: use status stream for message rates (CPU/RAM/GPU not proxied)
+  const { connected: krakenConnected, stats: krakenStats, error: krakenError } = useStatusStream();
+  // Stage1: use usage stream for CPU/RAM
   const { usage: stage1Usage, systemInfo: stage1SystemInfo, connected: stage1Connected, error: stage1Error } = useStage1UsageStream();
   const { data: models } = useLiveModels();
   const deactivateMutation = useDeactivateModel();
   const { balances, positions, orders, connected: accountConnected } = useAccountState();
-  const [usageHistory, setUsageHistory] = useState<UsageDataPoint[]>([]);
   const [stage1UsageHistory, setStage1UsageHistory] = useState<UsageDataPoint[]>([]);
-
-  // Accumulate Kraken Trader usage history over time
-  useEffect(() => {
-    if (!usage) return;
-
-    const now = Date.now();
-    const newPoint: UsageDataPoint = {
-      timestamp: now,
-      time: new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      cpu: usage.cpu_percent,
-      ram: usage.ram_percent,
-      gpu: usage.gpu_percent,
-    };
-
-    setUsageHistory(prev => {
-      const updated = [...prev, newPoint];
-      return updated.slice(-MAX_USAGE_HISTORY);
-    });
-  }, [usage]);
 
   // Accumulate Stage1 usage history over time
   useEffect(() => {
@@ -213,7 +195,7 @@ export default function LiveOverview() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Kraken Trader</CardTitle>
-            {usageConnected ? (
+            {krakenConnected ? (
               <Wifi className="h-4 w-4 text-green-500" />
             ) : (
               <WifiOff className="h-4 w-4 text-destructive" />
@@ -221,15 +203,15 @@ export default function LiveOverview() {
           </CardHeader>
           <CardContent>
             <div className="text-lg font-bold">
-              {usageConnected ? 'Connected' : 'Disconnected'}
+              {krakenConnected ? 'Connected' : 'Disconnected'}
             </div>
-            {usageError ? (
-              <p className="text-xs text-destructive truncate" title={usageError}>
-                {usageError}
+            {krakenError ? (
+              <p className="text-xs text-destructive truncate" title={krakenError}>
+                {krakenError}
               </p>
-            ) : systemInfo ? (
-              <p className="text-xs text-muted-foreground truncate">
-                {systemInfo.hostname}
+            ) : krakenStats?.message_rates ? (
+              <p className="text-xs text-muted-foreground">
+                {krakenStats.message_rates.total?.toLocaleString() ?? 0} msgs/s
               </p>
             ) : null}
           </CardContent>
@@ -238,52 +220,47 @@ export default function LiveOverview() {
 
       {/* Server Connection Status */}
       <div className="grid gap-4 md:grid-cols-2">
-        <Card className={usageConnected ? 'border-green-500/30' : 'border-destructive/30'}>
+        <Card className={krakenConnected ? 'border-green-500/30' : 'border-destructive/30'}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Server className="h-4 w-4" />
               Kraken Trader
             </CardTitle>
-            <Badge variant={usageConnected ? 'default' : 'destructive'} className="gap-1">
-              {usageConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
-              {usageConnected ? 'Live' : 'Offline'}
+            <Badge variant={krakenConnected ? 'default' : 'destructive'} className="gap-1">
+              {krakenConnected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+              {krakenConnected ? 'Live' : 'Offline'}
             </Badge>
           </CardHeader>
           <CardContent className="space-y-2">
-            {usage ? (
+            {krakenStats ? (
               <>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">CPU</span>
-                  <span className="font-medium">{usage.cpu_percent.toFixed(1)}%</span>
-                </div>
-                <Progress value={usage.cpu_percent} className="h-1.5" />
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">RAM</span>
-                  <span className="font-medium">{usage.ram_percent.toFixed(1)}%</span>
-                </div>
-                <Progress value={usage.ram_percent} className="h-1.5" />
-                {usage.gpu_percent !== undefined && (
-                  <>
+                {krakenStats.message_rates && (
+                  <div className="space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">GPU</span>
-                      <span className="font-medium">{usage.gpu_percent}%</span>
+                      <span className="text-muted-foreground">Messages/sec</span>
+                      <span className="font-mono font-medium">{krakenStats.message_rates.total?.toLocaleString() ?? 0}</span>
                     </div>
-                    <Progress value={usage.gpu_percent} className="h-1.5" />
-                  </>
-                )}
-                {usage.message_rates && (
-                  <div className="pt-2 border-t text-xs space-y-1">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Msgs/sec</span>
-                      <span className="font-mono">{usage.message_rates.total_per_sec.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Trades/sec</span>
-                      <span className="font-mono">{usage.message_rates.trades_per_sec.toLocaleString()}</span>
+                      <span className="font-mono font-medium">{krakenStats.message_rates.trades?.toLocaleString() ?? 0}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Orderbooks/sec</span>
+                      <span className="font-mono font-medium">{krakenStats.message_rates.orderbooks?.toLocaleString() ?? 0}</span>
+                    </div>
+                  </div>
+                )}
+                {krakenStats.thread_statuses && krakenStats.thread_statuses.length > 0 && (
+                  <div className="pt-2 border-t text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Threads</span>
+                      <span className="font-mono">{krakenStats.thread_statuses.length} active</span>
                     </div>
                   </div>
                 )}
               </>
+            ) : krakenError ? (
+              <p className="text-sm text-destructive truncate" title={krakenError}>{krakenError}</p>
             ) : (
               <p className="text-sm text-muted-foreground">Waiting for data...</p>
             )}
@@ -334,19 +311,18 @@ export default function LiveOverview() {
 
       {/* Resource Gauges and Queue Depths */}
       <div className="grid gap-4 md:grid-cols-2">
-        {/* Resource Gauges */}
+        {/* Stage1 Resource Gauges */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Cpu className="h-5 w-5" />
-              System Resources
+              Stage1 Resources
             </CardTitle>
-            <CardDescription>Real-time resource utilization</CardDescription>
+            <CardDescription>Stage1 server resource utilization</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {!usage ? (
+            {!stage1Usage ? (
               <div className="space-y-4">
-                <Skeleton className="h-4 w-full" />
                 <Skeleton className="h-4 w-full" />
                 <Skeleton className="h-4 w-full" />
               </div>
@@ -355,42 +331,17 @@ export default function LiveOverview() {
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span>CPU</span>
-                    <span className="font-medium">{usage.cpu_percent.toFixed(1)}%</span>
+                    <span className="font-medium">{stage1Usage.cpu_percent.toFixed(1)}%</span>
                   </div>
-                  <Progress value={usage.cpu_percent} className="h-2" />
+                  <Progress value={stage1Usage.cpu_percent} className="h-2" />
                 </div>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span>RAM ({usage.ram_used_mb} / {usage.ram_total_mb} MB)</span>
-                    <span className="font-medium">{usage.ram_percent.toFixed(1)}%</span>
+                    <span>RAM {stage1Usage.ram_used_mb !== undefined && `(${stage1Usage.ram_used_mb} / ${stage1Usage.ram_total_mb} MB)`}</span>
+                    <span className="font-medium">{stage1Usage.ram_percent.toFixed(1)}%</span>
                   </div>
-                  <Progress value={usage.ram_percent} className="h-2" />
+                  <Progress value={stage1Usage.ram_percent} className="h-2" />
                 </div>
-                {usage.gpu_percent !== undefined && (
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>GPU {usage.gpu_mem_used_mb !== undefined && `(${usage.gpu_mem_used_mb} / ${usage.gpu_mem_total_mb} MB)`}</span>
-                      <span className="font-medium">{usage.gpu_percent}%</span>
-                    </div>
-                    <Progress value={usage.gpu_percent} className="h-2" />
-                  </div>
-                )}
-                {usage.message_rates && (
-                  <div className="pt-2 border-t space-y-1 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Messages/sec</span>
-                      <span>{usage.message_rates.total_per_sec.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Trades/sec</span>
-                      <span>{usage.message_rates.trades_per_sec.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Orderbooks/sec</span>
-                      <span>{usage.message_rates.orderbooks_per_sec.toLocaleString()}</span>
-                    </div>
-                  </div>
-                )}
               </>
             )}
           </CardContent>
@@ -448,22 +399,22 @@ export default function LiveOverview() {
         </Card>
       </div>
 
-      {/* Resource Usage History Chart */}
-      {usageHistory.length > 1 && (
+      {/* Stage1 Resource Usage History Chart */}
+      {stage1UsageHistory.length > 1 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
-              Resource Usage History
+              Stage1 Resource History
             </CardTitle>
             <CardDescription>
-              CPU, RAM{usageHistory.some(p => p.gpu !== undefined) ? ', and GPU' : ''} utilization over time (last {usageHistory.length} samples)
+              CPU and RAM utilization over time (last {stage1UsageHistory.length} samples)
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="h-[200px]">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={usageHistory}>
+                <AreaChart data={stage1UsageHistory}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis
                     dataKey="time"
@@ -501,17 +452,6 @@ export default function LiveOverview() {
                     strokeWidth={2}
                     name="RAM"
                   />
-                  {usageHistory.some(p => p.gpu !== undefined) && (
-                    <Area
-                      type="monotone"
-                      dataKey="gpu"
-                      stroke="hsl(38, 92%, 50%)"
-                      fill="hsl(38, 92%, 50%)"
-                      fillOpacity={0.2}
-                      strokeWidth={2}
-                      name="GPU"
-                    />
-                  )}
                 </AreaChart>
               </ResponsiveContainer>
             </div>
