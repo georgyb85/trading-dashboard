@@ -2,11 +2,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Wallet, WifiOff, Loader2, TrendingUp, TrendingDown } from "lucide-react";
-import { useAccountState } from "@/hooks/useAccountState";
+import { useAccountStateContext } from "@/contexts/AccountStateContext";
 import { useMemo } from "react";
 
 export function BalancesTable() {
-  const { balances, connected, error } = useAccountState();
+  const { balances, connected, error } = useAccountStateContext();
 
   // Compute totals and sort by total value
   const enrichedBalances = useMemo(() => {

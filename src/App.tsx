@@ -12,6 +12,9 @@ import { WalkforwardProvider } from "./contexts/WalkforwardContext";
 import { IndicatorProvider } from "./contexts/IndicatorContext";
 import { MarketDataProvider } from "./contexts/MarketDataContext";
 import { StatusStreamProvider } from "./contexts/StatusStreamContext";
+import { UsageStreamProvider } from "./contexts/UsageStreamContext";
+import { Stage1UsageStreamProvider } from "./contexts/Stage1UsageStreamContext";
+import { AccountStateProvider } from "./contexts/AccountStateContext";
 import { PositionsTable } from "./components/PositionsTable";
 import { BalancesTable } from "./components/BalancesTable";
 import { OrdersTable } from "./components/OrdersTable";
@@ -51,27 +54,33 @@ const App = () => (
                 <IndicatorProvider>
                   <MarketDataProvider>
                     <StatusStreamProvider>
-                      <TradingLayout>
-                <Routes>
-            <Route path="/" element={<LiveOverview />} />
-            <Route path="/overview" element={<LiveOverview />} />
-            <Route path="/health" element={<ExecutionHealth />} />
-            <Route path="/positions" element={<PositionsTable />} />
-            <Route path="/balances" element={<BalancesTable />} />
-            <Route path="/orders" element={<OrdersTable />} />
-            <Route path="/market" element={<LiveMarketData />} />
-            <Route path="/risk" element={<RiskManagement />} />
-            <Route path="/indicators" element={<Indicators />} />
-            <Route path="/market-data" element={<Indicators />} />
-            <Route path="/tradesim" element={<TradesimDashboard />} />
-            <Route path="/lfs" element={<LfsDashboard />} />
-            <Route path="/walkforward" element={<WalkforwardDashboard />} />
-            <Route path="/live-model" element={<LiveModelPage />} />
-            <Route path="/audit-logs" element={<AuditLogs />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-              </Routes>
-            </TradingLayout>
+                      <UsageStreamProvider>
+                        <Stage1UsageStreamProvider>
+                          <AccountStateProvider>
+                            <TradingLayout>
+                              <Routes>
+                                <Route path="/" element={<LiveOverview />} />
+                                <Route path="/overview" element={<LiveOverview />} />
+                                <Route path="/health" element={<ExecutionHealth />} />
+                                <Route path="/positions" element={<PositionsTable />} />
+                                <Route path="/balances" element={<BalancesTable />} />
+                                <Route path="/orders" element={<OrdersTable />} />
+                                <Route path="/market" element={<LiveMarketData />} />
+                                <Route path="/risk" element={<RiskManagement />} />
+                                <Route path="/indicators" element={<Indicators />} />
+                                <Route path="/market-data" element={<Indicators />} />
+                                <Route path="/tradesim" element={<TradesimDashboard />} />
+                                <Route path="/lfs" element={<LfsDashboard />} />
+                                <Route path="/walkforward" element={<WalkforwardDashboard />} />
+                                <Route path="/live-model" element={<LiveModelPage />} />
+                                <Route path="/audit-logs" element={<AuditLogs />} />
+                                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                                <Route path="*" element={<NotFound />} />
+                              </Routes>
+                            </TradingLayout>
+                          </AccountStateProvider>
+                        </Stage1UsageStreamProvider>
+                      </UsageStreamProvider>
                     </StatusStreamProvider>
                   </MarketDataProvider>
                 </IndicatorProvider>

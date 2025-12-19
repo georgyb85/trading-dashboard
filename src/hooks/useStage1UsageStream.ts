@@ -28,9 +28,13 @@ export const useStage1UsageStream = (): UseStage1UsageStreamResult => {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const retryCountRef = useRef(0);
+  const connectionIdRef = useRef(0);
 
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    if (wsRef.current?.readyState === WebSocket.OPEN ||
+        wsRef.current?.readyState === WebSocket.CONNECTING) {
+      return;
+    }
 
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
@@ -41,6 +45,8 @@ export const useStage1UsageStream = (): UseStage1UsageStreamResult => {
       setError(`Stage1 connection failed after ${MAX_RETRIES} attempts. Refresh to retry.`);
       return;
     }
+
+    const connectionId = ++connectionIdRef.current;
 
     // Stage1 API base URL - convert http(s) to ws(s)
     const baseUrl = config.stage1ApiBaseUrl;
@@ -57,6 +63,7 @@ export const useStage1UsageStream = (): UseStage1UsageStreamResult => {
     }
 
     ws.onopen = () => {
+      if (connectionId !== connectionIdRef.current) return;
       setConnected(true);
       setError(null);
       retryCountRef.current = 0;
@@ -64,8 +71,11 @@ export const useStage1UsageStream = (): UseStage1UsageStreamResult => {
     };
 
     ws.onmessage = (event) => {
+      if (connectionId !== connectionIdRef.current) return;
       try {
         const msg: UsageMessage = JSON.parse(event.data);
+        setConnected(true);
+        setError(null);
         if (msg.type === 'usage_update') {
           setUsage(msg);
         } else if (msg.type === 'system_info') {
@@ -77,10 +87,12 @@ export const useStage1UsageStream = (): UseStage1UsageStreamResult => {
     };
 
     ws.onerror = () => {
+      if (connectionId !== connectionIdRef.current) return;
       setError('Stage1 WebSocket connection error');
     };
 
     ws.onclose = () => {
+      if (connectionId !== connectionIdRef.current) return;
       setConnected(false);
       wsRef.current = null;
       retryCountRef.current++;
@@ -105,6 +117,7 @@ export const useStage1UsageStream = (): UseStage1UsageStreamResult => {
     connect();
 
     return () => {
+      connectionIdRef.current++;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }

@@ -124,6 +124,7 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
   const pingIntervalRef = useRef<NodeJS.Timeout>();
   const shouldConnectRef = useRef(autoConnect);
+  const connectionIdRef = useRef(0);
 
   // Define all handlers BEFORE connect so they can be referenced
   const handleSnapshot = useCallback((message: any) => {
@@ -256,6 +257,7 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
       return;
     }
 
+    const connectionId = ++connectionIdRef.current;
     const wsUrl = joinUrl(config.krakenWsBaseUrl, '/api/status-ws');
 
     console.log('[StatusStream] Connecting to:', wsUrl);
@@ -263,6 +265,7 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
     wsRef.current = ws;
 
     ws.onopen = () => {
+      if (connectionId !== connectionIdRef.current) return;
       console.log('[StatusStream] Connected');
       setConnected(true);
       setError(null);
@@ -279,8 +282,11 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
     };
 
     ws.onmessage = (event) => {
+      if (connectionId !== connectionIdRef.current) return;
       try {
         const message: StatusMessage = JSON.parse(event.data);
+        setConnected(true);
+        setError(null);
 
         switch (message.type) {
           case 'snapshot':
@@ -311,11 +317,13 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
     };
 
     ws.onerror = (event) => {
+      if (connectionId !== connectionIdRef.current) return;
       console.error('[StatusStream] WebSocket error:', event);
       setError('WebSocket connection error');
     };
 
     ws.onclose = () => {
+      if (connectionId !== connectionIdRef.current) return;
       console.log('[StatusStream] Disconnected');
       setConnected(false);
       wsRef.current = null;
@@ -338,6 +346,7 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
 
   const disconnect = useCallback(() => {
     shouldConnectRef.current = false;
+    connectionIdRef.current++;
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
     }
@@ -361,6 +370,7 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
     return () => {
       // Cleanup on unmount
       shouldConnectRef.current = false;
+      connectionIdRef.current++;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }

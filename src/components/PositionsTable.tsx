@@ -15,8 +15,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { TrendingUp, TrendingDown, WifiOff, Loader2, ChevronLeft, ChevronRight, Wifi } from "lucide-react";
-import { useAccountState } from "@/hooks/useAccountState";
-import { useStatusStream } from "@/hooks/useStatusStream";
+import { useAccountStateContext } from "@/contexts/AccountStateContext";
+import { useStatusStreamContext } from "@/contexts/StatusStreamContext";
 
 // Mini sparkline component for metrics
 function Sparkline({ data, color, height = 32 }: { data: number[]; color: string; height?: number }) {
@@ -129,8 +129,8 @@ const forceCloseReasons = [
 ];
 
 export function PositionsTable() {
-  const { positions, connected: accountConnected, error: accountError } = useAccountState();
-  const { connected: wsConnected } = useStatusStream();
+  const { positions, connected: accountConnected, error: accountError } = useAccountStateContext();
+  const { connected: wsConnected } = useStatusStreamContext();
 
   const [activeTab, setActiveTab] = useState("active");
   const [triggerBracketCheck, setTriggerBracketCheck] = useState(false);

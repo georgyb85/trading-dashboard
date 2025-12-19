@@ -24,10 +24,14 @@ export const useUsageStream = (): UseUsageStreamResult => {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const retryCountRef = useRef(0);
+  const connectionIdRef = useRef(0);
 
   const connect = useCallback(() => {
-    // Skip if already connected
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    // Skip if already connected or mid-connection
+    if (wsRef.current?.readyState === WebSocket.OPEN ||
+        wsRef.current?.readyState === WebSocket.CONNECTING) {
+      return;
+    }
 
     // Clear any pending reconnect
     if (reconnectTimeoutRef.current) {
@@ -41,6 +45,8 @@ export const useUsageStream = (): UseUsageStreamResult => {
       return;
     }
 
+    const connectionId = ++connectionIdRef.current;
+
     // Use proxied path for Kraken trader (nginx/caddy forwards /api/usage to Kraken trader)
     const wsUrl = joinUrl(config.krakenWsBaseUrl, '/api/usage');
     let ws: WebSocket;
@@ -52,6 +58,7 @@ export const useUsageStream = (): UseUsageStreamResult => {
     }
 
     ws.onopen = () => {
+      if (connectionId !== connectionIdRef.current) return;
       setConnected(true);
       setError(null);
       retryCountRef.current = 0;
@@ -59,8 +66,11 @@ export const useUsageStream = (): UseUsageStreamResult => {
     };
 
     ws.onmessage = (event) => {
+      if (connectionId !== connectionIdRef.current) return;
       try {
         const msg: UsageMessage = JSON.parse(event.data);
+        setConnected(true);
+        setError(null);
         if (msg.type === 'usage_update') {
           setUsage(msg);
         } else if (msg.type === 'system_info') {
@@ -72,10 +82,12 @@ export const useUsageStream = (): UseUsageStreamResult => {
     };
 
     ws.onerror = () => {
+      if (connectionId !== connectionIdRef.current) return;
       setError('WebSocket connection error');
     };
 
     ws.onclose = () => {
+      if (connectionId !== connectionIdRef.current) return;
       setConnected(false);
       wsRef.current = null; // Clear ref immediately on close
       retryCountRef.current++;
@@ -101,6 +113,7 @@ export const useUsageStream = (): UseUsageStreamResult => {
     connect();
 
     return () => {
+      connectionIdRef.current++;
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }

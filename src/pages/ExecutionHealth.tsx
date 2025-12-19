@@ -4,8 +4,8 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Activity, Cpu, Wifi, WifiOff, TrendingUp, Clock, BarChart2, AlertCircle, Gauge } from 'lucide-react';
-import { useStatusStream } from '@/hooks/useStatusStream';
-import { useUsageStream } from '@/hooks/useUsageStream';
+import { useStatusStreamContext } from '@/contexts/StatusStreamContext';
+import { useUsageStreamContext } from '@/contexts/UsageStreamContext';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, Cell, ReferenceLine, AreaChart, Area } from 'recharts';
 
 const MAX_RATE_HISTORY = 60; // Keep last 60 data points (~1 minute at 1/sec)
@@ -46,8 +46,8 @@ function readRate(rates: Record<string, number> | undefined, keys: string[]): nu
 }
 
 export default function ExecutionHealth() {
-  const { connected, stats, trades, lastPrices, error } = useStatusStream();
-  const { usage: krakenUsage, systemInfo: krakenSystemInfo, connected: krakenUsageConnected, error: krakenUsageError } = useUsageStream();
+  const { connected, stats, trades, lastPrices, error } = useStatusStreamContext();
+  const { usage: krakenUsage, systemInfo: krakenSystemInfo, connected: krakenUsageConnected, error: krakenUsageError } = useUsageStreamContext();
   const [rateHistory, setRateHistory] = useState<RateDataPoint[]>([]);
   const [krakenUsageHistory, setKrakenUsageHistory] = useState<UsageDataPoint[]>([]);
 
@@ -98,7 +98,11 @@ export default function ExecutionHealth() {
     const rateSource = (stats?.message_rates ?? krakenUsage?.message_rates) as Record<string, number> | undefined;
     if (!rateSource) return;
 
-    const now = Date.now();
+    const now = stats?.message_rates && stats.timestamp
+      ? new Date(stats.timestamp).getTime()
+      : krakenUsage?.timestamp
+        ? krakenUsage.timestamp * 1000
+        : Date.now();
     const newPoint: RateDataPoint = {
       timestamp: now,
       time: new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -109,17 +113,22 @@ export default function ExecutionHealth() {
     };
 
     setRateHistory(prev => {
+      if (prev.length > 0 && prev[prev.length - 1].timestamp === newPoint.timestamp) {
+        const updated = [...prev];
+        updated[updated.length - 1] = newPoint;
+        return updated;
+      }
       const updated = [...prev, newPoint];
       // Keep only the last MAX_RATE_HISTORY points
       return updated.slice(-MAX_RATE_HISTORY);
     });
-  }, [messageRates, totalErrors, stats?.message_rates, krakenUsage?.message_rates]);
+  }, [messageRates.total, messageRates.trades, messageRates.orderbooks, totalErrors, stats?.timestamp, krakenUsage?.timestamp]);
 
   // Accumulate Kraken usage history over time
   useEffect(() => {
     if (!krakenUsage) return;
 
-    const now = Date.now();
+    const now = krakenUsage.timestamp ? krakenUsage.timestamp * 1000 : Date.now();
     const newPoint: UsageDataPoint = {
       timestamp: now,
       time: new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -129,6 +138,11 @@ export default function ExecutionHealth() {
     };
 
     setKrakenUsageHistory(prev => {
+      if (prev.length > 0 && prev[prev.length - 1].timestamp === newPoint.timestamp) {
+        const updated = [...prev];
+        updated[updated.length - 1] = newPoint;
+        return updated;
+      }
       const updated = [...prev, newPoint];
       return updated.slice(-MAX_USAGE_HISTORY);
     });
@@ -242,8 +256,11 @@ export default function ExecutionHealth() {
                   <LineChart data={rateHistory}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis
-                      dataKey="time"
+                      dataKey="timestamp"
+                      type="number"
+                      domain={['dataMin', 'dataMax']}
                       tick={{ fontSize: 10 }}
+                      tickFormatter={(value) => new Date(value).toLocaleTimeString([], { minute: '2-digit', second: '2-digit' })}
                       interval="preserveStartEnd"
                     />
                     <YAxis yAxisId="left" tick={{ fontSize: 10 }} />
@@ -259,44 +276,49 @@ export default function ExecutionHealth() {
                         backgroundColor: 'hsl(var(--card))',
                         border: '1px solid hsl(var(--border))'
                       }}
+                      labelFormatter={(value) => new Date(value as number).toLocaleTimeString()}
                     />
                     <Legend />
                     <Line
                       yAxisId="left"
-                      type="monotone"
+                      type="linear"
                       dataKey="total"
                       stroke="hsl(var(--primary))"
                       strokeWidth={2}
                       dot={false}
                       name="Total"
+                      isAnimationActive={false}
                     />
                     <Line
                       yAxisId="left"
-                      type="monotone"
+                      type="linear"
                       dataKey="trades"
                       stroke="hsl(142, 76%, 36%)"
                       strokeWidth={1.5}
                       dot={false}
                       name="Trades"
+                      isAnimationActive={false}
                     />
                     <Line
                       yAxisId="left"
-                      type="monotone"
+                      type="linear"
                       dataKey="orderbooks"
                       stroke="hsl(217, 91%, 60%)"
                       strokeWidth={1.5}
                       dot={false}
                       name="Orderbooks"
+                      isAnimationActive={false}
                     />
                     <Line
                       yAxisId="right"
-                      type="monotone"
+                      type="linear"
                       dataKey="errors"
                       stroke="hsl(0, 84%, 60%)"
                       strokeWidth={1.5}
                       dot={false}
                       name="Errors"
                       strokeDasharray="5 5"
+                      isAnimationActive={false}
                     />
                   </LineChart>
                 </ResponsiveContainer>
@@ -323,8 +345,11 @@ export default function ExecutionHealth() {
                   <AreaChart data={krakenUsageHistory}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis
-                      dataKey="time"
+                      dataKey="timestamp"
+                      type="number"
+                      domain={['dataMin', 'dataMax']}
                       tick={{ fontSize: 10 }}
+                      tickFormatter={(value) => new Date(value).toLocaleTimeString([], { minute: '2-digit', second: '2-digit' })}
                       interval="preserveStartEnd"
                     />
                     <YAxis
@@ -337,36 +362,40 @@ export default function ExecutionHealth() {
                         backgroundColor: 'hsl(var(--card))',
                         border: '1px solid hsl(var(--border))'
                       }}
+                      labelFormatter={(value) => new Date(value as number).toLocaleTimeString()}
                       formatter={(value: number) => [`${value.toFixed(1)}%`]}
                     />
                     <Legend />
                     <Area
-                      type="monotone"
+                      type="linear"
                       dataKey="cpu"
                       stroke="hsl(217, 91%, 60%)"
                       fill="hsl(217, 91%, 60%)"
                       fillOpacity={0.2}
                       strokeWidth={2}
                       name="CPU"
+                      isAnimationActive={false}
                     />
                     <Area
-                      type="monotone"
+                      type="linear"
                       dataKey="ram"
                       stroke="hsl(142, 76%, 36%)"
                       fill="hsl(142, 76%, 36%)"
                       fillOpacity={0.2}
                       strokeWidth={2}
                       name="RAM"
+                      isAnimationActive={false}
                     />
                     {hasGpuHistory && (
                       <Area
-                        type="monotone"
+                        type="linear"
                         dataKey="gpu"
                         stroke="hsl(38, 92%, 50%)"
                         fill="hsl(38, 92%, 50%)"
                         fillOpacity={0.2}
                         strokeWidth={2}
                         name="GPU"
+                        isAnimationActive={false}
                       />
                     )}
                   </AreaChart>

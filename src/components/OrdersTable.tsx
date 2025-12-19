@@ -18,8 +18,8 @@ import {
   FileDown,
   Eye,
 } from "lucide-react";
-import { useAccountState } from "@/hooks/useAccountState";
-import { useStatusStream } from "@/hooks/useStatusStream";
+import { useAccountStateContext } from "@/contexts/AccountStateContext";
+import { useStatusStreamContext } from "@/contexts/StatusStreamContext";
 
 // Order status type
 type OrderStatus = "Filled" | "Open" | "Rejected" | "Cancelled";
@@ -277,8 +277,8 @@ function StatusIndicator({ status }: { status: OrderStatus }) {
 }
 
 export function OrdersTable() {
-  const { orders, recentFinalOrders, connected, error } = useAccountState();
-  const { connected: wsConnected } = useStatusStream();
+  const { orders, recentFinalOrders, connected, error } = useAccountStateContext();
+  const { connected: wsConnected } = useStatusStreamContext();
 
   // Filter state
   const [modelFilter, setModelFilter] = useState("All");

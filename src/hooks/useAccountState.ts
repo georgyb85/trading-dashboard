@@ -53,6 +53,7 @@ export function useAccountState(options: UseAccountStateOptions = {}) {
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
   const shouldConnectRef = useRef(autoConnect);
   const historyLoadedRef = useRef(false);
+  const connectionIdRef = useRef(0);
 
   // Fetch order history from API and populate completed orders
   const fetchOrderHistory = useCallback(async () => {
@@ -154,6 +155,7 @@ export function useAccountState(options: UseAccountStateOptions = {}) {
       return;
     }
 
+    const connectionId = ++connectionIdRef.current;
     const wsUrl = joinUrl(config.krakenWsBaseUrl, '/api/account-ws');
 
     console.log('Connecting to Account State WebSocket:', wsUrl);
@@ -161,14 +163,18 @@ export function useAccountState(options: UseAccountStateOptions = {}) {
     wsRef.current = ws;
 
     ws.onopen = () => {
+      if (connectionId !== connectionIdRef.current) return;
       console.log('Account State WebSocket connected');
       setConnected(true);
       setError(null);
     };
 
     ws.onmessage = (event) => {
+      if (connectionId !== connectionIdRef.current) return;
       try {
         const message: AccountWSMessage = JSON.parse(event.data);
+        setConnected(true);
+        setError(null);
         console.log('📨 Received message:', message.topic, message.type, message);
 
         switch (message.topic) {
@@ -202,11 +208,13 @@ export function useAccountState(options: UseAccountStateOptions = {}) {
     };
 
     ws.onerror = (event) => {
+      if (connectionId !== connectionIdRef.current) return;
       console.error('Account State WebSocket error:', event);
       setError('WebSocket connection error');
     };
 
     ws.onclose = () => {
+      if (connectionId !== connectionIdRef.current) return;
       console.log('Account State WebSocket disconnected');
       setConnected(false);
       wsRef.current = null;
@@ -340,6 +348,7 @@ export function useAccountState(options: UseAccountStateOptions = {}) {
 
   const disconnect = useCallback(() => {
     shouldConnectRef.current = false;
+    connectionIdRef.current++;
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
     }

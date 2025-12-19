@@ -7,11 +7,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Activity, Server, Clock, Database, HardDrive, Wifi, WifiOff, AlertTriangle, PauseCircle, Wallet, TrendingUp, ShoppingCart } from 'lucide-react';
 import { useHealthData } from '@/hooks/useHealthData';
-import { useStatusStream } from '@/hooks/useStatusStream';
-import { useUsageStream } from '@/hooks/useUsageStream';
-import { useStage1UsageStream } from '@/hooks/useStage1UsageStream';
 import { useLiveModels, useDeactivateModel } from '@/hooks/useKrakenLive';
-import { useAccountState } from '@/hooks/useAccountState';
+import { useStatusStreamContext } from '@/contexts/StatusStreamContext';
+import { useUsageStreamContext } from '@/contexts/UsageStreamContext';
+import { useStage1UsageStreamContext } from '@/contexts/Stage1UsageStreamContext';
+import { useAccountStateContext } from '@/contexts/AccountStateContext';
 
 function formatUptime(ms: number): string {
   const seconds = Math.floor(ms / 1000);
@@ -31,11 +31,6 @@ function formatTimestamp(ts: number): string {
   return date.toLocaleTimeString();
 }
 
-function formatRate(value?: number): string {
-  if (value === undefined || Number.isNaN(value)) return '—';
-  return value.toLocaleString();
-}
-
 function formatMemory(usedMb?: number, totalMb?: number): string {
   if (usedMb === undefined || totalMb === undefined) return '—';
   return `${(usedMb / 1024).toFixed(1)} / ${(totalMb / 1024).toFixed(1)} GB`;
@@ -43,12 +38,12 @@ function formatMemory(usedMb?: number, totalMb?: number): string {
 
 export default function LiveOverview() {
   const { data: health, isLoading: healthLoading, error: healthError } = useHealthData();
-  const { connected: krakenConnected, stats: krakenStats, error: krakenError } = useStatusStream();
-  const { usage: krakenUsage, systemInfo: krakenSystemInfo, connected: krakenUsageConnected, error: krakenUsageError } = useUsageStream();
-  const { usage: stage1Usage, systemInfo: stage1SystemInfo, connected: stage1Connected, error: stage1Error } = useStage1UsageStream();
+  const { connected: krakenConnected, error: krakenError } = useStatusStreamContext();
+  const { usage: krakenUsage, systemInfo: krakenSystemInfo, connected: krakenUsageConnected, error: krakenUsageError } = useUsageStreamContext();
+  const { usage: stage1Usage, systemInfo: stage1SystemInfo, connected: stage1Connected, error: stage1Error } = useStage1UsageStreamContext();
   const { data: models } = useLiveModels();
   const deactivateMutation = useDeactivateModel();
-  const { balances, positions, orders, connected: accountConnected } = useAccountState();
+  const { balances, positions, orders, connected: accountConnected } = useAccountStateContext();
 
   // Filter to models with executors (trading-enabled models)
   const tradingModels = models?.filter(m => m.status === 'active' && m.has_executor) ?? [];
@@ -84,12 +79,6 @@ export default function LiveOverview() {
 
   const activeModelsCount = models?.filter(m => m.status === 'active').length ?? 0;
   const staleStreams = health?.streams.filter(s => s.stale).length ?? 0;
-  const krakenRates = (krakenStats?.message_rates || krakenUsage?.message_rates) as Record<string, number> | undefined;
-  const krakenTotalRate = krakenRates ? (krakenRates.total ?? krakenRates.total_per_sec ?? krakenRates.totalPerSec) : undefined;
-  const krakenTradeRate = krakenRates ? (krakenRates.trades ?? krakenRates.trades_per_sec ?? krakenRates.tradesPerSec ?? krakenRates.trade_messages ?? krakenRates.tradeMessages) : undefined;
-  const krakenOrderbookRate = krakenRates ? (krakenRates.orderbooks ?? krakenRates.orderbooks_per_sec ?? krakenRates.orderbooksPerSec ?? krakenRates.orderbook_messages ?? krakenRates.orderbookMessages) : undefined;
-  const hasKrakenRates = krakenTotalRate !== undefined || krakenTradeRate !== undefined || krakenOrderbookRate !== undefined;
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -221,6 +210,10 @@ export default function LiveOverview() {
                     <span className="font-medium">{krakenUsage.ram_percent.toFixed(1)}%</span>
                   </div>
                   <Progress value={krakenUsage.ram_percent} className="h-1.5" />
+                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                    <span>Memory</span>
+                    <span className="font-mono">{formatMemory(krakenUsage.ram_used_mb, krakenUsage.ram_total_mb)}</span>
+                  </div>
                 </div>
                 {krakenUsage.gpu_percent !== undefined && (
                   <div>
@@ -244,30 +237,21 @@ export default function LiveOverview() {
               <p className="text-sm text-muted-foreground">Waiting for usage telemetry...</p>
             )}
 
-            {hasKrakenRates && (
-              <div className="pt-3 border-t">
-                <div className="grid grid-cols-3 gap-3 text-sm">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Msgs/sec</p>
-                    <p className="font-mono font-medium">{formatRate(krakenTotalRate)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Trades/sec</p>
-                    <p className="font-mono font-medium">{formatRate(krakenTradeRate)}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Orderbooks/sec</p>
-                    <p className="font-mono font-medium">{formatRate(krakenOrderbookRate)}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {krakenSystemInfo && (
               <div className="pt-3 border-t text-xs space-y-1">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Host</span>
                   <span className="font-mono">{krakenSystemInfo.hostname}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">CPU</span>
+                  <span className="font-medium truncate ml-4" title={krakenSystemInfo.cpu_model}>
+                    {krakenSystemInfo.cpu_model?.split('@')[0]?.trim() || krakenSystemInfo.cpu_model}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">RAM</span>
+                  <span className="font-medium">{(krakenSystemInfo.ram_total_mb / 1024).toFixed(1)} GB</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">GPU</span>
