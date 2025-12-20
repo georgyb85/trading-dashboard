@@ -1,6 +1,6 @@
 // Status Stream API Types
 // Based on status_stream_api.md
-// Note: OHLCV data now comes from /ws/live (MarketDataContext), not /ws/status
+// Note: OHLCV data now comes from /traders/<id>/ws/live (MarketDataContext), not /ws/status
 
 export type StatusMessageType = 'snapshot' | 'update' | 'stats' | 'trade';
 

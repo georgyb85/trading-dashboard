@@ -63,7 +63,7 @@ export interface OrderStateEvent {
   messageType: 'state' | 'fill' | 'final';
 }
 
-// Order History Types (from /api/account/order-history)
+// Order History Types (from /traders/<id>/api/account/order-history)
 
 export interface OrderStateTransition {
   status: string;

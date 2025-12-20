@@ -1,8 +1,9 @@
 // API Client with retry logic and error handling
 
 import { ApiResponse, ApiError } from '@/lib/types/api';
+import { config } from '@/lib/config';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+const API_BASE_URL = config.krakenRestBaseUrl;
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // ms
 

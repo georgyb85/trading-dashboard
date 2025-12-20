@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Wifi, WifiOff, AlertCircle, AlertTriangle, Info, Loader2 } from "lucide-react";
+import { config } from "@/lib/config";
+import { joinUrl } from "@/lib/url";
 
 // Event table options from the image
 const eventTableOptions = [
@@ -23,13 +25,13 @@ const eventTableOptions = [
 
 // Severity badge component
 function SeverityBadge({ severity }: { severity: "ERROR" | "WARNING" | "INFO" }) {
-  const config = {
+  const severityConfig = {
     ERROR: { icon: AlertCircle, className: "bg-red-500/20 text-red-500 border-red-500/30" },
     WARNING: { icon: AlertTriangle, className: "bg-yellow-500/20 text-yellow-500 border-yellow-500/30" },
     INFO: { icon: Info, className: "bg-blue-500/20 text-blue-500 border-blue-500/30" },
   };
 
-  const { icon: Icon, className } = config[severity];
+  const { icon: Icon, className } = severityConfig[severity];
 
   return (
     <Badge variant="outline" className={className}>
@@ -129,11 +131,12 @@ export default function AuditLogs() {
   const [limit, setLimit] = useState("1");
   const [isQuerying, setIsQuerying] = useState(false);
   const [queryResults, setQueryResults] = useState<any[] | null>(null);
+  const logSnapshotPath = `${config.traderRestBasePath}/live/logs`;
+  const logWsPath = config.krakenLogsWsPath;
 
   // Connect to WebSocket for real-time logs
   useEffect(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws/logs`;
+    const wsUrl = joinUrl(config.krakenWsBaseUrl, config.krakenLogsWsPath);
 
     try {
       const ws = new WebSocket(wsUrl);
@@ -384,8 +387,8 @@ export default function AuditLogs() {
       <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-4">
         <div>
           Data Sources:{" "}
-          <span className="text-primary">/api/live/logs</span> (Snapshot),{" "}
-          <span className="text-primary">/ws/logs</span> (Streaming),{" "}
+          <span className="text-primary">{logSnapshotPath}</span> (Snapshot),{" "}
+          <span className="text-primary">{logWsPath}</span> (Streaming),{" "}
           <span className="text-primary">/api/events/{"{table}"}</span> (Durable History).
         </div>
         <div className="flex items-center gap-1.5">

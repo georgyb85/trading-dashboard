@@ -2,14 +2,14 @@
 
 ## All Tasks Completed ✅
 1. Added TypeScript types for extended API (StatusUpdate, UsageUpdateNew, ThreadStatus, RingBufferStats, PriceUpdate)
-2. Added WebSocket connections to `/system-status` and `/system-usage` endpoints
+2. Added WebSocket connections to `/traders/<id>/ws/status` and `/traders/<id>/ws/usage` endpoints
 3. Added state variables for all new data (prices, threads, ring buffers, message rates, system usage)
 4. Auto-reconnect logic for WebSockets
 5. **Price Ticker Component** - Added after title, displays BTC/ETH/SOL/XRP/ADA prices
 6. **Ring Buffer Monitor Card** - Added with utilization %, unconsumed count, max 12h tracking
 7. **Updated Thread Monitor** - Now uses real thread data instead of hardcoded values
 8. **Updated Message Rates Card** - Uses messageRatesExtended from new API
-9. **Nginx Proxy Configuration** - Configured `/system-status` and `/system-usage` endpoints
+9. **Nginx Proxy Configuration** - Configured `/traders/<id>/ws/status` and `/traders/<id>/ws/usage` endpoints
 10. Built and committed all changes
 
 ## Reference: Implementation Details 📝
@@ -195,7 +195,7 @@ const messageRates = messageRatesExtended || krakenInstance?.usageMetrics?.messa
 Added to nginx config (`/etc/nginx/sites-available/agenticresearch.info.conf`):
 
 ```nginx
-location /system-status {
+location /traders/<id>/ws/status {
     proxy_pass http://localhost:51187/status;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
@@ -204,7 +204,7 @@ location /system-status {
     proxy_read_timeout 3600s;
 }
 
-location /system-usage {
+location /traders/<id>/ws/usage {
     proxy_pass http://localhost:51187/usage;
     proxy_http_version 1.1;
     proxy_set_header Upgrade $http_upgrade;
@@ -235,7 +235,7 @@ All code changes have been implemented and deployed:
 1. ✅ UI components added to SystemHealthDashboard.tsx
 2. ✅ TypeScript types defined for all new data structures
 3. ✅ WebSocket connections established with auto-reconnect
-4. ✅ Nginx proxy configured for /system-status and /system-usage
+4. ✅ Nginx proxy configured for /traders/<id>/ws/status and /traders/<id>/ws/usage
 5. ✅ Project builds successfully
 6. ✅ All changes committed to git
 

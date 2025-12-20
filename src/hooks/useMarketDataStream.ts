@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { config } from '@/lib/config';
+import { joinUrl } from '@/lib/url';
 
 export interface IndicatorSnapshot {
   timestamp: number;
@@ -519,17 +521,15 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
       return;
     }
 
-    // Connect to unified /ws/live endpoint
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
-    const wsUrl = `${protocol}//${host}/ws/live`;
+    // Connect to unified /ws/live endpoint through trader proxy
+    const wsUrl = joinUrl(config.krakenWsBaseUrl, config.krakenLiveWsPath);
 
     console.log('[MarketDataStream] Connecting to:', wsUrl);
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log('[MarketDataStream] WebSocket connected to /ws/live');
+      console.log('[MarketDataStream] WebSocket connected to', config.krakenLiveWsPath);
       setConnected(true);
       setError(null);
       reconnectAttemptsRef.current = 0;
@@ -661,7 +661,7 @@ export function useMarketDataStream(options: UseMarketDataStreamOptions = {}) {
 
     const fetchHealth = async () => {
       try {
-        const resp = await fetch('/api/live/health');
+        const resp = await fetch(joinUrl(config.krakenRestBaseUrl, '/api/live/health'));
         if (!resp.ok) return;
         const data = await resp.json();
         if (cancelled) return;

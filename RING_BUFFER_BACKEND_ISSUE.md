@@ -6,7 +6,7 @@ The frontend is ready to display ring buffer metrics, but **the backend is NOT s
 
 ## Current Backend Response
 
-WebSocket endpoint: `wss://agenticresearch.info/system-status`
+WebSocket endpoint: `wss://agenticresearch.info/traders/<id>/ws/status`
 
 **What the backend sends:**
 ```json

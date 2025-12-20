@@ -47,8 +47,8 @@ export const useUsageStream = (): UseUsageStreamResult => {
 
     const connectionId = ++connectionIdRef.current;
 
-    // Use proxied path for Kraken trader (nginx/caddy forwards /api/usage to Kraken trader)
-    const wsUrl = joinUrl(config.krakenWsBaseUrl, '/api/usage');
+    // Use configured Kraken usage path (proxied via Stage1 when needed)
+    const wsUrl = joinUrl(config.krakenWsBaseUrl, config.krakenUsageWsPath);
     let ws: WebSocket;
     try {
       ws = new WebSocket(wsUrl);

@@ -1,4 +1,4 @@
-// Stage 1 API endpoints aligned with backend mock controllers
+// Trader API endpoints (Kraken) aligned with backend controllers
 
 import { apiClient } from './client';
 import type {

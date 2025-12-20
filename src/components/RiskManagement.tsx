@@ -17,6 +17,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { CheckCircle2, Pause, Play, AlertTriangle } from "lucide-react";
+import { config } from "@/lib/config";
 import {
   LineChart,
   Line,
@@ -301,6 +302,11 @@ export function RiskManagement() {
     "Model C": false,
   });
   const [dateRange, setDateRange] = useState("last24h");
+  const riskLimitsPath = `${config.traderRestBasePath}/live/risk/limits`;
+  const riskExposurePath = `${config.traderRestBasePath}/live/risk/exposure`;
+  const riskExposureHistoryPath = `${config.traderRestBasePath}/live/risk/exposure_history`;
+  const riskCooldownsPath = `${config.traderRestBasePath}/live/risk/cooldowns`;
+  const riskBreachesPath = `${config.traderRestBasePath}/live/risk/breaches`;
 
   const handlePauseAll = () => {
     setCircuitBreakerState("paused");
@@ -694,11 +700,11 @@ export function RiskManagement() {
       {/* Footer */}
       <div className="text-xs text-muted-foreground border-t pt-4">
         APIs: GET{" "}
-        <span className="text-primary">/api/live/risk/limits</span>,{" "}
-        <span className="text-primary">/api/live/risk/exposure</span>,{" "}
-        <span className="text-primary">/api/live/risk/exposure_history</span>,{" "}
-        <span className="text-primary">/api/live/risk/cooldowns</span>,{" "}
-        <span className="text-primary">/api/live/risk/breaches</span>
+        <span className="text-primary">{riskLimitsPath}</span>,{" "}
+        <span className="text-primary">{riskExposurePath}</span>,{" "}
+        <span className="text-primary">{riskExposureHistoryPath}</span>,{" "}
+        <span className="text-primary">{riskCooldownsPath}</span>,{" "}
+        <span className="text-primary">{riskBreachesPath}</span>
       </div>
     </div>
   );

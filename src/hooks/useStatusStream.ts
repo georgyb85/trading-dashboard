@@ -258,7 +258,7 @@ export function useStatusStream(options: UseStatusStreamOptions = {}) {
     }
 
     const connectionId = ++connectionIdRef.current;
-    const wsUrl = joinUrl(config.krakenWsBaseUrl, '/api/status-ws');
+    const wsUrl = joinUrl(config.krakenWsBaseUrl, config.krakenStatusWsPath);
 
     console.log('[StatusStream] Connecting to:', wsUrl);
     const ws = new WebSocket(wsUrl);

@@ -80,8 +80,8 @@ These types mirror the backend API specifications from:
 **Modified:** `/etc/nginx/sites-enabled/agenticresearch.info.conf`
 
 Added proxy configurations for:
-- `/api/account-ws` → WebSocket to backend port 33931 `/account` endpoint
-- `/api/status-ws` → WebSocket to backend port 33931 `/ws/status` endpoint
+- `/traders/<id>/ws/account` → WebSocket to backend port 33931 `/account` endpoint
+- `/traders/<id>/ws/status` → WebSocket to backend port 33931 `/ws/status` endpoint
 - `/api/account/` → HTTP API to backend port 33931 `/api/account/` endpoints
 
 All WebSocket proxies include:

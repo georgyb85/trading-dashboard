@@ -3,6 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { saveToCache, loadFromCache, CACHE_KEYS } from "@/utils/cache";
+import { config as appConfig } from "@/lib/config";
+import { joinUrl } from "@/lib/url";
 import {
   Wifi,
   WifiOff,
@@ -69,12 +71,16 @@ interface StatusUpdate {
 
 interface UsageUpdateNew {
   type: "usage_update";
-  cpu: number;
-  ram: number;
-  gpu: number;
-  messagesPerSec: number;
-  tradesPerSec: number;
-  orderbooksPerSec: number;
+  cpu?: number;
+  ram?: number;
+  gpu?: number;
+  cpu_percent?: number;
+  ram_percent?: number;
+  gpu_percent?: number;
+  messagesPerSec?: number;
+  tradesPerSec?: number;
+  orderbooksPerSec?: number;
+  message_rates?: MessageRates;
 }
 
 interface GPUInfo {
@@ -219,7 +225,6 @@ export function SystemHealthDashboard() {
 
   // WebSocket connections for GPU services
   useEffect(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const BASE_RECONNECT_DELAY_MS = 2000;
     const MAX_RECONNECT_DELAY_MS = 60000;
     const reconnectMap = reconnectTimers.current;
@@ -251,7 +256,7 @@ export function SystemHealthDashboard() {
     }
 
     function connect(config: GPUInstanceConfig) {
-      const wsUrl = `${protocol}//${window.location.host}/gpu-ws`;
+      const wsUrl = joinUrl(appConfig.krakenWsBaseUrl, appConfig.krakenUsageWsPath);
 
       console.log(`Connecting to GPU WebSocket for ${config.name} (${config.ip}):`, wsUrl);
 
@@ -468,11 +473,9 @@ export function SystemHealthDashboard() {
 
   // System Health WebSocket connections (new extended API)
   useEffect(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-
     // Connect to /status endpoint for prices, threads, ring buffers
     function connectSystemStatus() {
-      const wsUrl = `${protocol}//${window.location.host}/system-status`;
+      const wsUrl = joinUrl(appConfig.krakenWsBaseUrl, appConfig.krakenStatusWsPath);
       console.log('[SystemHealth] Connecting to status WebSocket:', wsUrl);
 
       try {
@@ -534,7 +537,7 @@ export function SystemHealthDashboard() {
 
     // Connect to /usage endpoint for CPU/RAM/GPU metrics
     function connectSystemUsage() {
-      const wsUrl = `${protocol}//${window.location.host}/system-usage`;
+      const wsUrl = joinUrl(appConfig.krakenWsBaseUrl, appConfig.krakenUsageWsPath);
       console.log('[SystemHealth] Connecting to usage WebSocket:', wsUrl);
 
       try {
@@ -550,14 +553,24 @@ export function SystemHealthDashboard() {
             const data: UsageUpdateNew = JSON.parse(event.data);
 
             if (data.type === 'usage_update') {
+              const cpu = data.cpu_percent ?? data.cpu;
+              const ram = data.ram_percent ?? data.ram;
+              const gpu = data.gpu_percent ?? data.gpu;
+
               setSystemUsage({
-                cpu: data.cpu,
-                ram: data.ram,
-                gpu: data.gpu
+                cpu: cpu ?? 0,
+                ram: ram ?? 0,
+                gpu: gpu ?? 0
               });
 
               // Also update message rates if provided
-              if (data.messagesPerSec) {
+              if (data.message_rates) {
+                setMessageRatesExtended({
+                  totalPerSec: data.message_rates.total_per_sec,
+                  tradesPerSec: data.message_rates.trades_per_sec,
+                  orderbooksPerSec: data.message_rates.orderbooks_per_sec
+                });
+              } else if (data.messagesPerSec !== undefined) {
                 setMessageRatesExtended({
                   totalPerSec: data.messagesPerSec,
                   tradesPerSec: data.tradesPerSec || 0,

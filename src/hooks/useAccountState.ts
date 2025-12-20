@@ -156,7 +156,7 @@ export function useAccountState(options: UseAccountStateOptions = {}) {
     }
 
     const connectionId = ++connectionIdRef.current;
-    const wsUrl = joinUrl(config.krakenWsBaseUrl, '/api/account-ws');
+    const wsUrl = joinUrl(config.krakenWsBaseUrl, config.krakenAccountWsPath);
 
     console.log('Connecting to Account State WebSocket:', wsUrl);
     const ws = new WebSocket(wsUrl);

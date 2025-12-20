@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
+import { config } from '@/lib/config';
+import { joinUrl } from '@/lib/url';
 import { OrderHistory } from '@/types/account';
 
 interface UseOrderHistoryOptions {
@@ -18,8 +20,9 @@ export function useOrderHistory(options: UseOrderHistoryOptions = {}) {
     setError(null);
 
     try {
-      console.log('📜 Fetching order history from /api/account/order-history');
-      const response = await fetch('/api/account/order-history');
+      const url = joinUrl(config.krakenRestBaseUrl, '/api/account/order-history');
+      console.log('📜 Fetching order history from', url);
+      const response = await fetch(url);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch order history: ${response.statusText}`);
@@ -39,7 +42,8 @@ export function useOrderHistory(options: UseOrderHistoryOptions = {}) {
 
   const fetchOrderById = useCallback(async (orderId: string): Promise<OrderHistory | null> => {
     try {
-      const response = await fetch(`/api/account/order-history/${orderId}`);
+      const url = joinUrl(config.krakenRestBaseUrl, `/api/account/order-history/${orderId}`);
+      const response = await fetch(url);
 
       if (!response.ok) {
         if (response.status === 404) {

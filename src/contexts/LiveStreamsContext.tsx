@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { config } from '@/lib/config';
+import { joinUrl } from '@/lib/url';
 import type { LivePrediction } from '@/lib/kraken/types';
 
 type TargetMap = Record<string, number | null>;
@@ -24,7 +26,7 @@ export const LiveStreamsProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const fetchInitialPredictions = async () => {
       try {
         // Get all live models
-        const modelsRes = await fetch('/api/live/models');
+        const modelsRes = await fetch(joinUrl(config.krakenRestBaseUrl, '/api/live/models'));
         if (!modelsRes.ok) return;
         const modelsData = await modelsRes.json();
         const models = modelsData.models || [];
@@ -41,7 +43,9 @@ export const LiveStreamsProvider: React.FC<{ children: React.ReactNode }> = ({ c
         await Promise.all(
           activeModels.map(async (model: any) => {
             try {
-              const predsRes = await fetch(`/api/live/predictions?model_id=${model.model_id}`);
+              const predsRes = await fetch(
+                joinUrl(config.krakenRestBaseUrl, `/api/live/predictions?model_id=${model.model_id}`)
+              );
               if (!predsRes.ok) return;
               const data = await predsRes.json();
 
@@ -89,9 +93,7 @@ export const LiveStreamsProvider: React.FC<{ children: React.ReactNode }> = ({ c
       }
 
       // Connect to unified V3 /ws/live endpoint
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.host;
-      const wsUrl = `${protocol}//${host}/ws/live`;
+      const wsUrl = joinUrl(config.krakenWsBaseUrl, config.krakenLiveWsPath);
 
       console.log('[LiveStreams] Connecting to:', wsUrl);
       const ws = new WebSocket(wsUrl);
@@ -218,4 +220,3 @@ export const LiveStreamsProvider: React.FC<{ children: React.ReactNode }> = ({ c
 };
 
 export const useLiveStreams = () => useContext(LiveStreamsContext);
-

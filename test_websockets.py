@@ -14,8 +14,8 @@ ENDPOINTS = [
     ("wss://agenticresearch.info/ws/usage", "Stage1 /ws/usage"),
 
     # Kraken trader proxied endpoints (through Stage1's nginx/caddy)
-    ("wss://agenticresearch.info/api/status-ws", "Kraken /api/status-ws"),
-    ("wss://agenticresearch.info/api/xgboost-ws", "Kraken /api/xgboost-ws"),
+    ("wss://agenticresearch.info/traders/<id>/ws/status", "Kraken /traders/<id>/ws/status"),
+    ("wss://agenticresearch.info/traders/<id>/xgboost", "Kraken /traders/<id>/xgboost"),
     ("wss://agenticresearch.info/status", "Kraken /status"),
     ("wss://agenticresearch.info/ws/status", "Kraken /ws/status"),
 ]

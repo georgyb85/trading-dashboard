@@ -1,4 +1,4 @@
-// Stage 1 API Types aligned with backend DTOs
+// Trader API Types aligned with backend DTOs
 
 // Indicator datasets (QuestDB exports)
 export interface IndicatorDataset {

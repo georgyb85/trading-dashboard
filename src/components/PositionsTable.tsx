@@ -17,6 +17,7 @@ import {
 import { TrendingUp, TrendingDown, WifiOff, Loader2, ChevronLeft, ChevronRight, Wifi } from "lucide-react";
 import { useAccountStateContext } from "@/contexts/AccountStateContext";
 import { useStatusStreamContext } from "@/contexts/StatusStreamContext";
+import { config } from "@/lib/config";
 
 // Mini sparkline component for metrics
 function Sparkline({ data, color, height = 32 }: { data: number[]; color: string; height?: number }) {
@@ -139,6 +140,9 @@ export function PositionsTable() {
   const [selectedPosition, setSelectedPosition] = useState<typeof sampleActivePositions[0] | null>(null);
   const [selectedReason, setSelectedReason] = useState("manual_close");
   const [historyPage, setHistoryPage] = useState(1);
+  const accountWsPath = config.krakenAccountWsPath;
+  const livePositionsPath = `${config.traderRestBasePath}/live/positions`;
+  const livePositionsHistoryPath = `${config.traderRestBasePath}/live/positions/history`;
 
   // Metrics data (would come from API in real implementation)
   const metrics = {
@@ -519,7 +523,7 @@ export function PositionsTable() {
       {/* Footer */}
       <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-4">
         <div>
-          Data Sources: <span className="text-primary">/account WS (Active)</span>, <span className="text-primary">/api/live/positions (Ops)</span>, <span className="text-primary">/api/live/positions/history (History)</span>
+          Data Sources: <span className="text-primary">{accountWsPath}</span>, <span className="text-primary">{livePositionsPath}</span>, <span className="text-primary">{livePositionsHistoryPath}</span>
         </div>
         <div className="flex items-center gap-1.5">
           WebSocket:

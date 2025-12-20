@@ -57,11 +57,11 @@ Successfully integrated the extended System Health API into the Trading Dashboar
 
 ```typescript
 // Status Stream - Prices, Threads, Ring Buffers, Message Rates
-ws://agenticresearch.info/system-status
+ws://agenticresearch.info/traders/<id>/ws/status
 → Proxied to: http://220.82.52.202:51187/status
 
 // Usage Stream - CPU/RAM/GPU Metrics
-ws://agenticresearch.info/system-usage
+ws://agenticresearch.info/traders/<id>/ws/usage
 → Proxied to: http://220.82.52.202:51187/usage
 ```
 
@@ -77,7 +77,7 @@ ws://agenticresearch.info/system-usage
 
 Added two new WebSocket proxy locations:
 ```nginx
-location /system-status {
+location /traders/<id>/ws/status {
     proxy_pass         http://220.82.52.202:51187/status;
     proxy_http_version 1.1;
     proxy_set_header   Upgrade           $http_upgrade;
@@ -87,7 +87,7 @@ location /system-status {
     # ... additional headers
 }
 
-location /system-usage {
+location /traders/<id>/ws/usage {
     proxy_pass         http://220.82.52.202:51187/usage;
     proxy_http_version 1.1;
     proxy_set_header   Upgrade           $http_upgrade;
@@ -223,7 +223,7 @@ interface UsageUpdateNew {
    feat: Add extended System Health Dashboard UI components
 
    Added Ring Buffer Monitor, Price Ticker, and updated Thread Monitor
-   to display real-time data from /system-status and /system-usage APIs.
+   to display real-time data from /traders/<id>/ws/status and /traders/<id>/ws/usage APIs.
    ```
    Commit: `6077ea7`
 
@@ -266,8 +266,8 @@ interface UsageUpdateNew {
 
 ```
 Frontend (React)
-  ↓ WebSocket wss://agenticresearch.info/system-status
-  ↓ WebSocket wss://agenticresearch.info/system-usage
+  ↓ WebSocket wss://agenticresearch.info/traders/<id>/ws/status
+  ↓ WebSocket wss://agenticresearch.info/traders/<id>/ws/usage
   ↓
 Nginx Proxy (443)
   ↓ http://220.82.52.202:51187/status
@@ -324,7 +324,7 @@ Live Trading System
    - Error detection
 
 4. **System Resources**
-   - CPU/RAM/GPU utilization from /system-usage
+   - CPU/RAM/GPU utilization from /traders/<id>/ws/usage
    - Message throughput rates
    - Historical trend charts (GPU instances)
 
@@ -333,7 +333,7 @@ Live Trading System
 ## Future Enhancements (Optional)
 
 1. **System Resource Summary Card**
-   - Aggregate CPU/RAM/GPU display from /system-usage
+   - Aggregate CPU/RAM/GPU display from /traders/<id>/ws/usage
    - Compact 3-column layout
    - Could be added after Price Ticker
 

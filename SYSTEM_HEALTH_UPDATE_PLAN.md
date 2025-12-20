@@ -187,8 +187,8 @@ const STATUS_WS_URL = 'ws://localhost:51187/status';
 const USAGE_WS_URL = 'ws://localhost:51187/usage';
 
 // For proxied connections through frontend:
-const STATUS_WS_URL = `ws://${window.location.host}/system-status`;
-const USAGE_WS_URL = `ws://${window.location.host}/system-usage`;
+const STATUS_WS_URL = `ws://${window.location.host}/traders/<id>/ws/status`;
+const USAGE_WS_URL = `ws://${window.location.host}/traders/<id>/ws/usage`;
 ```
 
 ---

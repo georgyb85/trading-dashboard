@@ -26,9 +26,11 @@ import {
   ReferenceLine
 } from "recharts";
 import { liveModelApi, LiveModel, LivePrediction } from "@/lib/api/endpoints";
+import { config } from "@/lib/config";
+import { joinUrl } from "@/lib/url";
 
 // WebSocket URL for live updates
-const WS_URL = import.meta.env.VITE_WS_URL || 'wss://agenticresearch.info/ws/live';
+const WS_URL = joinUrl(config.krakenWsBaseUrl, config.krakenLiveWsPath);
 
 interface PredictionChartData {
   time: string;

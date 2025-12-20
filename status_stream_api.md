@@ -9,7 +9,7 @@ Direct (Kraken trader):
 - ws://<kraken-host>:<port>/status (legacy alias)
 
 Proxied through Stage1 nginx:
-- wss://agenticresearch.info/api/status-ws
+- wss://agenticresearch.info/traders/<id>/ws/status
 
 ## Client Behavior
 
@@ -64,7 +64,7 @@ Broadcast periodically.
 ## Example
 
 ```bash
-websocat wss://agenticresearch.info/api/status-ws
+websocat wss://agenticresearch.info/traders/<id>/ws/status
 ```
 
 The server will start streaming immediately.

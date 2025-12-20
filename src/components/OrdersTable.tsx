@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useAccountStateContext } from "@/contexts/AccountStateContext";
 import { useStatusStreamContext } from "@/contexts/StatusStreamContext";
+import { config } from "@/lib/config";
 
 // Order status type
 type OrderStatus = "Filled" | "Open" | "Rejected" | "Cancelled";
@@ -259,14 +260,14 @@ function OrderFlowVisualization() {
 
 // Status indicator component
 function StatusIndicator({ status }: { status: OrderStatus }) {
-  const config = {
+  const statusConfig = {
     Filled: { color: "bg-green-500", text: "text-green-500" },
     Open: { color: "bg-yellow-500", text: "text-yellow-500" },
     Rejected: { color: "bg-red-500", text: "text-red-500" },
     Cancelled: { color: "bg-gray-500", text: "text-gray-500" },
   };
 
-  const { color, text } = config[status];
+  const { color, text } = statusConfig[status];
 
   return (
     <div className="flex items-center gap-2">
@@ -285,6 +286,9 @@ export function OrdersTable() {
   const [exchangeFilter, setExchangeFilter] = useState("All");
   const [stateFilter, setStateFilter] = useState("All");
   const [timeWindow, setTimeWindow] = useState("Last Hour");
+  const accountWsPath = config.krakenAccountWsPath;
+  const orderHistoryPath = `${config.traderRestBasePath}/account/order-history`;
+  const liveOrdersPath = `${config.traderRestBasePath}/live/orders`;
 
   // Convert real Kraken orders to unified format
   const krakenOrders: Order[] = useMemo(() => {
@@ -577,9 +581,9 @@ export function OrdersTable() {
       {/* Footer */}
       <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-4">
         <div>
-          Data Sources: Primary (<span className="text-primary">/account WS</span> +{" "}
-          <span className="text-primary">/api/account/order-history</span>). Enhanced with{" "}
-          <span className="text-primary">/api/live/orders</span>.
+          Data Sources: Primary (<span className="text-primary">{accountWsPath}</span> +{" "}
+          <span className="text-primary">{orderHistoryPath}</span>). Enhanced with{" "}
+          <span className="text-primary">{liveOrdersPath}</span>.
         </div>
         <div className="flex items-center gap-1.5">
           WebSocket:
