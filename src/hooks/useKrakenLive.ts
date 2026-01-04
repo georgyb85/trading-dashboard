@@ -235,16 +235,21 @@ export const useAttachExecutor = () => {
         throw new Error(resp.error || 'Attach executor failed');
       }
 
-      const recovery = await krakenClient.recoveryReset();
-      if (!recovery.success || !recovery.data) {
-        const suffix = resp.data.binding_id ? resp.data.binding_id.slice(0, 8) : 'unknown';
-        throw new Error(`Stage1 binding saved (${suffix}…), but recovery reset failed: ${recovery.error || 'unknown error'}`);
+      // Try recovery reset but don't fail if endpoint doesn't exist
+      let recovery: { success: boolean; data?: any; error?: string } = { success: false };
+      try {
+        recovery = await krakenClient.recoveryReset();
+      } catch (e) {
+        console.warn('[useAttachExecutor] Recovery reset failed (endpoint may not exist):', e);
       }
 
-      return { binding: resp.data, recovery: recovery.data };
+      return { binding: resp.data, recovery: recovery.data ?? null, recoverySkipped: !recovery.success };
     },
-    onSuccess: (_, request) => {
-      toast({ title: 'Executor attached', description: `Executor attached to model ${request.model_id.slice(0, 8)}…` });
+    onSuccess: (result, request) => {
+      const msg = result.recoverySkipped
+        ? `Executor attached to model ${request.model_id.slice(0, 8)}… (recovery reset skipped)`
+        : `Executor attached to model ${request.model_id.slice(0, 8)}…`;
+      toast({ title: 'Executor attached', description: msg });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
     },
@@ -264,16 +269,21 @@ export const useUpdateExecutor = () => {
         throw new Error(resp.error || 'Update executor failed');
       }
 
-      const recovery = await krakenClient.recoveryReset();
-      if (!recovery.success || !recovery.data) {
-        const suffix = resp.data.binding_id ? resp.data.binding_id.slice(0, 8) : 'unknown';
-        throw new Error(`Stage1 binding saved (${suffix}…), but recovery reset failed: ${recovery.error || 'unknown error'}`);
+      // Try recovery reset but don't fail if endpoint doesn't exist
+      let recovery: { success: boolean; data?: any; error?: string } = { success: false };
+      try {
+        recovery = await krakenClient.recoveryReset();
+      } catch (e) {
+        console.warn('[useUpdateExecutor] Recovery reset failed (endpoint may not exist):', e);
       }
 
-      return { binding: resp.data, recovery: recovery.data };
+      return { binding: resp.data, recovery: recovery.data ?? null, recoverySkipped: !recovery.success };
     },
-    onSuccess: (_, request) => {
-      toast({ title: 'Executor updated', description: `Executor binding updated for model ${request.model_id.slice(0, 8)}…` });
+    onSuccess: (result, request) => {
+      const msg = result.recoverySkipped
+        ? `Executor binding updated for model ${request.model_id.slice(0, 8)}… (recovery reset skipped)`
+        : `Executor binding updated for model ${request.model_id.slice(0, 8)}…`;
+      toast({ title: 'Executor updated', description: msg });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
     },
@@ -308,16 +318,21 @@ export const useDetachExecutor = () => {
         throw new Error(resp.error || 'Detach executor failed');
       }
 
-      const recovery = await krakenClient.recoveryReset();
-      if (!recovery.success || !recovery.data) {
-        const suffix = resp.data.binding_id ? resp.data.binding_id.slice(0, 8) : 'unknown';
-        throw new Error(`Stage1 binding saved (${suffix}…), but recovery reset failed: ${recovery.error || 'unknown error'}`);
+      // Try recovery reset but don't fail if endpoint doesn't exist
+      let recovery: { success: boolean; data?: any; error?: string } = { success: false };
+      try {
+        recovery = await krakenClient.recoveryReset();
+      } catch (e) {
+        console.warn('[useDetachExecutor] Recovery reset failed (endpoint may not exist):', e);
       }
 
-      return { binding: resp.data, recovery: recovery.data };
+      return { binding: resp.data, recovery: recovery.data ?? null, recoverySkipped: !recovery.success };
     },
-    onSuccess: (_, modelId) => {
-      toast({ title: 'Executor detached', description: `Executor disabled for model ${modelId.slice(0, 8)}…` });
+    onSuccess: (result, modelId) => {
+      const msg = result.recoverySkipped
+        ? `Executor disabled for model ${modelId.slice(0, 8)}… (recovery reset skipped)`
+        : `Executor disabled for model ${modelId.slice(0, 8)}…`;
+      toast({ title: 'Executor detached', description: msg });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
     },
