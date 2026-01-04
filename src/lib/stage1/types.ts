@@ -30,7 +30,7 @@ export interface Stage1RunSummary {
     hit_rate_short?: number;
     hit_rate_overall?: number;
     pf_dual?: number;
-    [key: string]: any;
+    [key: string]: unknown;
   } | string; // Can be object or JSON string
   created_at: string;
   completed_at?: string;
@@ -216,6 +216,115 @@ export interface StressTestConfig {
   seed: number;
 }
 
+// ---------------------------------------------------------------------------
+// Executor Config + Bindings (Stage1 persistence)
+// ---------------------------------------------------------------------------
+
+export type ExecutorThresholdChoice = "OptimalROC" | "Percentile" | "ZeroCrossover";
+
+export interface Stage1ExecutorConfig {
+  config_id: string;
+  name: string;
+  description?: string;
+  threshold_choice: ExecutorThresholdChoice;
+
+  position_size: number;
+
+  use_limit_orders: boolean;
+  limit_order_window: number;
+  limit_order_offset: number;
+
+  use_signal_exit: boolean;
+  exit_strength_pct: number;
+  honor_signal_reversal: boolean;
+
+  use_stop_loss: boolean;
+  use_atr_stop_loss: boolean;
+  stop_loss_pct: number;
+  atr_multiplier: number;
+  atr_period: number;
+  stop_loss_cooldown_bars: number;
+
+  use_take_profit: boolean;
+  use_atr_take_profit: boolean;
+  take_profit_pct: number;
+  atr_tp_multiplier: number;
+  atr_tp_period: number;
+
+  use_time_exit: boolean;
+  max_holding_bars: number;
+
+  version: number;
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
+  extra_config?: Record<string, unknown>;
+}
+
+export interface Stage1ExecutorConfigUpsertRequest {
+  name: string;
+  description?: string;
+  threshold_choice: ExecutorThresholdChoice;
+
+  position_size: number;
+
+  use_limit_orders: boolean;
+  limit_order_window: number;
+  limit_order_offset: number;
+
+  use_signal_exit: boolean;
+  exit_strength_pct: number;
+  honor_signal_reversal: boolean;
+
+  use_stop_loss: boolean;
+  use_atr_stop_loss: boolean;
+  stop_loss_pct: number;
+  atr_multiplier: number;
+  atr_period: number;
+  stop_loss_cooldown_bars: number;
+
+  use_take_profit: boolean;
+  use_atr_take_profit: boolean;
+  take_profit_pct: number;
+  atr_tp_multiplier: number;
+  atr_tp_period: number;
+
+  use_time_exit: boolean;
+  max_holding_bars: number;
+
+  extra_config?: Record<string, unknown>;
+  created_by?: string;
+  changed_by?: string;
+  change_reason?: string;
+}
+
+export interface Stage1ExecutorBinding {
+  binding_id: string;
+  trader_id?: string;
+  model_id: string;
+  stream_id: string;
+  symbol: string;
+  exchange: string;
+  executor_config_id: string;
+  enabled: boolean;
+  priority: number;
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
+}
+
+export interface Stage1ExecutorBindingUpsertRequest {
+  trader_id?: string;
+  model_id: string;
+  stream_id: string;
+  symbol: string;
+  exchange: string;
+  executor_config_id: string;
+  enabled: boolean;
+  priority: number;
+  created_by?: string;
+}
+
 export interface SimulateTradesRequest {
   dataset_id?: string;
   dataset_slug?: string;
@@ -249,7 +358,7 @@ export interface PerformanceMetrics {
   max_drawdown_pct?: number;
   win_rate?: number;
   total_trades?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface StressTestInterval {

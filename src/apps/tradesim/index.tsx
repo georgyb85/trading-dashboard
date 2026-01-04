@@ -13,10 +13,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useDatasetContext } from "@/contexts/DatasetContext";
 import { useRunsContext } from "@/contexts/RunsContext";
 import { useSimulationContext } from "@/contexts/SimulationContext";
-import { simulateTrades } from "@/lib/stage1/client";
-import type { TradeConfig, StressTestConfig, SimulateTradesResponse, Trade } from "@/lib/stage1/types";
+import { createExecutorConfig, simulateTrades, updateExecutorConfig } from "@/lib/stage1/client";
+import type { TradeConfig, StressTestConfig, SimulateTradesResponse, Stage1ExecutorConfig, Stage1RunSummary } from "@/lib/stage1/types";
 import { toast } from "@/hooks/use-toast";
 import { serializeTradeClipboard, parseTradeClipboard } from "@/lib/tradeClipboard";
+import { LoadExecutorConfigModal } from "@/apps/tradesim/components/LoadExecutorConfigModal";
+import { buildExecutorConfigUpsertRequest, tradeConfigFromExecutorConfig } from "@/lib/stage1/executorMapping";
 
 const TradesimDashboard = () => {
   const { selectedDataset } = useDatasetContext();
@@ -61,6 +63,11 @@ const TradesimDashboard = () => {
     seed: 42,
   });
   const [stressTestsEnabled, setStressTestsEnabled] = useState(true);
+
+  // Executor config persistence (Stage1 executor_configs)
+  const [executorConfigId, setExecutorConfigId] = useState<string | null>(null);
+  const [executorConfigName, setExecutorConfigName] = useState<string>("");
+  const [loadExecutorConfigOpen, setLoadExecutorConfigOpen] = useState(false);
 
   // Simulation results
   const [isRunning, setIsRunning] = useState(false);
@@ -136,7 +143,7 @@ const TradesimDashboard = () => {
     }
   }, [activeTab, tradeFilter]);
 
-  const handleLoadRun = (run: any) => {
+  const handleLoadRun = (run: Stage1RunSummary) => {
     setSelectedRunId(run.run_id);
     setSelectedRunName(`Run ${run.run_id.substring(0, 8)}`);
     setLastTradesimRun(run.run_id);
@@ -145,6 +152,60 @@ const TradesimDashboard = () => {
       title: "Run loaded",
       description: `Loaded run ${run.run_id.substring(0, 8)} from dataset ${run.dataset_slug || run.dataset_id}`,
     });
+  };
+
+  const handleSaveSimulation = async () => {
+    const defaultName = executorConfigName
+      ? executorConfigName
+      : selectedRunId
+          ? `run_${selectedRunId.slice(0, 8)}_sim`
+          : "simulation";
+
+    const name = window.prompt("Save simulation as (executor config name):", defaultName);
+    if (!name) return;
+
+    const request = buildExecutorConfigUpsertRequest(tradeConfig, {
+      name,
+      description: selectedRunId ? `Tradesim config for run ${selectedRunId}` : "Tradesim config",
+      createdBy: "trading-dashboard",
+      changedBy: "trading-dashboard",
+      changeReason: selectedRunId ? `save_simulation run_id=${selectedRunId}` : "save_simulation",
+    });
+
+    try {
+      if (executorConfigId) {
+        const response = await updateExecutorConfig(executorConfigId, request);
+        if (!response.success || !response.data) {
+          throw new Error(response.error || "Failed to update executor config");
+        }
+        setExecutorConfigId(response.data.config_id);
+        setExecutorConfigName(response.data.name);
+        toast({ title: "Simulation saved", description: `Updated: ${response.data.name}` });
+        return;
+      }
+
+      const response = await createExecutorConfig(request);
+      if (!response.success || !response.data) {
+        throw new Error(response.error || "Failed to create executor config");
+      }
+      setExecutorConfigId(response.data.config_id);
+      setExecutorConfigName(response.data.name);
+      toast({ title: "Simulation saved", description: `Created: ${response.data.name}` });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Save failed";
+      toast({ title: "Save failed", description: msg, variant: "destructive" });
+    }
+  };
+
+  const handleLoadSimulation = () => {
+    setLoadExecutorConfigOpen(true);
+  };
+
+  const handleExecutorConfigLoaded = (cfg: Stage1ExecutorConfig) => {
+    setTradeConfig(tradeConfigFromExecutorConfig(cfg));
+    setExecutorConfigId(cfg.config_id);
+    setExecutorConfigName(cfg.name);
+    toast({ title: "Simulation loaded", description: `Loaded: ${cfg.name}` });
   };
 
   const handleRunSimulation = async () => {
@@ -295,6 +356,8 @@ const TradesimDashboard = () => {
         onCopyConfig={handleCopyClipboard}
         onPasteConfig={handlePasteClipboard}
         onRunSimulation={handleRunSimulation}
+        onSaveSimulation={handleSaveSimulation}
+        onLoadSimulation={handleLoadSimulation}
         isRunning={isRunning}
         canRun={!isRunning && !!selectedRunId && !!selectedDataset}
       />
@@ -366,7 +429,11 @@ const TradesimDashboard = () => {
               {/* Trade Filter */}
               <div className="flex items-center gap-4">
                 <span className="text-sm font-medium text-foreground">Trade Filter:</span>
-                <RadioGroup value={tradeFilter} onValueChange={(val) => setTradeFilter(val as any)} className="flex gap-4">
+                <RadioGroup
+                  value={tradeFilter}
+                  onValueChange={(val) => setTradeFilter(val as "all" | "long" | "short")}
+                  className="flex gap-4"
+                >
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="all" id="all" />
                     <Label htmlFor="all" className="cursor-pointer">All</Label>
@@ -408,6 +475,12 @@ const TradesimDashboard = () => {
         onOpenChange={setLoadRunModalOpen}
         datasetId={selectedDataset}
         onLoadRun={handleLoadRun}
+      />
+
+      <LoadExecutorConfigModal
+        open={loadExecutorConfigOpen}
+        onOpenChange={setLoadExecutorConfigOpen}
+        onLoadConfig={handleExecutorConfigLoaded}
       />
     </div>
   );

@@ -94,7 +94,7 @@ export interface LiveModelDetail extends LiveModelSummary {
 }
 
 // Full active model response with training results for rich visualizations
-export interface ActiveModelResponse extends LiveModelDetail {}
+export type ActiveModelResponse = LiveModelDetail;
 
 export interface LiveModelMetricsResponse {
   model_id: string;
@@ -169,6 +169,24 @@ export interface HealthResponse {
   models: ModelHealth[];
   active_model_id: string | null;
   error?: string;
+}
+
+// /api/live/recovery/reset (operator endpoint)
+export interface RecoveryResetResponse {
+  success: boolean;
+  state?: string;
+  boot_id?: string;
+  stage1_upserts?: number;
+  reconciliation?: {
+    success: boolean;
+    positions_recovered: number;
+    orphan_orders_found: number;
+    pending_orders_canceled: number;
+    unknown_models_skipped: number;
+    first_unattributed_clordid?: string;
+  };
+  error?: string;
+  message?: string;
 }
 
 // /usage WebSocket message types (verified from usage_stream.cpp)

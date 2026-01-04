@@ -60,8 +60,9 @@ import {
 import { krakenClient } from '@/lib/kraken/client';
 import { Input } from '@/components/ui/input';
 import { useMarketDataContext } from '@/contexts/MarketDataContext';
-import { ExecutorConfigModal } from '@/components/ExecutorConfigModal';
-import type { LiveModelSummary, ExecutorConfig } from '@/lib/kraken/types';
+import { Stage1ExecutorBindingModal } from '@/components/Stage1ExecutorBindingModal';
+import type { LiveModelSummary } from '@/lib/kraken/types';
+import type { Stage1ExecutorBindingUpsertRequest } from '@/lib/stage1/types';
 import { cn } from '@/lib/utils';
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1476,22 +1477,21 @@ const LiveModelPage = () => {
         isSubmitting={goLiveMutation.isPending}
       />
 
-      <ExecutorConfigModal
+      <Stage1ExecutorBindingModal
         open={executorModalOpen}
         onClose={() => {
           setExecutorModalOpen(false);
           setExecutorTargetModel(null);
         }}
-        onSubmit={(config: ExecutorConfig) => {
-          if (!executorTargetModel) return;
+        onSubmit={(request: Stage1ExecutorBindingUpsertRequest) => {
           if (executorModalMode === 'attach') {
             attachExecutor.mutate(
-              { modelId: executorTargetModel.model_id, config },
+              request,
               { onSuccess: () => { setExecutorModalOpen(false); setExecutorTargetModel(null); } }
             );
           } else {
             updateExecutor.mutate(
-              { modelId: executorTargetModel.model_id, config },
+              request,
               { onSuccess: () => { setExecutorModalOpen(false); setExecutorTargetModel(null); } }
             );
           }

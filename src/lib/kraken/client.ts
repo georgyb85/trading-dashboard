@@ -9,6 +9,7 @@ import type {
   AvailableFeaturesResponse,
   ExecutorConfig,
   HealthResponse,
+  RecoveryResetResponse,
 } from './types';
 
 class KrakenClient {
@@ -63,8 +64,8 @@ class KrakenClient {
     return this.request<{ success: boolean }>(`/api/live/models/${modelId}/deactivate`, { method: 'POST' });
   }
 
-  async retrainModel(modelId: string): Promise<KrakenApiResponse<{ success: boolean; train_result?: any }>> {
-    return this.request<{ success: boolean; train_result?: any }>(`/api/live/models/${modelId}/retrain`, { method: 'POST' });
+  async retrainModel(modelId: string): Promise<KrakenApiResponse<{ success: boolean; train_result?: unknown }>> {
+    return this.request<{ success: boolean; train_result?: unknown }>(`/api/live/models/${modelId}/retrain`, { method: 'POST' });
   }
 
   async getMetrics(modelId: string): Promise<KrakenApiResponse<LiveModelMetricsResponse>> {
@@ -147,6 +148,13 @@ class KrakenClient {
    */
   async getHealth(): Promise<KrakenApiResponse<HealthResponse>> {
     return this.request<HealthResponse>('/api/live/health');
+  }
+
+  /**
+   * Operator action: force reconciliation + Stage1 desired-state reload.
+   */
+  async recoveryReset(): Promise<KrakenApiResponse<RecoveryResetResponse>> {
+    return this.request<RecoveryResetResponse>('/api/live/recovery/reset', { method: 'POST' });
   }
 }
 

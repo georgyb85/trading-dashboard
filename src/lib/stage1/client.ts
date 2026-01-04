@@ -6,6 +6,10 @@ import type {
   Stage1RunSummary,
   Stage1RunDetail,
   Stage1ApiResponse,
+  Stage1ExecutorConfig,
+  Stage1ExecutorConfigUpsertRequest,
+  Stage1ExecutorBinding,
+  Stage1ExecutorBindingUpsertRequest,
   ValidateScriptRequest,
   ValidateScriptResponse,
   BuildIndicatorsRequest,
@@ -95,7 +99,10 @@ class Stage1Client {
       };
     }
 
-    return response as any;
+    return {
+      success: false,
+      error: response.error || 'Failed to load datasets',
+    };
   }
 
   /**
@@ -113,7 +120,10 @@ class Stage1Client {
       };
     }
 
-    return response as any;
+    return {
+      success: false,
+      error: response.error || 'Failed to load runs',
+    };
   }
 
   /**
@@ -126,8 +136,8 @@ class Stage1Client {
   /**
    * Get run predictions (optional, for future trade-sim seeding)
    */
-  async getRunPredictions(runId: string, format = 'json'): Promise<Stage1ApiResponse<any>> {
-    return this.request<any>(`/api/runs/${runId}/predictions?format=${format}`);
+  async getRunPredictions(runId: string, format = 'json'): Promise<Stage1ApiResponse<unknown>> {
+    return this.request<unknown>(`/api/runs/${runId}/predictions?format=${format}`);
   }
 
   /**
@@ -210,6 +220,64 @@ class Stage1Client {
       body: JSON.stringify(request),
     });
   }
+
+  // -------------------------------------------------------------------------
+  // Executor configs (Stage1 persistence)
+  // -------------------------------------------------------------------------
+
+  async listExecutorConfigs(limit = 200, offset = 0): Promise<Stage1ApiResponse<Stage1ExecutorConfig[]>> {
+    const response = await this.request<{ configs: Stage1ExecutorConfig[]; count: number }>(
+      `/api/executor/configs?limit=${limit}&offset=${offset}`
+    );
+
+    if (response.success && response.data) {
+      return {
+        data: response.data.configs,
+        success: true,
+      };
+    }
+
+    return {
+      success: false,
+      error: response.error || 'Failed to load executor configs',
+    };
+  }
+
+  async getExecutorConfig(configId: string): Promise<Stage1ApiResponse<Stage1ExecutorConfig>> {
+    return this.request<Stage1ExecutorConfig>(`/api/executor/configs/${configId}`);
+  }
+
+  async createExecutorConfig(request: Stage1ExecutorConfigUpsertRequest): Promise<Stage1ApiResponse<Stage1ExecutorConfig>> {
+    return this.request<Stage1ExecutorConfig>('/api/executor/configs', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
+  async updateExecutorConfig(
+    configId: string,
+    request: Stage1ExecutorConfigUpsertRequest
+  ): Promise<Stage1ApiResponse<Stage1ExecutorConfig>> {
+    return this.request<Stage1ExecutorConfig>(`/api/executor/configs/${configId}`, {
+      method: 'PUT',
+      body: JSON.stringify(request),
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Executor bindings (Stage1 persistence)
+  // -------------------------------------------------------------------------
+
+  async getExecutorBindingByModel(modelId: string): Promise<Stage1ApiResponse<Stage1ExecutorBinding>> {
+    return this.request<Stage1ExecutorBinding>(`/api/executor/bindings/by-model/${encodeURIComponent(modelId)}`);
+  }
+
+  async upsertExecutorBinding(request: Stage1ExecutorBindingUpsertRequest): Promise<Stage1ApiResponse<Stage1ExecutorBinding>> {
+    return this.request<Stage1ExecutorBinding>('/api/executor/bindings', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
 }
 
 // Export singleton instance
@@ -252,3 +320,21 @@ export const downloadBinanceOhlcv = (request: BinanceDownloadRequest) =>
 
 export const simulateTrades = (request: SimulateTradesRequest) =>
   stage1Client.simulateTrades(request);
+
+export const listExecutorConfigs = (limit?: number, offset?: number) =>
+  stage1Client.listExecutorConfigs(limit, offset);
+
+export const getExecutorConfig = (configId: string) =>
+  stage1Client.getExecutorConfig(configId);
+
+export const createExecutorConfig = (request: Stage1ExecutorConfigUpsertRequest) =>
+  stage1Client.createExecutorConfig(request);
+
+export const updateExecutorConfig = (configId: string, request: Stage1ExecutorConfigUpsertRequest) =>
+  stage1Client.updateExecutorConfig(configId, request);
+
+export const getExecutorBindingByModel = (modelId: string) =>
+  stage1Client.getExecutorBindingByModel(modelId);
+
+export const upsertExecutorBinding = (request: Stage1ExecutorBindingUpsertRequest) =>
+  stage1Client.upsertExecutorBinding(request);

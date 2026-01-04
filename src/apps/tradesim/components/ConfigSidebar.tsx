@@ -3,7 +3,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { ChevronLeft, Play, Loader2 } from "lucide-react";
+import { ChevronLeft, Play, Loader2, Save, FolderOpen } from "lucide-react";
 import type { TradeConfig, StressTestConfig } from "@/lib/stage1/types";
 
 interface ConfigSidebarProps {
@@ -18,6 +18,8 @@ interface ConfigSidebarProps {
   onCopyConfig: () => void;
   onPasteConfig: () => void;
   onRunSimulation: () => void;
+  onSaveSimulation: () => void;
+  onLoadSimulation: () => void;
   isRunning: boolean;
   canRun: boolean;
 }
@@ -34,6 +36,8 @@ export const ConfigSidebar = ({
   onCopyConfig,
   onPasteConfig,
   onRunSimulation,
+  onSaveSimulation,
+  onLoadSimulation,
   isRunning,
   canRun,
 }: ConfigSidebarProps) => {
@@ -430,6 +434,28 @@ export const ConfigSidebar = ({
               </>
             )}
           </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1 gap-2"
+              size="sm"
+              onClick={onSaveSimulation}
+              disabled={isRunning}
+            >
+              <Save className="h-4 w-4" />
+              Save Simulation
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1 gap-2"
+              size="sm"
+              onClick={onLoadSimulation}
+              disabled={isRunning}
+            >
+              <FolderOpen className="h-4 w-4" />
+              Load Simulation
+            </Button>
+          </div>
         </div>
         </div>
       )}

@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { krakenClient } from '@/lib/kraken/client';
-import type { GoLiveRequest, ExecutorConfig } from '@/lib/kraken/types';
+import { getExecutorBindingByModel, upsertExecutorBinding } from '@/lib/stage1/client';
+import type { GoLiveRequest } from '@/lib/kraken/types';
+import type { Stage1ExecutorBindingUpsertRequest } from '@/lib/stage1/types';
 import { toast } from './use-toast';
 
 export const useGoLive = () => {
@@ -227,16 +229,24 @@ export const useDeployModel = () => {
 export const useAttachExecutor = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (params: { modelId: string; config: ExecutorConfig }) => {
-      const resp = await krakenClient.attachExecutor(params.modelId, params.config);
+    mutationFn: async (request: Stage1ExecutorBindingUpsertRequest) => {
+      const resp = await upsertExecutorBinding(request);
       if (!resp.success || !resp.data) {
         throw new Error(resp.error || 'Attach executor failed');
       }
-      return resp.data;
+
+      const recovery = await krakenClient.recoveryReset();
+      if (!recovery.success || !recovery.data) {
+        const suffix = resp.data.binding_id ? resp.data.binding_id.slice(0, 8) : 'unknown';
+        throw new Error(`Stage1 binding saved (${suffix}…), but recovery reset failed: ${recovery.error || 'unknown error'}`);
+      }
+
+      return { binding: resp.data, recovery: recovery.data };
     },
-    onSuccess: (_, params) => {
-      toast({ title: 'Executor attached', description: `Executor attached to model ${params.modelId.slice(0, 8)}…` });
+    onSuccess: (_, request) => {
+      toast({ title: 'Executor attached', description: `Executor attached to model ${request.model_id.slice(0, 8)}…` });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
+      queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
     },
     onError: (err: any) => {
       const message = err instanceof Error ? err.message : 'Attach executor failed';
@@ -248,16 +258,24 @@ export const useAttachExecutor = () => {
 export const useUpdateExecutor = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (params: { modelId: string; config: ExecutorConfig }) => {
-      const resp = await krakenClient.updateExecutor(params.modelId, params.config);
+    mutationFn: async (request: Stage1ExecutorBindingUpsertRequest) => {
+      const resp = await upsertExecutorBinding(request);
       if (!resp.success || !resp.data) {
         throw new Error(resp.error || 'Update executor failed');
       }
-      return resp.data;
+
+      const recovery = await krakenClient.recoveryReset();
+      if (!recovery.success || !recovery.data) {
+        const suffix = resp.data.binding_id ? resp.data.binding_id.slice(0, 8) : 'unknown';
+        throw new Error(`Stage1 binding saved (${suffix}…), but recovery reset failed: ${recovery.error || 'unknown error'}`);
+      }
+
+      return { binding: resp.data, recovery: recovery.data };
     },
-    onSuccess: (_, params) => {
-      toast({ title: 'Executor updated', description: `Executor config updated for model ${params.modelId.slice(0, 8)}…` });
+    onSuccess: (_, request) => {
+      toast({ title: 'Executor updated', description: `Executor binding updated for model ${request.model_id.slice(0, 8)}…` });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
+      queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
     },
     onError: (err: any) => {
       const message = err instanceof Error ? err.message : 'Update executor failed';
@@ -270,15 +288,38 @@ export const useDetachExecutor = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (modelId: string) => {
-      const resp = await krakenClient.detachExecutor(modelId);
+      const binding = await getExecutorBindingByModel(modelId);
+      if (!binding.success || !binding.data) {
+        throw new Error(binding.error || 'Failed to load executor binding from Stage1');
+      }
+
+      const resp = await upsertExecutorBinding({
+        trader_id: binding.data.trader_id || 'kraken',
+        model_id: binding.data.model_id,
+        stream_id: binding.data.stream_id,
+        symbol: binding.data.symbol,
+        exchange: binding.data.exchange,
+        executor_config_id: binding.data.executor_config_id,
+        enabled: false,
+        priority: binding.data.priority,
+        created_by: 'trading-dashboard',
+      });
       if (!resp.success || !resp.data) {
         throw new Error(resp.error || 'Detach executor failed');
       }
-      return resp.data;
+
+      const recovery = await krakenClient.recoveryReset();
+      if (!recovery.success || !recovery.data) {
+        const suffix = resp.data.binding_id ? resp.data.binding_id.slice(0, 8) : 'unknown';
+        throw new Error(`Stage1 binding saved (${suffix}…), but recovery reset failed: ${recovery.error || 'unknown error'}`);
+      }
+
+      return { binding: resp.data, recovery: recovery.data };
     },
     onSuccess: (_, modelId) => {
-      toast({ title: 'Executor detached', description: `Executor removed from model ${modelId.slice(0, 8)}…` });
+      toast({ title: 'Executor detached', description: `Executor disabled for model ${modelId.slice(0, 8)}…` });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
+      queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
     },
     onError: (err: any) => {
       const message = err instanceof Error ? err.message : 'Detach executor failed';
