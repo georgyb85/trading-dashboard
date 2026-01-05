@@ -1,9 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { config } from "@/lib/config";
 import { krakenClient } from '@/lib/kraken/client';
-import { getExecutorBindingByModel, listExecutorBindings, upsertExecutorBinding } from '@/lib/stage1/client';
-import type { GoLiveRequest } from '@/lib/kraken/types';
-import type { Stage1ExecutorBindingUpsertRequest } from '@/lib/stage1/types';
+import {
+  deleteTraderDeployment,
+  disableTraderDeployment,
+  enableTraderDeployment,
+  getExecutorBindingByModel,
+  listExecutorBindings,
+  listTraderDeployments,
+  upsertExecutorBinding,
+} from "@/lib/stage1/client";
+import type { GoLiveRequest, KrakenApiResponse, LiveModelSummary, RecoveryResetResponse } from "@/lib/kraken/types";
+import type { Stage1ExecutorBinding, Stage1ExecutorBindingUpsertRequest, Stage1TraderDeployment } from "@/lib/stage1/types";
 import { toast } from './use-toast';
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  return fallback;
+};
 
 export const useGoLive = () => {
   const queryClient = useQueryClient();
@@ -19,13 +34,17 @@ export const useGoLive = () => {
       toast({ title: 'Go Live started', description: `Model ${data.model_id || data.run_id} is live` });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
+      queryClient.invalidateQueries({ queryKey: ["stage1", "deployments"] });
       // Also invalidate metrics and predictions to flush stale data from previous model
       queryClient.invalidateQueries({ queryKey: ['kraken', 'metrics'] });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'predictions'] });
     },
-    onError: (err: any) => {
-      const message = err instanceof Error ? err.message : 'Go Live failed';
-      toast({ title: 'Go Live error', description: message, variant: 'destructive' });
+    onError: (error: unknown) => {
+      toast({
+        title: 'Go Live error',
+        description: getErrorMessage(error, 'Go Live failed'),
+        variant: 'destructive',
+      });
     },
   });
 };
@@ -56,42 +75,54 @@ export const useLiveModels = () => {
   return useQuery({
     queryKey: ['kraken', 'live_models'],
     queryFn: async () => {
-      const [modelsResp, bindingsResp] = await Promise.all([
+      const traderId = config.traderId;
+      const [deploymentsResp, bindingsResp, runtimeModelsResp] = await Promise.all([
+        listTraderDeployments(traderId, { limit: 500, offset: 0 }),
+        listExecutorBindings({ traderId, limit: 500, offset: 0 }),
         krakenClient.listModels(),
-        listExecutorBindings({ traderId: "kraken", limit: 500, offset: 0 }),
       ]);
 
-      if (!modelsResp.success || !modelsResp.data) {
-        throw new Error(modelsResp.error || 'Failed to load live models');
+      if (!deploymentsResp.success || !deploymentsResp.data) {
+        throw new Error(deploymentsResp.error || "Failed to load Stage1 deployments");
       }
 
-      const models = modelsResp.data.models;
-      if (!bindingsResp.success || !bindingsResp.data || bindingsResp.data.length === 0) {
-        return models;
-      }
-
-      const bestBindingByModelId = new Map<string, (typeof bindingsResp.data)[number]>();
-      for (const binding of bindingsResp.data) {
-        const existing = bestBindingByModelId.get(binding.model_id);
-        if (!existing || binding.priority > existing.priority) {
-          bestBindingByModelId.set(binding.model_id, binding);
+      const runtimeByModelId = new Map<string, LiveModelSummary>();
+      if (runtimeModelsResp.success && runtimeModelsResp.data?.models) {
+        for (const model of runtimeModelsResp.data.models) {
+          runtimeByModelId.set(model.model_id, model);
         }
       }
 
-      return models.map((model) => {
-        if (model.has_executor !== undefined && model.executor_enabled !== undefined) {
-          return model;
+      const bestBindingByModelId = new Map<string, Stage1ExecutorBinding>();
+      if (bindingsResp.success && bindingsResp.data) {
+        for (const binding of bindingsResp.data) {
+          const existing = bestBindingByModelId.get(binding.model_id);
+          if (!existing || binding.priority > existing.priority) {
+            bestBindingByModelId.set(binding.model_id, binding);
+          }
         }
+      }
 
-        const binding = bestBindingByModelId.get(model.model_id);
-        if (!binding) {
-          return model;
-        }
+      return deploymentsResp.data.map((deployment: Stage1TraderDeployment) => {
+        const runtime = runtimeByModelId.get(deployment.model_id);
+        const binding = bestBindingByModelId.get(deployment.model_id);
 
         return {
-          ...model,
-          has_executor: true,
-          executor_enabled: binding.enabled,
+          ...(runtime || {}),
+          model_id: deployment.model_id,
+          run_id: deployment.run_id || runtime?.run_id || deployment.model_id,
+          stream_id: deployment.stream_id || runtime?.stream_id,
+          dataset_id: deployment.dataset_id || runtime?.dataset_id || deployment.stream_id,
+          status: deployment.enabled ? "active" : "inactive",
+          version: runtime?.version ?? 0,
+          trained_at_ms: runtime?.trained_at_ms ?? 0,
+          next_retrain_ms: runtime?.next_retrain_ms,
+          long_threshold: deployment.long_threshold,
+          short_threshold: deployment.short_threshold,
+          feature_hash: deployment.feature_hash || runtime?.feature_hash,
+          target_horizon_bars: deployment.target_horizon_bars,
+          has_executor: !!binding,
+          executor_enabled: binding?.enabled ?? false,
         };
       });
     },
@@ -111,20 +142,65 @@ export const useActivateModel = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (modelId: string) => {
-      const resp = await krakenClient.activateModel(modelId);
+      const resp = await enableTraderDeployment(config.traderId, modelId);
       if (!resp.success || !resp.data) {
-        throw new Error(resp.error || 'Activate failed');
+        throw new Error(resp.error || "Enable deployment failed");
       }
+
+      // Best-effort apply on Kraken (operator endpoint). Do not fail enable if Kraken is unavailable.
+      try {
+        await krakenClient.recoveryReset();
+      } catch {
+        // ignore
+      }
+
       return resp.data;
     },
     onSuccess: (_, modelId) => {
       toast({ title: 'Activated', description: `Model ${modelId} is now active` });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
+      queryClient.invalidateQueries({ queryKey: ["stage1", "deployments"] });
     },
-    onError: (err: any) => {
-      const message = err instanceof Error ? err.message : 'Activate failed';
-      toast({ title: 'Activate failed', description: message, variant: 'destructive' });
+    onError: (error: unknown) => {
+      toast({
+        title: 'Activate failed',
+        description: getErrorMessage(error, 'Activate failed'),
+        variant: 'destructive',
+      });
+    },
+  });
+};
+
+export const useDeactivateModel = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (modelId: string) => {
+      const resp = await disableTraderDeployment(config.traderId, modelId);
+      if (!resp.success || !resp.data) {
+        throw new Error(resp.error || "Disable deployment failed");
+      }
+
+      try {
+        await krakenClient.recoveryReset();
+      } catch {
+        // ignore
+      }
+
+      return resp.data;
+    },
+    onSuccess: (_, modelId) => {
+      toast({ title: "Deactivated", description: `Model ${modelId} is now inactive` });
+      queryClient.invalidateQueries({ queryKey: ["kraken", "live_models"] });
+      queryClient.invalidateQueries({ queryKey: ["kraken", "active_model"] });
+      queryClient.invalidateQueries({ queryKey: ["stage1", "deployments"] });
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: 'Deactivate failed',
+        description: getErrorMessage(error, 'Deactivate failed'),
+        variant: 'destructive',
+      });
     },
   });
 };
@@ -144,31 +220,12 @@ export const useRetrainModel = () => {
       queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
     },
-    onError: (err: any) => {
-      const message = err instanceof Error ? err.message : 'Retrain failed';
-      toast({ title: 'Retrain failed', description: message, variant: 'destructive' });
-    },
-  });
-};
-
-export const useDeactivateModel = () => {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (modelId: string) => {
-      const resp = await krakenClient.deactivateModel(modelId);
-      if (!resp.success || !resp.data) {
-        throw new Error(resp.error || 'Deactivate failed');
-      }
-      return resp.data;
-    },
-    onSuccess: (_, modelId) => {
-      toast({ title: 'Deactivated', description: `Model ${modelId} deactivated` });
-      queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
-      queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
-    },
-    onError: (err: any) => {
-      const message = err instanceof Error ? err.message : 'Deactivate failed';
-      toast({ title: 'Deactivate failed', description: message, variant: 'destructive' });
+    onError: (error: unknown) => {
+      toast({
+        title: 'Retrain failed',
+        description: getErrorMessage(error, 'Retrain failed'),
+        variant: 'destructive',
+      });
     },
   });
 };
@@ -188,9 +245,12 @@ export const useDeleteModel = () => {
       queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
     },
-    onError: (err: any) => {
-      const message = err instanceof Error ? err.message : 'Delete failed';
-      toast({ title: 'Delete failed', description: message, variant: 'destructive' });
+    onError: (error: unknown) => {
+      toast({
+        title: 'Delete failed',
+        description: getErrorMessage(error, 'Delete failed'),
+        variant: 'destructive',
+      });
     },
   });
 };
@@ -210,9 +270,12 @@ export const useUpdateThresholds = () => {
       queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
     },
-    onError: (err: any) => {
-      const message = err instanceof Error ? err.message : 'Update thresholds failed';
-      toast({ title: 'Threshold update failed', description: message, variant: 'destructive' });
+    onError: (error: unknown) => {
+      toast({
+        title: 'Threshold update failed',
+        description: getErrorMessage(error, 'Update thresholds failed'),
+        variant: 'destructive',
+      });
     },
   });
 };
@@ -252,9 +315,12 @@ export const useDeployModel = () => {
       queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
     },
-    onError: (err: any) => {
-      const message = err instanceof Error ? err.message : 'Deploy failed';
-      toast({ title: 'Deploy failed', description: message, variant: 'destructive' });
+    onError: (error: unknown) => {
+      toast({
+        title: 'Deploy failed',
+        description: getErrorMessage(error, 'Deploy failed'),
+        variant: 'destructive',
+      });
     },
   });
 };
@@ -269,7 +335,7 @@ export const useAttachExecutor = () => {
       }
 
       // Try recovery reset but don't fail if endpoint doesn't exist
-      let recovery: { success: boolean; data?: any; error?: string } = { success: false };
+      let recovery: KrakenApiResponse<RecoveryResetResponse> = { success: false };
       try {
         recovery = await krakenClient.recoveryReset();
       } catch (e) {
@@ -286,9 +352,12 @@ export const useAttachExecutor = () => {
       queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
     },
-    onError: (err: any) => {
-      const message = err instanceof Error ? err.message : 'Attach executor failed';
-      toast({ title: 'Attach executor failed', description: message, variant: 'destructive' });
+    onError: (error: unknown) => {
+      toast({
+        title: 'Attach executor failed',
+        description: getErrorMessage(error, 'Attach executor failed'),
+        variant: 'destructive',
+      });
     },
   });
 };
@@ -303,7 +372,7 @@ export const useUpdateExecutor = () => {
       }
 
       // Try recovery reset but don't fail if endpoint doesn't exist
-      let recovery: { success: boolean; data?: any; error?: string } = { success: false };
+      let recovery: KrakenApiResponse<RecoveryResetResponse> = { success: false };
       try {
         recovery = await krakenClient.recoveryReset();
       } catch (e) {
@@ -320,9 +389,12 @@ export const useUpdateExecutor = () => {
       queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
     },
-    onError: (err: any) => {
-      const message = err instanceof Error ? err.message : 'Update executor failed';
-      toast({ title: 'Update executor failed', description: message, variant: 'destructive' });
+    onError: (error: unknown) => {
+      toast({
+        title: 'Update executor failed',
+        description: getErrorMessage(error, 'Update executor failed'),
+        variant: 'destructive',
+      });
     },
   });
 };
@@ -337,7 +409,7 @@ export const useDetachExecutor = () => {
       }
 
       const resp = await upsertExecutorBinding({
-        trader_id: binding.data.trader_id || 'kraken',
+        trader_id: binding.data.trader_id || config.traderId,
         model_id: binding.data.model_id,
         stream_id: binding.data.stream_id,
         symbol: binding.data.symbol,
@@ -352,7 +424,7 @@ export const useDetachExecutor = () => {
       }
 
       // Try recovery reset but don't fail if endpoint doesn't exist
-      let recovery: { success: boolean; data?: any; error?: string } = { success: false };
+      let recovery: KrakenApiResponse<RecoveryResetResponse> = { success: false };
       try {
         recovery = await krakenClient.recoveryReset();
       } catch (e) {
@@ -369,9 +441,12 @@ export const useDetachExecutor = () => {
       queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
     },
-    onError: (err: any) => {
-      const message = err instanceof Error ? err.message : 'Detach executor failed';
-      toast({ title: 'Detach executor failed', description: message, variant: 'destructive' });
+    onError: (error: unknown) => {
+      toast({
+        title: 'Detach executor failed',
+        description: getErrorMessage(error, 'Detach executor failed'),
+        variant: 'destructive',
+      });
     },
   });
 };
@@ -380,20 +455,31 @@ export const useUndeployModel = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (modelId: string) => {
-      const resp = await krakenClient.undeployModel(modelId);
+      const resp = await deleteTraderDeployment(config.traderId, modelId);
       if (!resp.success || !resp.data) {
-        throw new Error(resp.error || 'Undeploy failed');
+        throw new Error(resp.error || "Delete deployment failed");
       }
+
+      try {
+        await krakenClient.recoveryReset();
+      } catch {
+        // ignore
+      }
+
       return resp.data;
     },
     onSuccess: (_, modelId) => {
       toast({ title: 'Model undeployed', description: `Model ${modelId.slice(0, 8)}… removed` });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
+      queryClient.invalidateQueries({ queryKey: ["stage1", "deployments"] });
     },
-    onError: (err: any) => {
-      const message = err instanceof Error ? err.message : 'Undeploy failed';
-      toast({ title: 'Undeploy failed', description: message, variant: 'destructive' });
+    onError: (error: unknown) => {
+      toast({
+        title: 'Undeploy failed',
+        description: getErrorMessage(error, 'Undeploy failed'),
+        variant: 'destructive',
+      });
     },
   });
 };

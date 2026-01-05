@@ -1,9 +1,36 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { config } from '@/lib/config';
 import { joinUrl } from '@/lib/url';
+import { listTraderDeployments } from "@/lib/stage1/client";
 import type { LivePrediction } from '@/lib/kraken/types';
 
 type TargetMap = Record<string, number | null>;
+
+type RawPrediction = {
+  ts_ms?: number;
+  ts?: number;
+  model_id?: string;
+  prediction?: number;
+  long_threshold?: number;
+  short_threshold?: number;
+  target?: number | null;
+  actual?: number | null;
+};
+
+const toLivePrediction = (payload: unknown, fallbackModelId: string): LivePrediction | null => {
+  const raw = payload as RawPrediction;
+  const tsMs = raw.ts_ms ?? raw.ts;
+  if (typeof tsMs !== "number" || typeof raw.prediction !== "number") return null;
+
+  return {
+    ts_ms: tsMs,
+    model_id: raw.model_id || fallbackModelId,
+    prediction: raw.prediction,
+    long_threshold: raw.long_threshold,
+    short_threshold: raw.short_threshold,
+    actual: raw.target ?? raw.actual,
+  };
+};
 
 interface LiveStreamsState {
   predictions: LivePrediction[];
@@ -25,15 +52,11 @@ export const LiveStreamsProvider: React.FC<{ children: React.ReactNode }> = ({ c
   useEffect(() => {
     const fetchInitialPredictions = async () => {
       try {
-        // Get all live models
-        const modelsRes = await fetch(joinUrl(config.krakenRestBaseUrl, '/api/live/models'));
-        if (!modelsRes.ok) return;
-        const modelsData = await modelsRes.json();
-        const models = modelsData.models || [];
+        const deploymentsRes = await listTraderDeployments(config.traderId, { enabled: true, limit: 500, offset: 0 });
+        if (!deploymentsRes.success || !deploymentsRes.data) return;
 
-        // Filter to active models only
-        const activeModels = models.filter((m: any) => m.status === 'active');
-        if (activeModels.length === 0) {
+        const activeDeployments = deploymentsRes.data;
+        if (activeDeployments.length === 0) {
           console.log('[LiveStreams] No active models found');
           return;
         }
@@ -41,27 +64,22 @@ export const LiveStreamsProvider: React.FC<{ children: React.ReactNode }> = ({ c
         // Fetch predictions for all active models in parallel
         const allPreds: LivePrediction[] = [];
         await Promise.all(
-          activeModels.map(async (model: any) => {
+          activeDeployments.map(async (deployment) => {
             try {
               const predsRes = await fetch(
-                joinUrl(config.krakenRestBaseUrl, `/api/live/predictions?model_id=${model.model_id}`)
+                joinUrl(config.krakenRestBaseUrl, `/api/live/predictions?model_id=${deployment.model_id}`)
               );
               if (!predsRes.ok) return;
               const data = await predsRes.json();
 
               if (data.predictions && Array.isArray(data.predictions)) {
-                const preds: LivePrediction[] = data.predictions.map((p: any) => ({
-                  ts_ms: p.ts_ms ?? p.ts,
-                  model_id: p.model_id || data.model_id,
-                  prediction: p.prediction,
-                  long_threshold: p.long_threshold,
-                  short_threshold: p.short_threshold,
-                  actual: p.target ?? p.actual,
-                }));
+                const preds: LivePrediction[] = data.predictions
+                  .map((p: unknown) => toLivePrediction(p, deployment.model_id))
+                  .filter((p): p is LivePrediction => p !== null);
                 allPreds.push(...preds);
               }
             } catch (err) {
-              console.error(`[LiveStreams] Failed to fetch predictions for model ${model.model_id}:`, err);
+              console.error(`[LiveStreams] Failed to fetch predictions for model ${deployment.model_id}:`, err);
             }
           })
         );
@@ -74,7 +92,7 @@ export const LiveStreamsProvider: React.FC<{ children: React.ReactNode }> = ({ c
         predsRef.current = Array.from(predMap.values())
           .sort((a, b) => b.ts_ms - a.ts_ms)
           .slice(0, 200);
-        console.log('[LiveStreams] Loaded initial predictions for', activeModels.length, 'active models:', predsRef.current.length, 'total');
+        console.log('[LiveStreams] Loaded initial predictions for', activeDeployments.length, 'active models:', predsRef.current.length, 'total');
         setPredictions([...predsRef.current]);
       } catch (err) {
         console.error('[LiveStreams] Failed to fetch initial predictions:', err);
@@ -142,14 +160,9 @@ export const LiveStreamsProvider: React.FC<{ children: React.ReactNode }> = ({ c
           // Legacy format support (predictions plural) for backward compatibility
           if (msg.topic === 'predictions') {
             if (msg.type === 'snapshot' && Array.isArray(msg.predictions)) {
-              const preds: LivePrediction[] = msg.predictions.map((p: any) => ({
-                ts_ms: p.ts_ms ?? p.ts,
-                model_id: p.model_id || msg.model_id,
-                prediction: p.prediction,
-                long_threshold: p.long_threshold,
-                short_threshold: p.short_threshold,
-                actual: p.target ?? p.actual,
-              }));
+              const preds: LivePrediction[] = msg.predictions
+                .map((p: unknown) => toLivePrediction(p, msg.model_id))
+                .filter((p): p is LivePrediction => p !== null);
               predsRef.current = preds.sort((a, b) => b.ts_ms - a.ts_ms).slice(0, 200);
               setPredictions([...predsRef.current]);
             } else if (msg.type === 'update') {

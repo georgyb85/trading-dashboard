@@ -10,6 +10,8 @@ import type {
   Stage1ExecutorConfigUpsertRequest,
   Stage1ExecutorBinding,
   Stage1ExecutorBindingUpsertRequest,
+  Stage1TraderDeployment,
+  Stage1TraderDeploymentUpsertRequest,
   ValidateScriptRequest,
   ValidateScriptResponse,
   BuildIndicatorsRequest,
@@ -276,7 +278,7 @@ class Stage1Client {
       offset?: number;
     } = {}
   ): Promise<Stage1ApiResponse<Stage1ExecutorBinding[]>> {
-    const traderId = params.traderId ?? "kraken";
+    const traderId = params.traderId ?? config.traderId;
     const limit = params.limit ?? 500;
     const offset = params.offset ?? 0;
 
@@ -316,6 +318,75 @@ class Stage1Client {
       method: 'POST',
       body: JSON.stringify(request),
     });
+  }
+
+  // -------------------------------------------------------------------------
+  // Trader deployments (Stage1 persistence)
+  // -------------------------------------------------------------------------
+
+  async listTraderDeployments(
+    traderId: string,
+    params: { enabled?: boolean; limit?: number; offset?: number } = {}
+  ): Promise<Stage1ApiResponse<Stage1TraderDeployment[]>> {
+    const limit = params.limit ?? 200;
+    const offset = params.offset ?? 0;
+
+    const query = new URLSearchParams();
+    if (params.enabled !== undefined) {
+      query.set("enabled", params.enabled ? "true" : "false");
+    }
+    query.set("limit", String(limit));
+    query.set("offset", String(offset));
+
+    const response = await this.request<{ deployments: Stage1TraderDeployment[]; count: number }>(
+      `/api/traders/${encodeURIComponent(traderId)}/deployments?${query.toString()}`
+    );
+
+    if (response.success && response.data) {
+      return {
+        data: response.data.deployments,
+        success: true,
+      };
+    }
+
+    return {
+      success: false,
+      error: response.error || "Failed to load trader deployments",
+    };
+  }
+
+  async upsertTraderDeployment(
+    traderId: string,
+    request: Stage1TraderDeploymentUpsertRequest
+  ): Promise<Stage1ApiResponse<Stage1TraderDeployment>> {
+    return this.request<Stage1TraderDeployment>(`/api/traders/${encodeURIComponent(traderId)}/deployments`, {
+      method: "POST",
+      body: JSON.stringify(request),
+    });
+  }
+
+  async enableTraderDeployment(traderId: string, modelId: string): Promise<Stage1ApiResponse<Stage1TraderDeployment>> {
+    return this.request<Stage1TraderDeployment>(
+      `/api/traders/${encodeURIComponent(traderId)}/deployments/${encodeURIComponent(modelId)}/enable`,
+      { method: "PUT" }
+    );
+  }
+
+  async disableTraderDeployment(traderId: string, modelId: string): Promise<Stage1ApiResponse<Stage1TraderDeployment>> {
+    return this.request<Stage1TraderDeployment>(
+      `/api/traders/${encodeURIComponent(traderId)}/deployments/${encodeURIComponent(modelId)}/disable`,
+      { method: "PUT" }
+    );
+  }
+
+  async deleteTraderDeployment(
+    traderId: string,
+    modelId: string
+  ): Promise<Stage1ApiResponse<{ success: boolean; deleted_trader_id: string; deleted_model_id: string; deleted_deployment_id: string }>> {
+    return this.request<{ success: boolean; deleted_trader_id: string; deleted_model_id: string; deleted_deployment_id: string }>(
+      `/api/traders/${encodeURIComponent(traderId)}/deployments/${encodeURIComponent(modelId)}`,
+      { method: "DELETE" }
+    );
   }
 }
 
@@ -385,3 +456,18 @@ export const getExecutorBindingByModel = (modelId: string) =>
 
 export const upsertExecutorBinding = (request: Stage1ExecutorBindingUpsertRequest) =>
   stage1Client.upsertExecutorBinding(request);
+
+export const listTraderDeployments = (traderId: string, params?: { enabled?: boolean; limit?: number; offset?: number }) =>
+  stage1Client.listTraderDeployments(traderId, params);
+
+export const upsertTraderDeployment = (traderId: string, request: Stage1TraderDeploymentUpsertRequest) =>
+  stage1Client.upsertTraderDeployment(traderId, request);
+
+export const enableTraderDeployment = (traderId: string, modelId: string) =>
+  stage1Client.enableTraderDeployment(traderId, modelId);
+
+export const disableTraderDeployment = (traderId: string, modelId: string) =>
+  stage1Client.disableTraderDeployment(traderId, modelId);
+
+export const deleteTraderDeployment = (traderId: string, modelId: string) =>
+  stage1Client.deleteTraderDeployment(traderId, modelId);

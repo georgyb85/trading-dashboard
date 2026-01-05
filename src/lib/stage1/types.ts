@@ -325,6 +325,78 @@ export interface Stage1ExecutorBindingUpsertRequest {
   created_by?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Trader Deployments (Stage1 persistence)
+// ---------------------------------------------------------------------------
+
+export interface Stage1TraderDeployment {
+  deployment_id: string;
+  trader_id: string;
+  model_id: string;
+  enabled: boolean;
+  priority: number;
+  dataset_id?: string;
+  run_id?: string;
+  stream_id: string;
+  symbol: string;
+  exchange: string;
+  feature_hash: string;
+
+  long_threshold: number;
+  short_threshold: number;
+  long_threshold_optimal?: number;
+  long_threshold_percentile?: number;
+  short_threshold_optimal?: number;
+  short_threshold_percentile?: number;
+  zero_crossover_enabled: boolean;
+
+  target_horizon_bars: number;
+  threshold_method: ExecutorThresholdChoice;
+  max_holding_bars: number;
+  val_split_ratio: number;
+  cooldown_bars: number;
+
+  artifact_ref: string;
+  artifact_sha256: string;
+
+  created_at: string;
+  updated_at: string;
+  created_by?: string;
+}
+
+export interface Stage1TraderDeploymentUpsertRequest {
+  model_id: string;
+  enabled: boolean;
+  priority: number;
+  dataset_id?: string;
+  run_id?: string;
+  stream_id: string;
+  symbol: string;
+  exchange: string;
+  feature_hash: string;
+
+  threshold_method: ExecutorThresholdChoice;
+  target_horizon_bars: number;
+  zero_crossover_enabled?: boolean;
+
+  long_threshold_optimal?: number;
+  short_threshold_optimal?: number;
+  long_threshold_percentile?: number;
+  short_threshold_percentile?: number;
+
+  max_holding_bars?: number;
+  val_split_ratio?: number;
+  cooldown_bars?: number;
+
+  artifact: {
+    sha256: string;
+    format: "ubj" | "json" | "bin";
+    content_base64?: string;
+  };
+
+  created_by?: string;
+}
+
 export interface SimulateTradesRequest {
   dataset_id?: string;
   dataset_slug?: string;

@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { config } from "@/lib/config";
 import type { LiveModelSummary } from "@/lib/kraken/types";
 import { getExecutorBindingByModel, listExecutorConfigs } from "@/lib/stage1/client";
 import type {
@@ -140,7 +141,7 @@ export function Stage1ExecutorBindingModal({
     if (priorityValue === null) return;
 
     onSubmit({
-      trader_id: "kraken",
+      trader_id: config.traderId,
       model_id: model.model_id,
       stream_id: streamId.trim(),
       symbol: symbol.trim(),
