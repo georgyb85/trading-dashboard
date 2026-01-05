@@ -268,6 +268,45 @@ class Stage1Client {
   // Executor bindings (Stage1 persistence)
   // -------------------------------------------------------------------------
 
+  async listExecutorBindings(
+    params: {
+      traderId?: string;
+      enabled?: boolean;
+      limit?: number;
+      offset?: number;
+    } = {}
+  ): Promise<Stage1ApiResponse<Stage1ExecutorBinding[]>> {
+    const traderId = params.traderId ?? "kraken";
+    const limit = params.limit ?? 500;
+    const offset = params.offset ?? 0;
+
+    const query = new URLSearchParams();
+    if (traderId) {
+      query.set("trader_id", traderId);
+    }
+    if (params.enabled !== undefined) {
+      query.set("enabled", params.enabled ? "true" : "false");
+    }
+    query.set("limit", String(limit));
+    query.set("offset", String(offset));
+
+    const response = await this.request<{ bindings: Stage1ExecutorBinding[]; count: number }>(
+      `/api/executor/bindings?${query.toString()}`
+    );
+
+    if (response.success && response.data) {
+      return {
+        data: response.data.bindings,
+        success: true,
+      };
+    }
+
+    return {
+      success: false,
+      error: response.error || "Failed to load executor bindings",
+    };
+  }
+
   async getExecutorBindingByModel(modelId: string): Promise<Stage1ApiResponse<Stage1ExecutorBinding>> {
     return this.request<Stage1ExecutorBinding>(`/api/executor/bindings/by-model/${encodeURIComponent(modelId)}`);
   }
@@ -332,6 +371,14 @@ export const createExecutorConfig = (request: Stage1ExecutorConfigUpsertRequest)
 
 export const updateExecutorConfig = (configId: string, request: Stage1ExecutorConfigUpsertRequest) =>
   stage1Client.updateExecutorConfig(configId, request);
+
+export const listExecutorBindings = (params?: {
+  traderId?: string;
+  enabled?: boolean;
+  limit?: number;
+  offset?: number;
+}) =>
+  stage1Client.listExecutorBindings(params);
 
 export const getExecutorBindingByModel = (modelId: string) =>
   stage1Client.getExecutorBindingByModel(modelId);

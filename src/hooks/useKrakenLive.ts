@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { krakenClient } from '@/lib/kraken/client';
-import { getExecutorBindingByModel, upsertExecutorBinding } from '@/lib/stage1/client';
+import { getExecutorBindingByModel, listExecutorBindings, upsertExecutorBinding } from '@/lib/stage1/client';
 import type { GoLiveRequest } from '@/lib/kraken/types';
 import type { Stage1ExecutorBindingUpsertRequest } from '@/lib/stage1/types';
 import { toast } from './use-toast';
@@ -56,11 +56,44 @@ export const useLiveModels = () => {
   return useQuery({
     queryKey: ['kraken', 'live_models'],
     queryFn: async () => {
-      const resp = await krakenClient.listModels();
-      if (!resp.success || !resp.data) {
-        throw new Error(resp.error || 'Failed to load live models');
+      const [modelsResp, bindingsResp] = await Promise.all([
+        krakenClient.listModels(),
+        listExecutorBindings({ traderId: "kraken", limit: 500, offset: 0 }),
+      ]);
+
+      if (!modelsResp.success || !modelsResp.data) {
+        throw new Error(modelsResp.error || 'Failed to load live models');
       }
-      return resp.data.models;
+
+      const models = modelsResp.data.models;
+      if (!bindingsResp.success || !bindingsResp.data || bindingsResp.data.length === 0) {
+        return models;
+      }
+
+      const bestBindingByModelId = new Map<string, (typeof bindingsResp.data)[number]>();
+      for (const binding of bindingsResp.data) {
+        const existing = bestBindingByModelId.get(binding.model_id);
+        if (!existing || binding.priority > existing.priority) {
+          bestBindingByModelId.set(binding.model_id, binding);
+        }
+      }
+
+      return models.map((model) => {
+        if (model.has_executor !== undefined && model.executor_enabled !== undefined) {
+          return model;
+        }
+
+        const binding = bestBindingByModelId.get(model.model_id);
+        if (!binding) {
+          return model;
+        }
+
+        return {
+          ...model,
+          has_executor: true,
+          executor_enabled: binding.enabled,
+        };
+      });
     },
     retry: false,
     // Cache for 5 minutes - data is considered fresh during this time
