@@ -11,7 +11,7 @@ import {
   useLiveModels,
   useActivateModel,
   useDeactivateModel,
-  useDeleteModel,
+  useUndeployModel,
   useUpdateThresholds,
   useAttachExecutor,
   useUpdateExecutor,
@@ -310,9 +310,9 @@ const ModelCard = ({
           )}
           onClick={(e) => {
             e.stopPropagation();
-            if (window.confirm(`Delete model ${model.model_id.slice(0, 8)}…?`)) onDelete();
+            if (window.confirm(`Undeploy model ${model.model_id.slice(0, 8)}…?`)) onDelete();
           }}
-          title="Delete Model"
+          title="Undeploy Model"
         >
           <Trash2 className="h-4 w-4" />
         </button>
@@ -1111,7 +1111,7 @@ const LiveModelPage = () => {
   const { data: liveModels = [], isLoading: liveModelsLoading } = useLiveModels();
   const activateModel = useActivateModel();
   const deactivateModel = useDeactivateModel();
-  const deleteModel = useDeleteModel();
+  const undeployModel = useUndeployModel();
   const updateThresholds = useUpdateThresholds();
   const { predictions: livePredictions, targets: liveTargets, maturedTargets } = useMarketDataContext();
 
@@ -1406,7 +1406,7 @@ const LiveModelPage = () => {
                   onSelect={() => setSelectedModelId(model.model_id)}
                   onActivate={() => activateModel.mutate(model.model_id)}
                   onDeactivate={() => deactivateModel.mutate(model.model_id)}
-                  onDelete={() => deleteModel.mutate(model.model_id)}
+                  onDelete={() => undeployModel.mutate(model.model_id)}
                   onAttachExecutor={() => {
                     setExecutorTargetModel(model);
                     setExecutorModalMode('attach');
@@ -1422,7 +1422,7 @@ const LiveModelPage = () => {
                       detachExecutor.mutate(model.model_id);
                     }
                   }}
-                  isPending={activateModel.isPending || deactivateModel.isPending || deleteModel.isPending}
+                  isPending={activateModel.isPending || deactivateModel.isPending || undeployModel.isPending}
                 />
               ))}
             </div>
