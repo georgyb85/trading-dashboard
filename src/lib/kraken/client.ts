@@ -31,7 +31,12 @@ class KrakenClient {
       });
       if (!resp.ok) {
         const text = await resp.text().catch(() => '');
-        throw new Error(text || `HTTP ${resp.status}`);
+        try {
+          const parsed = JSON.parse(text) as { error?: string; message?: string };
+          throw new Error(parsed.message || parsed.error || text || `HTTP ${resp.status}`);
+        } catch {
+          throw new Error(text || `HTTP ${resp.status}`);
+        }
       }
       const json = (await resp.json()) as T;
       return { success: true, data: json };

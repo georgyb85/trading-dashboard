@@ -147,11 +147,14 @@ export const useActivateModel = () => {
         throw new Error(resp.error || "Enable deployment failed");
       }
 
-      // Best-effort apply on Kraken (operator endpoint). Do not fail enable if Kraken is unavailable.
-      try {
-        await krakenClient.recoveryReset();
-      } catch {
-        // ignore
+      // Best-effort apply on Kraken (operator endpoint). Stage1 remains source of truth.
+      const reset = await krakenClient.recoveryReset();
+      if (!reset.success || reset.data?.success === false) {
+        toast({
+          title: 'Kraken reconcile failed',
+          description: reset.error || reset.data?.message || 'Recovery reset failed',
+          variant: 'destructive',
+        });
       }
 
       return resp.data;
@@ -181,10 +184,13 @@ export const useDeactivateModel = () => {
         throw new Error(resp.error || "Disable deployment failed");
       }
 
-      try {
-        await krakenClient.recoveryReset();
-      } catch {
-        // ignore
+      const reset = await krakenClient.recoveryReset();
+      if (!reset.success || reset.data?.success === false) {
+        toast({
+          title: 'Kraken reconcile failed',
+          description: reset.error || reset.data?.message || 'Recovery reset failed',
+          variant: 'destructive',
+        });
       }
 
       return resp.data;
@@ -334,21 +340,26 @@ export const useAttachExecutor = () => {
         throw new Error(resp.error || 'Attach executor failed');
       }
 
-      // Try recovery reset but don't fail if endpoint doesn't exist
-      let recovery: KrakenApiResponse<RecoveryResetResponse> = { success: false };
-      try {
-        recovery = await krakenClient.recoveryReset();
-      } catch (e) {
-        console.warn('[useAttachExecutor] Recovery reset failed (endpoint may not exist):', e);
-      }
+      const recovery = await krakenClient.recoveryReset();
+      const recoveryOk = recovery.success && recovery.data?.success !== false;
 
-      return { binding: resp.data, recovery: recovery.data ?? null, recoverySkipped: !recovery.success };
+      return {
+        binding: resp.data,
+        recovery: recovery.data ?? null,
+        recoveryOk,
+        recoveryError: recovery.error || recovery.data?.message,
+      };
     },
     onSuccess: (result, request) => {
-      const msg = result.recoverySkipped
-        ? `Executor attached to model ${request.model_id.slice(0, 8)}… (recovery reset skipped)`
-        : `Executor attached to model ${request.model_id.slice(0, 8)}…`;
+      const msg = `Executor attached to model ${request.model_id.slice(0, 8)}…`;
       toast({ title: 'Executor attached', description: msg });
+      if (!result.recoveryOk) {
+        toast({
+          title: 'Kraken reconcile failed',
+          description: result.recoveryError || 'Recovery reset failed',
+          variant: 'destructive',
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
     },
@@ -371,21 +382,26 @@ export const useUpdateExecutor = () => {
         throw new Error(resp.error || 'Update executor failed');
       }
 
-      // Try recovery reset but don't fail if endpoint doesn't exist
-      let recovery: KrakenApiResponse<RecoveryResetResponse> = { success: false };
-      try {
-        recovery = await krakenClient.recoveryReset();
-      } catch (e) {
-        console.warn('[useUpdateExecutor] Recovery reset failed (endpoint may not exist):', e);
-      }
+      const recovery = await krakenClient.recoveryReset();
+      const recoveryOk = recovery.success && recovery.data?.success !== false;
 
-      return { binding: resp.data, recovery: recovery.data ?? null, recoverySkipped: !recovery.success };
+      return {
+        binding: resp.data,
+        recovery: recovery.data ?? null,
+        recoveryOk,
+        recoveryError: recovery.error || recovery.data?.message,
+      };
     },
     onSuccess: (result, request) => {
-      const msg = result.recoverySkipped
-        ? `Executor binding updated for model ${request.model_id.slice(0, 8)}… (recovery reset skipped)`
-        : `Executor binding updated for model ${request.model_id.slice(0, 8)}…`;
+      const msg = `Executor binding updated for model ${request.model_id.slice(0, 8)}…`;
       toast({ title: 'Executor updated', description: msg });
+      if (!result.recoveryOk) {
+        toast({
+          title: 'Kraken reconcile failed',
+          description: result.recoveryError || 'Recovery reset failed',
+          variant: 'destructive',
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
     },
@@ -423,21 +439,26 @@ export const useDetachExecutor = () => {
         throw new Error(resp.error || 'Detach executor failed');
       }
 
-      // Try recovery reset but don't fail if endpoint doesn't exist
-      let recovery: KrakenApiResponse<RecoveryResetResponse> = { success: false };
-      try {
-        recovery = await krakenClient.recoveryReset();
-      } catch (e) {
-        console.warn('[useDetachExecutor] Recovery reset failed (endpoint may not exist):', e);
-      }
+      const recovery = await krakenClient.recoveryReset();
+      const recoveryOk = recovery.success && recovery.data?.success !== false;
 
-      return { binding: resp.data, recovery: recovery.data ?? null, recoverySkipped: !recovery.success };
+      return {
+        binding: resp.data,
+        recovery: recovery.data ?? null,
+        recoveryOk,
+        recoveryError: recovery.error || recovery.data?.message,
+      };
     },
     onSuccess: (result, modelId) => {
-      const msg = result.recoverySkipped
-        ? `Executor disabled for model ${modelId.slice(0, 8)}… (recovery reset skipped)`
-        : `Executor disabled for model ${modelId.slice(0, 8)}…`;
+      const msg = `Executor disabled for model ${modelId.slice(0, 8)}…`;
       toast({ title: 'Executor detached', description: msg });
+      if (!result.recoveryOk) {
+        toast({
+          title: 'Kraken reconcile failed',
+          description: result.recoveryError || 'Recovery reset failed',
+          variant: 'destructive',
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
       queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
     },
@@ -460,10 +481,13 @@ export const useUndeployModel = () => {
         throw new Error(resp.error || "Delete deployment failed");
       }
 
-      try {
-        await krakenClient.recoveryReset();
-      } catch {
-        // ignore
+      const reset = await krakenClient.recoveryReset();
+      if (!reset.success || reset.data?.success === false) {
+        toast({
+          title: 'Kraken reconcile failed',
+          description: reset.error || reset.data?.message || 'Recovery reset failed',
+          variant: 'destructive',
+        });
       }
 
       return resp.data;
