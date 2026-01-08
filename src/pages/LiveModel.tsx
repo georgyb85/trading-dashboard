@@ -1219,7 +1219,20 @@ const LiveModelPage = () => {
       toast({ title: 'No run selected', description: 'Load a run from Walkforward first', variant: 'destructive' });
       return;
     }
-    goLiveMutation.mutate({ run_id: selectedRun.run_id, run: selectedRun });
+    const desiredModelId = selectedRun.run_id.replace(/-/g, '');
+    const existingDeployment = liveModels.find((m) => m.model_id === desiredModelId);
+
+    // Stage1 is the source of truth; avoid re-training if an artifact already exists.
+    // Re-deploy should be idempotent and not change thresholds/predictions.
+    if (existingDeployment) {
+      if (existingDeployment.status === 'active') {
+        toast({ title: 'Already deployed', description: `Model ${desiredModelId.slice(0, 8)}… is already active` });
+      } else {
+        activateModel.mutate(desiredModelId);
+      }
+    } else {
+      goLiveMutation.mutate({ run_id: selectedRun.run_id, run: selectedRun });
+    }
     setModalOpen(false);
   };
 
