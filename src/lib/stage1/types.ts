@@ -308,6 +308,8 @@ export interface Stage1ExecutorBinding {
   executor_config_id: string;
   enabled: boolean;
   priority: number;
+  max_positions: number;
+  max_equity_pct: number;
   created_at: string;
   updated_at: string;
   created_by?: string;
@@ -322,6 +324,8 @@ export interface Stage1ExecutorBindingUpsertRequest {
   executor_config_id: string;
   enabled: boolean;
   priority: number;
+  max_positions: number;
+  max_equity_pct: number;
   created_by?: string;
 }
 

@@ -433,6 +433,8 @@ export const useDetachExecutor = () => {
         executor_config_id: binding.data.executor_config_id,
         enabled: false,
         priority: binding.data.priority,
+        max_positions: binding.data.max_positions,
+        max_equity_pct: binding.data.max_equity_pct,
         created_by: 'trading-dashboard',
       });
       if (!resp.success || !resp.data) {

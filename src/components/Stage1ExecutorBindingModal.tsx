@@ -44,6 +44,8 @@ interface Stage1ExecutorBindingModalProps {
 }
 
 const DEFAULT_PRIORITY = "100";
+const DEFAULT_MAX_POSITIONS = "1";
+const DEFAULT_MAX_EQUITY_PCT = "1.0";
 
 const isNotFoundError = (errorMessage: string) => {
   return errorMessage.includes("HTTP 404");
@@ -63,6 +65,8 @@ export function Stage1ExecutorBindingModal({
   const [exchange, setExchange] = useState<ExchangeChoice>("kraken");
   const [priority, setPriority] = useState<string>(DEFAULT_PRIORITY);
   const [enabled, setEnabled] = useState<boolean>(true);
+  const [maxPositions, setMaxPositions] = useState<string>(DEFAULT_MAX_POSITIONS);
+  const [maxEquityPct, setMaxEquityPct] = useState<string>(DEFAULT_MAX_EQUITY_PCT);
 
   const configsQuery = useQuery<Stage1ExecutorConfig[], Error>({
     queryKey: ["stage1", "executor_configs"],
@@ -106,6 +110,8 @@ export function Stage1ExecutorBindingModal({
     setExchange("kraken");
     setPriority(DEFAULT_PRIORITY);
     setEnabled(true);
+    setMaxPositions(DEFAULT_MAX_POSITIONS);
+    setMaxEquityPct(DEFAULT_MAX_EQUITY_PCT);
   }, [open, model?.stream_id]);
 
   useEffect(() => {
@@ -118,6 +124,8 @@ export function Stage1ExecutorBindingModal({
     setExchange(bindingQuery.data.exchange === "binance" ? "binance" : "kraken");
     setPriority(String(bindingQuery.data.priority ?? DEFAULT_PRIORITY));
     setEnabled(bindingQuery.data.enabled);
+    setMaxPositions(String(bindingQuery.data.max_positions ?? DEFAULT_MAX_POSITIONS));
+    setMaxEquityPct(String(bindingQuery.data.max_equity_pct ?? DEFAULT_MAX_EQUITY_PCT));
   }, [bindingQuery.data, open]);
 
   const priorityValue = useMemo(() => {
@@ -126,6 +134,18 @@ export function Stage1ExecutorBindingModal({
     return parsed;
   }, [priority]);
 
+  const maxPositionsValue = useMemo(() => {
+    const parsed = Number.parseInt(maxPositions, 10);
+    if (Number.isNaN(parsed)) return null;
+    return parsed;
+  }, [maxPositions]);
+
+  const maxEquityPctValue = useMemo(() => {
+    const parsed = Number.parseFloat(maxEquityPct);
+    if (Number.isNaN(parsed)) return null;
+    return parsed;
+  }, [maxEquityPct]);
+
   const canSubmit =
     !!model?.model_id &&
     selectedConfigId.length > 0 &&
@@ -133,12 +153,19 @@ export function Stage1ExecutorBindingModal({
     symbol.trim().length > 0 &&
     exchange.length > 0 &&
     priorityValue !== null &&
-    priorityValue >= 0;
+    priorityValue >= 0 &&
+    maxPositionsValue !== null &&
+    maxPositionsValue > 0 &&
+    maxEquityPctValue !== null &&
+    maxEquityPctValue > 0 &&
+    maxEquityPctValue <= 1.0;
 
   const handleSubmit = () => {
     if (!model?.model_id) return;
     if (!canSubmit) return;
     if (priorityValue === null) return;
+    if (maxPositionsValue === null) return;
+    if (maxEquityPctValue === null) return;
 
     onSubmit({
       trader_id: config.traderId,
@@ -149,6 +176,8 @@ export function Stage1ExecutorBindingModal({
       executor_config_id: selectedConfigId,
       enabled,
       priority: priorityValue,
+      max_positions: maxPositionsValue,
+      max_equity_pct: maxEquityPctValue,
       created_by: "trading-dashboard",
     });
   };
@@ -268,6 +297,30 @@ export function Stage1ExecutorBindingModal({
                   min="0"
                   value={priority}
                   onChange={(e) => setPriority(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="max_positions">Max Positions</Label>
+                <Input
+                  id="max_positions"
+                  type="number"
+                  min="1"
+                  value={maxPositions}
+                  onChange={(e) => setMaxPositions(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="max_equity_pct">Max Equity % (0..1)</Label>
+                <Input
+                  id="max_equity_pct"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="1"
+                  value={maxEquityPct}
+                  onChange={(e) => setMaxEquityPct(e.target.value)}
                 />
               </div>
 
