@@ -71,6 +71,38 @@ export const useActiveModel = () => {
   });
 };
 
+export const useRecoveryReset = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const resp = await krakenClient.recoveryReset();
+      if (!resp.success || !resp.data) {
+        throw new Error(resp.error || 'Recovery reset failed');
+      }
+      return resp.data;
+    },
+    onSuccess: (data: RecoveryResetResponse) => {
+      toast({
+        title: 'Recovery reset complete',
+        description: data.success ? 'Trading enabled' : (data.message || 'Recovery reset finished'),
+      });
+      queryClient.invalidateQueries({ queryKey: ['kraken', 'health'] });
+      queryClient.invalidateQueries({ queryKey: ['kraken', 'live_models'] });
+      queryClient.invalidateQueries({ queryKey: ['kraken', 'active_model'] });
+      queryClient.invalidateQueries({ queryKey: ['kraken', 'metrics'] });
+      queryClient.invalidateQueries({ queryKey: ['kraken', 'predictions'] });
+      queryClient.invalidateQueries({ queryKey: ['stage1', 'deployments'] });
+    },
+    onError: (error: unknown) => {
+      toast({
+        title: 'Recovery reset failed',
+        description: getErrorMessage(error, 'Recovery reset failed'),
+        variant: 'destructive',
+      });
+    },
+  });
+};
+
 export const useLiveModels = () => {
   return useQuery({
     queryKey: ['kraken', 'live_models'],

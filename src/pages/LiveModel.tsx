@@ -12,11 +12,13 @@ import {
   useActivateModel,
   useDeactivateModel,
   useUndeployModel,
+  useRecoveryReset,
   useUpdateThresholds,
   useAttachExecutor,
   useUpdateExecutor,
   useDetachExecutor,
 } from '@/hooks/useKrakenLive';
+import { useHealthData } from '@/hooks/useHealthData';
 import type { XGBoostTrainResult } from '@/lib/types/xgboost';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -1107,6 +1109,8 @@ const LiveModelPage = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string>('');
   const goLiveMutation = useGoLive();
+  const { data: health } = useHealthData();
+  const recoveryReset = useRecoveryReset();
   const { data: activeModel, isLoading: activeModelLoading, isError: activeModelError } = useActiveModel();
   const { data: liveModels = [], isLoading: liveModelsLoading } = useLiveModels();
   const activateModel = useActivateModel();
@@ -1320,6 +1324,7 @@ const LiveModelPage = () => {
   // Count stats
   const activeModelsCount = liveModels.filter(m => m.status === 'active').length;
   const tradingModelsCount = liveModels.filter(m => m.has_executor && m.executor_enabled).length;
+  const showTradingDisabledBanner = health?.trading_enabled === false || (health?.recovery_state && health.recovery_state !== 'active');
 
   return (
     <div className="min-h-screen">
@@ -1328,6 +1333,41 @@ const LiveModelPage = () => {
       {/* ═══════════════════════════════════════════════════════════════════════════════ */}
       <div className="border-b border-border/50">
         <div className="px-6 py-6">
+          {showTradingDisabledBanner && (
+            <div className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="space-y-1">
+                  <div className="text-sm font-semibold text-destructive">Trading disabled</div>
+                  <div className="text-xs text-muted-foreground">
+                    Recovery state: <span className="font-mono">{health?.recovery_state ?? 'unknown'}</span>
+                    {health?.recovery_reason ? (
+                      <>
+                        {' '}
+                        • reason: <span className="font-mono">{health.recovery_reason}</span>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => recoveryReset.mutate()}
+                  disabled={recoveryReset.isPending}
+                  className="w-full md:w-auto"
+                >
+                  {recoveryReset.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Recovering…
+                    </>
+                  ) : (
+                    'Recovery Reset'
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Top Row: Title + Go Live */}
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-3">

@@ -168,6 +168,13 @@ export interface HealthResponse {
   pipeline: string;
   models: ModelHealth[];
   active_model_id: string | null;
+  trading_enabled?: boolean;
+  recovery_state?: string;
+  boot_id?: string;
+  reconciliation_started_ms?: number;
+  activated_ms?: number;
+  recovery_reason?: string;
+  recovery_details_json?: string;
   error?: string;
 }
 
