@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
+import { useAccountStateContext } from "@/contexts/AccountStateContext";
+import { useStatusStreamContext } from "@/contexts/StatusStreamContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
