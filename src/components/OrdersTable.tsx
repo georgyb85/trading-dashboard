@@ -308,6 +308,7 @@ export function OrdersTable() {
         status = "Open";
 
       const formatTime = (ns: number) => {
+        if (!ns || ns <= 0) return "\u2014";
         const date = new Date(ns / 1000000);
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -335,13 +336,18 @@ export function OrdersTable() {
       return {
         id: order.id,
         status,
-        clientOrderId: order.clientId || `ord_${order.id.slice(0, 8)}`,
+        clientOrderId: (order.clientId && order.clientId !== "0") ? order.clientId : `ord_${order.id.slice(0, 8)}`,
         exchange: "Kraken",
         symbol: order.symbol,
         side: isBuy ? "Buy" : "Sell",
         type: (order.type as "Limit" | "Market" | "Stop") || "Limit",
         quantity: `${parseFloat(order.quantity).toFixed(4)} ${order.symbol.split("/")[0] || ""}`,
-        price: order.price ? formatCurrency(order.price) : "Market",
+        price: (() => {
+          const displayPrice = (status === "Filled" && order.avgFillPrice && parseFloat(order.avgFillPrice) > 0)
+            ? order.avgFillPrice
+            : order.price;
+          return displayPrice ? formatCurrency(displayPrice) : "Market";
+        })(),
         time: formatTime(order.lastUpdateNs),
       };
     });

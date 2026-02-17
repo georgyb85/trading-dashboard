@@ -11,7 +11,7 @@ import {
   OrderEntry,
   OrderHistory
 } from '@/types/account';
-import { saveToCache, loadFromCache, CACHE_KEYS } from '@/utils/cache';
+import { saveToCache, loadFromCache, isArrayOfObjects, CACHE_KEYS } from '@/utils/cache';
 import { config } from '@/lib/config';
 import { joinUrl } from '@/lib/url';
 
@@ -33,16 +33,16 @@ export function useAccountState(options: UseAccountStateOptions = {}) {
   const [connected, setConnected] = useState(false);
   const [snapshot, setSnapshot] = useState<AccountSnapshot | null>(null);
   const [balances, setBalances] = useState<Map<string, BalanceEntry>>(() => {
-    const cached = loadFromCache<BalanceEntry[]>(CACHE_KEYS.ACCOUNT_BALANCES);
+    const cached = loadFromCache<BalanceEntry[]>(CACHE_KEYS.ACCOUNT_BALANCES, isArrayOfObjects);
     return cached ? new Map(cached.map(b => [b.asset, b])) : new Map();
   });
   const [positions, setPositions] = useState<Map<string, PositionEntry>>(() => {
-    const cached = loadFromCache<PositionEntry[]>(CACHE_KEYS.ACCOUNT_POSITIONS);
+    const cached = loadFromCache<PositionEntry[]>(CACHE_KEYS.ACCOUNT_POSITIONS, isArrayOfObjects);
     return cached ? new Map(cached.map(p => [p.id, p])) : new Map();
   });
   const [orders, setOrders] = useState<Map<string, OrderEntry>>(new Map());
   const [recentFinalOrders, setRecentFinalOrders] = useState<OrderEntry[]>(() => {
-    const cached = loadFromCache<OrderEntry[]>(CACHE_KEYS.COMPLETED_ORDERS);
+    const cached = loadFromCache<OrderEntry[]>(CACHE_KEYS.COMPLETED_ORDERS, isArrayOfObjects);
     console.log('📂 Loaded', cached?.length || 0, 'completed orders from cache');
     return cached || [];
   });
@@ -125,11 +125,9 @@ export function useAccountState(options: UseAccountStateOptions = {}) {
         // Add cached orders first
         prev.forEach(order => orderMap.set(order.id, order));
 
-        // Add API orders (won't overwrite if already in cache)
+        // Add API orders (overwrites cached — API data is fresher/corrected)
         completedOrders.forEach(order => {
-          if (!orderMap.has(order.id)) {
-            orderMap.set(order.id, order);
-          }
+          orderMap.set(order.id, order);
         });
 
         const merged = Array.from(orderMap.values())
@@ -319,7 +317,7 @@ export function useAccountState(options: UseAccountStateOptions = {}) {
         };
 
         setRecentFinalOrders(prev => {
-          const updated = [finalOrder, ...prev];
+          const updated = [finalOrder, ...prev.filter(o => o.id !== finalOrder.id)];
           const trimmed = updated.slice(0, 100); // Keep last 100 final orders
 
           // Save to cache
