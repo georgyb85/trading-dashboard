@@ -249,22 +249,37 @@ export function PositionsTable() {
     return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
   };
 
+  // Phase 9: Stale exit-pending threshold (5 minutes)
+  const STALE_EXIT_THRESHOLD_MS = 5 * 60 * 1000;
+
   // Map Stage1 positions to display format
   const displayPositions: DisplayPosition[] = useMemo(() => {
-    return stage1ActivePositions.map(pos => ({
-      id: pos.position_id,
-      modelId: pos.model_id,
-      streamId: pos.stream_id,
-      symbol: pos.symbol,
-      exchange: pos.exchange,
-      side: pos.side,
-      entryPrice: pos.entry_price,
-      qty: `${pos.quantity.toFixed(6)} ${pos.symbol.split(/[-_]/)[0]}`,
-      unrealizedPnl: 0, // Would need current price to calculate
-      slTpLevels: formatSlTp(pos),
-      barsHeld: pos.bars_held,
-      cooldownState: pos.exit_pending ? "Exit Pending" : "Active",
-    }));
+    const now = Date.now();
+    return stage1ActivePositions.map(pos => {
+      let cooldownState = "Active";
+      if (pos.exit_pending) {
+        const pendingDuration = pos.exit_requested_at_ms
+          ? now - pos.exit_requested_at_ms
+          : 0;
+        cooldownState = pendingDuration > STALE_EXIT_THRESHOLD_MS
+          ? "Stale Exit"
+          : "Exit Pending";
+      }
+      return {
+        id: pos.position_id,
+        modelId: pos.model_id,
+        streamId: pos.stream_id,
+        symbol: pos.symbol,
+        exchange: pos.exchange,
+        side: pos.side,
+        entryPrice: pos.entry_price,
+        qty: `${pos.quantity.toFixed(6)} ${pos.symbol.split(/[-_]/)[0]}`,
+        unrealizedPnl: 0,
+        slTpLevels: formatSlTp(pos),
+        barsHeld: pos.bars_held,
+        cooldownState,
+      };
+    });
   }, [stage1ActivePositions]);
 
   // Map Stage1 history positions to display format
@@ -492,12 +507,16 @@ export function PositionsTable() {
                                   variant={position.cooldownState === "Active" ? "default" : "secondary"}
                                   className={position.cooldownState === "Active"
                                     ? "bg-green-500/20 text-green-500 border-green-500/30"
-                                    : position.cooldownState === "Exit Pending"
-                                      ? "bg-orange-500/20 text-orange-500 border-orange-500/30"
-                                      : "bg-yellow-500/20 text-yellow-500 border-yellow-500/30"}
+                                    : position.cooldownState === "Stale Exit"
+                                      ? "bg-red-500/20 text-red-500 border-red-500/30 animate-pulse"
+                                      : position.cooldownState === "Exit Pending"
+                                        ? "bg-orange-500/20 text-orange-500 border-orange-500/30"
+                                        : "bg-yellow-500/20 text-yellow-500 border-yellow-500/30"}
                                 >
                                   {position.cooldownState === "Active" ? (
                                     <><span className="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5" /> Active</>
+                                  ) : position.cooldownState === "Stale Exit" ? (
+                                    <><span className="w-1.5 h-1.5 rounded-full bg-red-500 mr-1.5 animate-pulse" /> Stale Exit</>
                                   ) : position.cooldownState === "Exit Pending" ? (
                                     <><span className="w-1.5 h-1.5 rounded-full bg-orange-500 mr-1.5" /> Exit Pending</>
                                   ) : (
